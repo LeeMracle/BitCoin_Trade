@@ -76,6 +76,8 @@ async def _fetch_range(
 
             for c in candles:
                 ts = c[0]
+                if ts < start_ms:
+                    continue
                 if ts > end_ms:
                     break
                 all_rows.append({

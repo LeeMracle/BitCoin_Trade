@@ -47,7 +47,7 @@ class BacktestEngine:
         df["ts"] = df["ts"].astype(np.int64)
 
         # 전략 신호 생성
-        signal: pd.Series = strategy_fn(df).reindex(df.index).fillna(method="ffill").fillna(0)
+        signal: pd.Series = strategy_fn(df).reindex(df.index).ffill().fillna(0)
 
         equity_rows = []
         trade_rows = []

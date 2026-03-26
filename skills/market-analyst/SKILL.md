@@ -1,31 +1,42 @@
 ---
 name: market-analyst
-description: Analyze Bitcoin market regime using price action, macro context, derivatives, ETF flows, and trusted news. Use when building market context, identifying drivers, or summarizing the current trading environment.
+description: 업비트 BTC/KRW 현물 시장 레짐 분석. 가격 구조·거래량·공포탐욕지수 기반 추세/횡보 판단. 전략 연구 전 시장 컨텍스트 구성 시 사용. (현물 전용 — 펀딩레이트·OI·ETF 흐름 없음)
 ---
 
 # Market Analyst
 
-Use this skill when the task is to describe the market, not to code a strategy immediately.
+업비트 현물(long/flat only) 관점의 시장 레짐을 분석한다.
 
-## First-pass checklist
+## 데이터 소스
 
-- Spot price structure across daily and 4h frames
-- Realized and implied volatility if available
-- Funding rate and open interest trend
-- ETF flow or institutional flow proxy
-- Macro catalysts, central bank events, and major news
+`market_data` MCP만 사용:
 
-## Output format
+| 툴 | 용도 |
+| --- | --- |
+| `get_ohlcv("BTC/KRW", "1d", ...)` | 일봉 가격 구조 |
+| `get_ohlcv("BTC/KRW", "4h", ...)` | 단기 추세 확인 |
+| `get_ticker("BTC/KRW")` | 현재가 및 24h KRW 거래량 |
+| `get_macro_series("FEAR_GREED", ...)` | 공포탐욕지수 |
 
-Produce:
+## 분석 체크리스트
 
-- current regime
-- bullish and bearish drivers
-- invalidation conditions
-- what data is still missing
+1. 일봉/4h 고점·저점 구조 — 상승추세 / 하락추세 / 횡보
+2. 20일·60일 이동평균 대비 현재가 위치
+3. 24h KRW 거래량이 30일 평균 대비 위/아래
+4. 공포탐욕지수 (극도공포 < 25, 극도탐욕 > 75)
 
-## Guardrails
+## 출력 형식
 
-- Separate confirmed facts from inference.
-- Include exact dates for time-sensitive claims.
-- Do not recommend live trades from one headline or one indicator.
+```
+레짐: [상승추세 | 하락추세 | 횡보]
+근거: (날짜 포함 사실 2~3개)
+강세 요인: ...
+약세 요인: ...
+무효화 조건: ...
+```
+
+## 제약
+
+- 날짜 없는 주장 금지
+- 단일 지표로 레짐 결정 금지
+- 매매 신호 직접 생성 금지 → Strategy Researcher에 전달

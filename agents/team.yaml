@@ -1,18 +1,18 @@
-version: 0.1
+version: 0.2
+
+exchange: upbit
+market_type: spot       # 현물 전용 — long/flat only, 숏·레버리지 없음
+base_currency: KRW
+symbol: "BTC/KRW"
+current_phase: 2        # 1=완료, 2=진행중, 3=대기, 4=대기
 
 user_interface:
   primary_agent: pm_orchestrator
-  policy: "user talks only to PM Orchestrator"
+  policy: "사용자는 PM Orchestrator에게만 말한다"
 
 agents:
   pm_orchestrator:
-    role: "Single user-facing project manager and orchestration layer"
-    owns:
-      - task intake
-      - planning
-      - delegation
-      - milestone tracking
-      - final user responses
+    role: "단일 사용자 접점. 단계 판단·위임·아티팩트 검토·마일스톤 추적"
     skill: "project-orchestrator"
     may_delegate_to:
       - market_analyst
@@ -20,47 +20,59 @@ agents:
       - backtest_engineer
       - execution_risk_guard
     required_artifacts:
-      - project_brief
       - decision_log
       - release_checklist
 
   market_analyst:
-    role: "Market context and regime analysis"
+    role: "BTC/KRW 시장 레짐 분석 (추세/횡보 판단)"
     skill: "market-analyst"
-    reports_to: "pm_orchestrator"
+    reports_to: pm_orchestrator
+    tools:
+      - market_data.get_ohlcv
+      - market_data.get_ticker
+      - market_data.get_macro_series
     outputs:
-      - regime_report
-      - catalyst_summary
-      - data_gap_note
+      - regime_report      # workspace/research/{date}_regime.md
 
   strategy_researcher:
-    role: "Rule design and hypothesis definition"
+    role: "가설 → 테스트 가능한 strategy_spec 작성"
     skill: "strategy-researcher"
-    reports_to: "pm_orchestrator"
+    reports_to: pm_orchestrator
+    tools:
+      - market_data.get_ohlcv    # 데이터 확인용
     outputs:
-      - strategy_spec
+      - strategy_spec            # workspace/specs/{id}_spec.md
       - parameter_ranges
-      - validation_plan
 
   backtest_engineer:
-    role: "Simulation, metrics, and reproducibility"
+    role: "strategy_spec 구현, 시뮬레이션 실행, 실험 기록"
     skill: "backtest-engineer"
-    reports_to: "pm_orchestrator"
+    reports_to: pm_orchestrator
+    tools:
+      - market_data.get_ohlcv
+      - experiment_tracker.create_experiment
+      - experiment_tracker.log_run
+      - experiment_tracker.compare_runs
     outputs:
-      - backtest_run
-      - trade_log
-      - metrics_report
+      - workspace/runs/{run_id}/config.json
+      - workspace/runs/{run_id}/metrics.json
+      - workspace/runs/{run_id}/equity_curve.csv
+      - workspace/runs/{run_id}/trade_log.csv
 
   execution_risk_guard:
-    role: "Execution safety and operational control"
+    role: "거래 실행 안전 관리. IP·권한·Rate Limit 점검, 포지션 정합성"
     skill: "execution-risk-guard"
-    reports_to: "pm_orchestrator"
+    reports_to: pm_orchestrator
+    phase_active: 3           # Phase 3 이후 활성화
+    tools:
+      - exchange_execution.*  # Phase 3 구현 예정
+      - alerting.*            # Phase 3 구현 예정
     outputs:
       - execution_policy
-      - reconciliation_report
-      - incident_log
+      - incident_log           # workspace/runs/{date}/incident_log.json
 
 handoff_rules:
-  - "Specialist agents do not answer the user directly."
-  - "PM Orchestrator is responsible for synthesis and conflict resolution."
-  - "Live trading requires explicit approval from PM Orchestrator after risk signoff."
+  - "전문 에이전트는 사용자에게 직접 응답하지 않는다"
+  - "PM Orchestrator가 결과를 합쳐 단일 응답 반환"
+  - "실전 거래: Execution Risk Guard 승인 → PM Orchestrator 최종 확인"
+  - "인샘플 성과만으로 다음 단계 이동 금지"
