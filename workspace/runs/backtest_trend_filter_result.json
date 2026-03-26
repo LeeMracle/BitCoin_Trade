@@ -1,0 +1,47 @@
+{
+  "is_base": {
+    "sharpe": 1.1758,
+    "calmar": 5.2158,
+    "max_drawdown": -0.0653,
+    "total_return": 0.3409,
+    "n_trades": 4,
+    "win_rate": 0.75,
+    "avg_trade_return": 0.0777
+  },
+  "is_ma": {
+    "sharpe": -0.1098,
+    "calmar": -0.225,
+    "max_drawdown": -0.0544,
+    "total_return": -0.0122,
+    "n_trades": 1,
+    "win_rate": 0.0,
+    "avg_trade_return": -0.0122
+  },
+  "oos_base": {
+    "sharpe": -1.2687,
+    "calmar": -0.8387,
+    "max_drawdown": -0.4338,
+    "total_return": -0.3638,
+    "n_trades": 3,
+    "win_rate": 0.3333,
+    "avg_trade_return": -0.1267
+  },
+  "oos_ma": {
+    "sharpe": -1.7168,
+    "calmar": -1.0,
+    "max_drawdown": -0.1499,
+    "total_return": -0.1499,
+    "n_trades": 2,
+    "win_rate": 0.0,
+    "avg_trade_return": -0.0769
+  },
+  "bh_is": 5.0749,
+  "bh_oos": -0.2526,
+  "phase3_go": false,
+  "run_ids": {
+    "is_base": "20260326_bae7008d",
+    "is_ma": "20260326_5155d97c",
+    "oos_base": "20260326_588cf381",
+    "oos_ma": "20260326_9f13170e"
+  }
+}
