@@ -7,6 +7,7 @@ dist/
 # 민감 정보 — 절대 커밋 금지
 docs/upbit_api_key.md
 docs/aws_inform.md
+docs/telegram_inform.md
 docs/*.pem
 *.pem
 services/.env
