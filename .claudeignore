@@ -1,0 +1,23 @@
+# 빌드 산출물 및 의존성 — 토큰 낭비 방지
+node_modules/
+dist/
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# 로그 및 임시 파일
+*.log
+*.tmp
+*.cache
+
+# 대용량 데이터 파일
+workspace/runs/*.parquet
+workspace/runs/*.csv
+workspace/runs/*.pkl
+workspace/runs/*.h5
+
+# 환경 설정 (시크릿 포함 가능)
+.env
+secrets/
+# .env.example은 제외하지 않음 (템플릿이므로 안전)

@@ -1,0 +1,260 @@
+:root {
+  font-family: "Bahnschrift", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  color: #10223a;
+  background:
+    radial-gradient(circle at top left, rgba(255, 198, 109, 0.18), transparent 28%),
+    radial-gradient(circle at top right, rgba(44, 160, 145, 0.18), transparent 30%),
+    linear-gradient(180deg, #f8fbff 0%, #eef3f7 100%);
+  line-height: 1.45;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.page {
+  width: min(1380px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 32px 0 48px;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: 1.8fr 0.9fr;
+  gap: 24px;
+  align-items: end;
+  margin-bottom: 28px;
+}
+
+.hero__kicker {
+  margin: 0 0 10px;
+  letter-spacing: 0.18em;
+  font-size: 12px;
+  font-weight: 700;
+  color: #4d6b88;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(2.4rem, 5vw, 4.2rem);
+  line-height: 0.95;
+}
+
+.hero__body {
+  max-width: 800px;
+  margin: 16px 0 0;
+  font-size: 1.05rem;
+  color: #43556a;
+}
+
+.hero__badge {
+  justify-self: end;
+  width: 100%;
+  padding: 18px 20px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #0f2b46, #1a4664);
+  color: #f7fbff;
+  box-shadow: 0 22px 40px rgba(16, 34, 58, 0.16);
+}
+
+.hero__badge span {
+  display: block;
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
+.hero__badge strong {
+  display: block;
+  margin-top: 10px;
+  font-size: 1.45rem;
+  line-height: 1.2;
+}
+
+.architecture {
+  position: relative;
+  padding: 28px;
+  border: 1px solid rgba(115, 136, 161, 0.2);
+  border-radius: 32px;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 28px 60px rgba(48, 71, 92, 0.12);
+}
+
+.architecture__grid {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+.vps-cluster {
+  display: grid;
+  gap: 18px;
+}
+
+.card {
+  padding: 20px 20px 18px;
+  border-radius: 28px;
+  border: 1px solid rgba(105, 129, 156, 0.2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+.card h2 {
+  margin: 0 0 14px;
+  font-size: 1.45rem;
+  line-height: 1.1;
+}
+
+.card ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #314559;
+}
+
+.card li + li {
+  margin-top: 8px;
+}
+
+.card__eyebrow {
+  margin-bottom: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #59748f;
+}
+
+.card--local {
+  background: linear-gradient(180deg, #e4f2ff, #f5fbff);
+}
+
+.card--vps {
+  background: linear-gradient(180deg, #dff5e7, #f4fbf6);
+}
+
+.card--runtime {
+  background: linear-gradient(180deg, #fff5dc, #fffaf0);
+}
+
+.card--external {
+  background: linear-gradient(180deg, #ffe9dc, #fff8f2);
+}
+
+.card--alert {
+  background: linear-gradient(180deg, #ffe2e7, #fff7f8);
+}
+
+.flows {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin: 22px 0 18px;
+}
+
+.flow {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+  gap: 10px;
+}
+
+.flow__line {
+  display: block;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #6c7f91, transparent);
+}
+
+.flow__label {
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: #f4f8fb;
+  border: 1px solid rgba(108, 127, 145, 0.2);
+  text-align: center;
+}
+
+.flow__label strong {
+  display: block;
+  font-size: 0.98rem;
+}
+
+.flow__label span {
+  display: block;
+  margin-top: 4px;
+  color: #577087;
+  font-size: 0.9rem;
+}
+
+.monitor-wrap {
+  width: min(520px, 100%);
+  margin-left: auto;
+}
+
+.notes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 22px;
+}
+
+.note {
+  padding: 18px 18px 16px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.68);
+  border: 1px solid rgba(116, 135, 154, 0.18);
+}
+
+.note h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.note p {
+  margin: 0;
+  color: #4c6177;
+}
+
+@media (max-width: 1100px) {
+  .hero,
+  .architecture__grid,
+  .flows,
+  .notes {
+    grid-template-columns: 1fr;
+  }
+
+  .hero__badge,
+  .monitor-wrap {
+    justify-self: stretch;
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .page {
+    width: min(100vw - 20px, 100%);
+    padding: 18px 0 30px;
+  }
+
+  .architecture {
+    padding: 18px;
+    border-radius: 24px;
+  }
+
+  .card {
+    border-radius: 22px;
+  }
+}

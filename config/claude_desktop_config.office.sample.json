@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "office-word": {
+      "command": "D:\\정수\\비트코인투자\\tools\\office-word-mcp.cmd",
+      "args": []
+    },
+    "office-excel": {
+      "command": "D:\\정수\\비트코인투자\\tools\\office-excel-mcp.cmd",
+      "args": []
+    },
+    "office-powerpoint": {
+      "command": "D:\\정수\\비트코인투자\\tools\\office-powerpoint-mcp.cmd",
+      "args": []
+    }
+  }
+}

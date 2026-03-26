@@ -1,0 +1,93 @@
+version: 0.1
+exchange: upbit
+market_type: spot_only   # 현물 전용 — 선물/파생상품 없음
+base_currency: KRW
+symbol_format: "BTC/KRW"  # ccxt 표준 형식 (업비트 원본: KRW-BTC)
+
+# ── 환경변수 (secrets_config 구현 전까지 .env로 관리) ──────────────
+env_vars:
+  UPBIT_ACCESS_KEY: required
+  UPBIT_SECRET_KEY: required
+
+# ── MCP 서버 실행 커맨드 ───────────────────────────────────────────
+mcp_servers:
+
+  market_data:
+    purpose: "업비트 OHLCV 및 현재가 조회"
+    transport: stdio
+    run: "python -m market_data.server"
+    cwd: "services/"
+    notes: >
+      펀딩레이트·미결제약정 없음 (현물 전용).
+      get_funding / get_open_interest 툴 미포함.
+    tools:
+      get_ohlcv:
+        params:
+          symbol: "str — 'BTC/KRW'"
+          timeframe: "str — '1m'|'3m'|'5m'|'15m'|'30m'|'1h'|'4h'|'1d'|'1w'"
+          start: "str — ISO8601 'YYYY-MM-DDTHH:MM:SSZ'"
+          end: "str — ISO8601"
+          use_cache: "bool — default true"
+        returns: "list[{ts, open, high, low, close, volume}]"
+        rate_limit: "업비트 최대 200캔들/요청, 복수 요청 시 0.1s 간격"
+
+      get_ticker:
+        params:
+          symbol: "str — 'BTC/KRW'"
+        returns: "{ts, last, bid, ask, volume_24h, change_pct_24h}"
+        notes: "현재가 및 24h 거래량"
+
+      get_orderbook:
+        params:
+          symbol: "str — 'BTC/KRW'"
+          limit: "int — 호가 단계 수, default 10"
+        returns: "{ts, bids: [[price, size]], asks: [[price, size]]}"
+
+      get_macro_series:
+        params:
+          series_id: "str — 'FEAR_GREED' (Alternative.me, 무인증)"
+          start: "str — ISO8601"
+          end: "str — ISO8601"
+        returns: "list[{date, value, label}]"
+        notes: "Phase 2에서는 FEAR_GREED만 구현"
+
+  experiment_tracker:
+    purpose: "백테스트 실험 기록 및 비교"
+    transport: stdio
+    run: "python -m experiment_tracker.server"
+    cwd: "services/"
+    tools:
+      create_experiment:
+        params:
+          name: "str"
+          strategy_id: "str — workspace/specs/ 파일명 또는 해시"
+          description: "str — optional"
+        returns: "{experiment_id, created_at}"
+
+      log_run:
+        params:
+          experiment_id: "str"
+          params: "dict — {symbol, timeframe, start, end, fee_rate, slippage_bps, ...}"
+          metrics: "dict — {sharpe, calmar, max_dd, total_return, n_trades, win_rate}"
+          artifact_paths: "list[str] — workspace/runs/{run_id}/ 내 파일들"
+        returns: "{run_id, logged_at}"
+
+      compare_runs:
+        params:
+          experiment_id: "str"
+          run_ids: "list[str] — 빈 배열이면 전체"
+          sort_by: "str — default 'sharpe'"
+        returns: "{runs: list[RunSummary], best_run_id}"
+
+# ── 미구현 (Phase 3 이후) ─────────────────────────────────────────
+deferred_to_phase3:
+  - exchange_execution   # 페이퍼/실전 주문 — 업비트 REST + WebSocket
+  - alerting             # Slack/Telegram 알림
+  - secrets_config       # 정식 시크릿 관리
+
+# ── Rate Limit 참고 ───────────────────────────────────────────────
+rate_limits:
+  default_group: "29 req/sec (1,799 req/min)"
+  order_group: "4 req/sec (59 req/min)"
+  check_header: "Remaining-Req"
+  on_429: "RetryAfter 헤더 확인 후 대기"

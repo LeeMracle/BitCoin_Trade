@@ -1,0 +1,52 @@
+version: 0.1
+
+mcp_servers:
+  market_data:
+    purpose: "OHLCV, funding, open interest, macro series"
+    transport: "stdio_or_http"
+    tools:
+      - get_ohlcv
+      - get_funding
+      - get_open_interest
+      - get_macro_series
+
+  news_research:
+    purpose: "Trusted news search and article fetch"
+    transport: "stdio_or_http"
+    tools:
+      - search_news
+      - fetch_article
+      - extract_key_events
+
+  experiment_tracker:
+    purpose: "Run metadata, metrics, and artifact tracking"
+    transport: "stdio"
+    tools:
+      - create_experiment
+      - log_run
+      - compare_runs
+
+  exchange_execution:
+    purpose: "Paper/live execution and reconciliation"
+    transport: "stdio_or_http"
+    tools:
+      - place_order
+      - get_positions
+      - cancel_open_orders
+      - reconcile_state
+
+  alerting:
+    purpose: "Heartbeat, incidents, and operational alerts"
+    transport: "stdio_or_http"
+    tools:
+      - send_alert
+      - trigger_incident
+      - healthcheck
+
+  secrets_config:
+    purpose: "Secrets resolution and runtime config validation"
+    transport: "stdio"
+    tools:
+      - get_secret
+      - list_required_secrets
+      - validate_runtime_config

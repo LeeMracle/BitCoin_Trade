@@ -1,0 +1,66 @@
+version: 0.1
+
+user_interface:
+  primary_agent: pm_orchestrator
+  policy: "user talks only to PM Orchestrator"
+
+agents:
+  pm_orchestrator:
+    role: "Single user-facing project manager and orchestration layer"
+    owns:
+      - task intake
+      - planning
+      - delegation
+      - milestone tracking
+      - final user responses
+    skill: "project-orchestrator"
+    may_delegate_to:
+      - market_analyst
+      - strategy_researcher
+      - backtest_engineer
+      - execution_risk_guard
+    required_artifacts:
+      - project_brief
+      - decision_log
+      - release_checklist
+
+  market_analyst:
+    role: "Market context and regime analysis"
+    skill: "market-analyst"
+    reports_to: "pm_orchestrator"
+    outputs:
+      - regime_report
+      - catalyst_summary
+      - data_gap_note
+
+  strategy_researcher:
+    role: "Rule design and hypothesis definition"
+    skill: "strategy-researcher"
+    reports_to: "pm_orchestrator"
+    outputs:
+      - strategy_spec
+      - parameter_ranges
+      - validation_plan
+
+  backtest_engineer:
+    role: "Simulation, metrics, and reproducibility"
+    skill: "backtest-engineer"
+    reports_to: "pm_orchestrator"
+    outputs:
+      - backtest_run
+      - trade_log
+      - metrics_report
+
+  execution_risk_guard:
+    role: "Execution safety and operational control"
+    skill: "execution-risk-guard"
+    reports_to: "pm_orchestrator"
+    outputs:
+      - execution_policy
+      - reconciliation_report
+      - incident_log
+
+handoff_rules:
+  - "Specialist agents do not answer the user directly."
+  - "PM Orchestrator is responsible for synthesis and conflict resolution."
+  - "Live trading requires explicit approval from PM Orchestrator after risk signoff."
