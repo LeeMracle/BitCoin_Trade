@@ -1,0 +1,91 @@
+{
+  "sweep_top5": [
+    {
+      "buy_thr": 25,
+      "sell_thr": 55,
+      "sharpe": 1.1743,
+      "calmar": 5.2158,
+      "max_dd": -0.0653,
+      "total_return": 0.3409,
+      "n_trades": 4,
+      "win_rate": 0.75
+    },
+    {
+      "buy_thr": 25,
+      "sell_thr": 45,
+      "sharpe": 1.1664,
+      "calmar": 5.2897,
+      "max_dd": -0.0601,
+      "total_return": 0.3177,
+      "n_trades": 5,
+      "win_rate": 0.8
+    },
+    {
+      "buy_thr": 25,
+      "sell_thr": 50,
+      "sharpe": 1.0448,
+      "calmar": 4.355,
+      "max_dd": -0.0653,
+      "total_return": 0.2846,
+      "n_trades": 4,
+      "win_rate": 0.75
+    },
+    {
+      "buy_thr": 30,
+      "sell_thr": 45,
+      "sharpe": 0.8601,
+      "calmar": 2.8633,
+      "max_dd": -0.0885,
+      "total_return": 0.2534,
+      "n_trades": 7,
+      "win_rate": 0.5714
+    },
+    {
+      "buy_thr": 30,
+      "sell_thr": 50,
+      "sharpe": 0.7626,
+      "calmar": 2.3719,
+      "max_dd": -0.0946,
+      "total_return": 0.2244,
+      "n_trades": 5,
+      "win_rate": 0.6
+    }
+  ],
+  "best_buy": 25,
+  "best_sell": 55,
+  "base_is": {
+    "sharpe": 1.1743,
+    "calmar": 5.2158,
+    "max_drawdown": -0.0653,
+    "total_return": 0.3409,
+    "n_trades": 4,
+    "win_rate": 0.75,
+    "avg_trade_return": 0.0777
+  },
+  "dca_is": {
+    "sharpe": 1.1743,
+    "calmar": 5.2158,
+    "max_drawdown": -0.0653,
+    "total_return": 0.3409,
+    "n_trades": 4,
+    "win_rate": 0.75,
+    "avg_trade_return": 0.0777
+  },
+  "oos": {
+    "sharpe": -1.2687,
+    "calmar": -0.8387,
+    "max_drawdown": -0.4338,
+    "total_return": -0.3638,
+    "n_trades": 3,
+    "win_rate": 0.3333,
+    "avg_trade_return": -0.1267
+  },
+  "bh_is": 5.0749,
+  "bh_oos": -0.2526,
+  "phase3_go": false,
+  "run_ids": {
+    "base_is": "20260326_09c21b40",
+    "dca_is": "20260326_5d76e652",
+    "oos": "20260326_5b877ccf"
+  }
+}
