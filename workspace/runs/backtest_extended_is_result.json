@@ -1,0 +1,206 @@
+{
+  "description": "Phase 2 확장 검증 — F&G 전체 히스토리 + 레짐 필터",
+  "periods": {
+    "is": "2020-01-01 ~ 2025-03-01",
+    "oos": "2025-03-01 ~ 2026-03-01",
+    "fg_available_from": "2018-02-01"
+  },
+  "bh_is": 14.4602,
+  "bh_oos": -0.2526,
+  "strategies": {
+    "fg_base_is": {
+      "sharpe": -0.0981,
+      "calmar": -0.63,
+      "max_drawdown": -0.6418,
+      "total_return": -0.4043,
+      "n_trades": 8,
+      "win_rate": 0.625,
+      "avg_trade_return": -0.033
+    },
+    "fg_base_oos": {
+      "sharpe": -0.8947,
+      "calmar": -0.7127,
+      "max_drawdown": -0.3728,
+      "total_return": -0.2657,
+      "n_trades": 3,
+      "win_rate": 0.3333,
+      "avg_trade_return": -0.0841
+    },
+    "cooldown_is": {
+      "sharpe": -0.5776,
+      "calmar": -0.9057,
+      "max_drawdown": -0.5726,
+      "total_return": -0.5186,
+      "n_trades": 8,
+      "win_rate": 0.375,
+      "avg_trade_return": -0.077
+    },
+    "cooldown_oos": {
+      "sharpe": 0.19,
+      "calmar": 0.138,
+      "max_drawdown": -0.106,
+      "total_return": 0.0146,
+      "n_trades": 2,
+      "win_rate": 0.5,
+      "avg_trade_return": 0.0116
+    },
+    "regime_cooldown_is": {
+      "sharpe": -0.5273,
+      "calmar": -0.8684,
+      "max_drawdown": -0.4897,
+      "total_return": -0.4253,
+      "n_trades": 5,
+      "win_rate": 0.4,
+      "avg_trade_return": -0.0919
+    },
+    "regime_cooldown_oos": {
+      "sharpe": 0.19,
+      "calmar": 0.138,
+      "max_drawdown": -0.106,
+      "total_return": 0.0146,
+      "n_trades": 2,
+      "win_rate": 0.5,
+      "avg_trade_return": 0.0116
+    }
+  },
+  "sweep_top10": [
+    {
+      "buy_thr": 15,
+      "sell_thr": 55,
+      "regime_dd": -0.35,
+      "cd_days": 90,
+      "sl_pct": -0.08,
+      "sharpe": 0.5141,
+      "total_return": 0.332,
+      "max_dd": -0.1599,
+      "n_trades": 3,
+      "win_rate": 0.6667
+    },
+    {
+      "buy_thr": 15,
+      "sell_thr": 55,
+      "regime_dd": -0.35,
+      "cd_days": 120,
+      "sl_pct": -0.08,
+      "sharpe": 0.5141,
+      "total_return": 0.332,
+      "max_dd": -0.1599,
+      "n_trades": 3,
+      "win_rate": 0.6667
+    },
+    {
+      "buy_thr": 15,
+      "sell_thr": 50,
+      "regime_dd": -0.35,
+      "cd_days": 90,
+      "sl_pct": -0.08,
+      "sharpe": 0.5141,
+      "total_return": 0.332,
+      "max_dd": -0.1599,
+      "n_trades": 3,
+      "win_rate": 0.6667
+    },
+    {
+      "buy_thr": 15,
+      "sell_thr": 50,
+      "regime_dd": -0.35,
+      "cd_days": 150,
+      "sl_pct": -0.08,
+      "sharpe": 0.5141,
+      "total_return": 0.332,
+      "max_dd": -0.1599,
+      "n_trades": 3,
+      "win_rate": 0.6667
+    },
+    {
+      "buy_thr": 15,
+      "sell_thr": 50,
+      "regime_dd": -0.35,
+      "cd_days": 60,
+      "sl_pct": -0.08,
+      "sharpe": 0.5141,
+      "total_return": 0.332,
+      "max_dd": -0.1599,
+      "n_trades": 3,
+      "win_rate": 0.6667
+    },
+    {
+      "buy_thr": 15,
+      "sell_thr": 50,
+      "regime_dd": -0.35,
+      "cd_days": 120,
+      "sl_pct": -0.1,
+      "sharpe": 0.5141,
+      "total_return": 0.332,
+      "max_dd": -0.1599,
+      "n_trades": 3,
+      "win_rate": 0.6667
+    },
+    {
+      "buy_thr": 15,
+      "sell_thr": 50,
+      "regime_dd": -0.35,
+      "cd_days": 120,
+      "sl_pct": -0.08,
+      "sharpe": 0.5141,
+      "total_return": 0.332,
+      "max_dd": -0.1599,
+      "n_trades": 3,
+      "win_rate": 0.6667
+    },
+    {
+      "buy_thr": 15,
+      "sell_thr": 55,
+      "regime_dd": -0.35,
+      "cd_days": 120,
+      "sl_pct": -0.1,
+      "sharpe": 0.5141,
+      "total_return": 0.332,
+      "max_dd": -0.1599,
+      "n_trades": 3,
+      "win_rate": 0.6667
+    },
+    {
+      "buy_thr": 15,
+      "sell_thr": 55,
+      "regime_dd": -0.35,
+      "cd_days": 150,
+      "sl_pct": -0.08,
+      "sharpe": 0.5141,
+      "total_return": 0.332,
+      "max_dd": -0.1599,
+      "n_trades": 3,
+      "win_rate": 0.6667
+    },
+    {
+      "buy_thr": 15,
+      "sell_thr": 55,
+      "regime_dd": -0.35,
+      "cd_days": 60,
+      "sl_pct": -0.08,
+      "sharpe": 0.5141,
+      "total_return": 0.332,
+      "max_dd": -0.1599,
+      "n_trades": 3,
+      "win_rate": 0.6667
+    }
+  ],
+  "phase3_strict": false,
+  "phase3_relaxed": false,
+  "best_params": {
+    "buy_thr": 15,
+    "sell_thr": 55,
+    "regime_dd": -0.35,
+    "cd_days": 90,
+    "sl_pct": -0.08
+  },
+  "best_oos": {
+    "sharpe": -1.5351,
+    "calmar": -1.0,
+    "max_drawdown": -0.0918,
+    "total_return": -0.0918,
+    "n_trades": 1,
+    "win_rate": 0.0,
+    "avg_trade_return": -0.0918
+  }
+}

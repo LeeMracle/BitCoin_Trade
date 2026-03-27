@@ -24,12 +24,23 @@
 - API 키에 **출금하기 권한 절대 부여 금지**
 - 상세 가이드: [workspace/reference/upbit-api-guide.md](workspace/reference/upbit-api-guide.md)
 
-## 현재 단계: Phase 1 완료, Phase 2 진행 중
+## 현재 단계: Phase 2 완료, Phase 3 준비
 
 - [x] Phase 1: 레포 골격, 스킬 정의, MCP 계약 초안
-- [ ] Phase 2: 시장 데이터 어댑터, 백테스트 러너, 실험 로깅 구현
-- [ ] Phase 3: 페이퍼 트레이딩, 알림, 조정
-- [ ] Phase 4: 실전 거래 (하드 리스크 게이트 이후)
+- [x] Phase 2: 시장 데이터 어댑터, 백테스트 러너, 전략 탐색 완료
+  - F&G 역추세 → 실패 (구조적 한계)
+  - 추세추종 전환 → **DC(50)+ATR(14)x3.0** OOS Sharpe 1.123, MDD -18.7% (엄격 기준 통과)
+  - 보조: RSI(10)>50<45+EMA(150) OOS Sharpe 1.040, MDD -14.9%
+- [ ] Phase 3: 페이퍼 트레이딩 진행 중
+  - 메인: DC(50)+ATR(14)x3.0 — `services/paper_trading/`
+  - 보조: RSI(10)>50/<45+EMA(150) — 관찰용
+  - 일일 체크: `python scripts/daily_check.py` (09:05 KST 실행 권장)
+  - 텔레그램 알림: `services/.env.example` 참고하여 `.env` 설정 필요
+- [ ] Phase 4: 실전 거래 — 모듈 구현 완료, AWS 배포 필요
+  - 실행 모듈: `services/execution/` (upbit_client, trader)
+  - AWS 서버: `13.209.165.58` (Seoul, t3.micro, Ubuntu 24.04)
+  - 배포: `bash scripts/deploy_to_aws.sh`
+  - 일일 실행: `scripts/daily_live.py` (cron UTC 00:05 = KST 09:05)
 
 ## 에이전트 팀 구조
 

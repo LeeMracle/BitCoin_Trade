@@ -1,9 +1,12 @@
 """텔레그램 알림 모듈."""
 import os
+from pathlib import Path
 import aiohttp
 from dotenv import load_dotenv
 
-load_dotenv()
+# 프로젝트 루트 기준 .env 로드
+_env_path = Path(__file__).resolve().parents[1] / ".env"
+load_dotenv(_env_path)
 
 TELEGRAM_API = "https://api.telegram.org/bot{token}/sendMessage"
 

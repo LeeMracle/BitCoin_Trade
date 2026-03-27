@@ -14,3 +14,8 @@ docs/telegram_inform.md
 docs/*.pem
 *.pem
 services/.env
+
+# 트레이딩 상태 (로컬 전용)
+workspace/paper_trading_state.json
+workspace/live_trading_state.json
+workspace/live_trading_log.jsonl

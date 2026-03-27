@@ -1,0 +1,157 @@
+{
+  "description": "Phase 2 전략 전환 — 추세추종/모멘텀 종합 백테스트",
+  "periods": {
+    "is": "2020-01-01~2023-12-31",
+    "oos": "2024-01-01~2026-03-27"
+  },
+  "bh_is": 5.8731,
+  "bh_oos": 0.7601,
+  "is_top10": [
+    {
+      "strategy": "Donchian",
+      "params": "DC(30/10)",
+      "sharpe": 1.9993,
+      "total_return": 29.0529,
+      "max_dd": -0.2921,
+      "n_trades": 17,
+      "win_rate": 0.6471
+    },
+    {
+      "strategy": "Donchian",
+      "params": "DC(20/10)",
+      "sharpe": 1.9322,
+      "total_return": 31.3794,
+      "max_dd": -0.3922,
+      "n_trades": 22,
+      "win_rate": 0.5455
+    },
+    {
+      "strategy": "RSI_Mom",
+      "params": "RSI(10) >55/<50",
+      "sharpe": 1.8916,
+      "total_return": 30.9301,
+      "max_dd": -0.3547,
+      "n_trades": 53,
+      "win_rate": 0.434
+    },
+    {
+      "strategy": "RSI_Mom",
+      "params": "RSI(14) >55/<40",
+      "sharpe": 1.8899,
+      "total_return": 39.4761,
+      "max_dd": -0.3728,
+      "n_trades": 20,
+      "win_rate": 0.5
+    },
+    {
+      "strategy": "RSI_Mom",
+      "params": "RSI(14) >55/<45",
+      "sharpe": 1.887,
+      "total_return": 35.1662,
+      "max_dd": -0.401,
+      "n_trades": 27,
+      "win_rate": 0.4444
+    },
+    {
+      "strategy": "RSI_Mom",
+      "params": "RSI(14) >50/<45",
+      "sharpe": 1.8836,
+      "total_return": 37.3743,
+      "max_dd": -0.4068,
+      "n_trades": 36,
+      "win_rate": 0.3333
+    },
+    {
+      "strategy": "Donchian",
+      "params": "DC(30/20)",
+      "sharpe": 1.865,
+      "total_return": 29.6449,
+      "max_dd": -0.3671,
+      "n_trades": 14,
+      "win_rate": 0.6429
+    },
+    {
+      "strategy": "RSI_Mom",
+      "params": "RSI(14) >50/<50",
+      "sharpe": 1.8647,
+      "total_return": 31.7201,
+      "max_dd": -0.3861,
+      "n_trades": 67,
+      "win_rate": 0.2687
+    },
+    {
+      "strategy": "RSI_Mom",
+      "params": "RSI(10) >50/<50",
+      "sharpe": 1.8425,
+      "total_return": 30.5463,
+      "max_dd": -0.473,
+      "n_trades": 81,
+      "win_rate": 0.3086
+    },
+    {
+      "strategy": "RSI_Mom",
+      "params": "RSI(5) >55/<50",
+      "sharpe": 1.8273,
+      "total_return": 25.9332,
+      "max_dd": -0.4122,
+      "n_trades": 116,
+      "win_rate": 0.3362
+    }
+  ],
+  "oos_comparison": [
+    {
+      "전략": "Buy & Hold",
+      "수익률": "+76.0%",
+      "Sharpe": "—",
+      "MDD": "—",
+      "거래": "—",
+      "승률": "—"
+    },
+    {
+      "전략": "MA_Cross (EMA(10/100))",
+      "수익률": "+9.9%",
+      "Sharpe": "0.292",
+      "MDD": "-31.0%",
+      "거래": "5",
+      "승률": "40%"
+    },
+    {
+      "전략": "RSI_Mom (RSI(10) >55/<50)",
+      "수익률": "+78.5%",
+      "Sharpe": "1.075",
+      "MDD": "-30.3%",
+      "거래": "32",
+      "승률": "38%"
+    },
+    {
+      "전략": "Donchian (DC(30/10))",
+      "수익률": "+29.6%",
+      "Sharpe": "0.599",
+      "MDD": "-33.9%",
+      "거래": "12",
+      "승률": "33%"
+    },
+    {
+      "전략": "MultiFactor (MA(10/100)+RSI(5)>50+ATR(14)x3.0)",
+      "수익률": "+19.7%",
+      "Sharpe": "0.462",
+      "MDD": "-25.6%",
+      "거래": "11",
+      "승률": "55%"
+    }
+  ],
+  "best_oos": {
+    "name": "RSI_Mom (RSI(10) >55/<50)",
+    "metrics": {
+      "total_return": 0.7845,
+      "sharpe": 1.0753,
+      "calmar": 2.5889,
+      "max_dd": -0.303,
+      "n_trades": 32,
+      "win_rate": 0.375,
+      "avg_trade": 0.0262
+    }
+  },
+  "phase3_strict": false,
+  "phase3_relaxed": false
+}
