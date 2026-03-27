@@ -22,6 +22,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import aiohttp
+import ccxt
 import numpy as np
 import pandas as pd
 
@@ -38,11 +39,16 @@ from services.execution.multi_trader import (
 from services.execution.scanner import get_krw_market_coins
 from services.market_data.fetcher import fetch_ohlcv
 from services.paper_trading.strategy import calc_atr, calc_donchian_upper
-from services.execution.upbit_client import get_balance
+from services.execution.upbit_client import get_balance, _create_exchange
 from services.alerting.notifier import send, notify_error
 
 UPBIT_WS_URL = "wss://api.upbit.com/websocket/v1"
 REFRESH_HOUR_UTC = 0  # UTC 00:00 = KST 09:00
+
+# ── 안전장치 설정 ─────────────────────────────────────
+MAX_CONSECUTIVE_ERRORS = 5     # 연속 오류 N회 시 봇 중지
+ERROR_COOLDOWN_SEC = 60        # 오류 발생 후 동일 종목 재시도 대기 (초)
+ALERT_COOLDOWN_SEC = 300       # 동일 오류 알림 간격 (5분)
 
 
 class RealtimeMonitor:
@@ -51,6 +57,10 @@ class RealtimeMonitor:
         self.state: dict = load_state()
         self.running = True
         self.last_refresh_date = ""
+        # 안전장치
+        self.consecutive_errors = 0
+        self.error_cooldown: dict[str, float] = {}   # {symbol: timestamp}
+        self.last_alert_time: dict[str, float] = {}   # {error_key: timestamp}
 
     async def start(self):
         print("=" * 60)
@@ -193,6 +203,10 @@ class RealtimeMonitor:
                         print(f"  구독 완료: {len(upbit_codes)}개 종목")
 
                         async for msg in ws:
+                            if not self.running:
+                                print("봇 중지 요청 — 웹소켓 종료")
+                                return
+
                             if msg.type == aiohttp.WSMsgType.BINARY:
                                 data = json.loads(msg.data.decode("utf-8"))
                                 await self._handle_tick(data)
@@ -258,9 +272,53 @@ class RealtimeMonitor:
         if price > level["upper"]:
             await self._execute_buy(symbol, price, level)
 
+    # ── 안전장치 메서드 ─────────────────────────────────
+    def _is_in_cooldown(self, symbol: str) -> bool:
+        """해당 종목이 오류 쿨다운 중인지 확인."""
+        import time
+        if symbol in self.error_cooldown:
+            if time.time() < self.error_cooldown[symbol]:
+                return True
+            del self.error_cooldown[symbol]
+        return False
+
+    def _set_cooldown(self, symbol: str):
+        import time
+        self.error_cooldown[symbol] = time.time() + ERROR_COOLDOWN_SEC
+
+    async def _handle_error(self, error_key: str, msg: str):
+        """오류 처리: 연속 오류 카운트 + 알림 쿨다운."""
+        import time
+        self.consecutive_errors += 1
+
+        # 동일 오류 알림 쿨다운 (5분 이내 중복 알림 방지)
+        now = time.time()
+        last = self.last_alert_time.get(error_key, 0)
+        if now - last >= ALERT_COOLDOWN_SEC:
+            self.last_alert_time[error_key] = now
+            await notify_error(f"{msg}\n(연속 오류: {self.consecutive_errors}/{MAX_CONSECUTIVE_ERRORS})")
+
+        # 연속 오류 초과 시 봇 중지
+        if self.consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+            self.running = False
+            await send(
+                f"🛑 *봇 자동 중지*\n"
+                f"연속 오류 {self.consecutive_errors}회 발생\n"
+                f"마지막: {msg}\n"
+                f"서버에서 원인 확인 후 재시작 필요:\n"
+                f"`sudo systemctl restart btc-trader`"
+            )
+            print(f"\n!!! 봇 자동 중지: 연속 오류 {self.consecutive_errors}회 !!!")
+
+    def _reset_errors(self):
+        """성공 시 연속 오류 카운트 초기화."""
+        self.consecutive_errors = 0
+
     async def _execute_buy(self, symbol: str, price: float, level: dict):
         positions = self.state.get("positions", {})
         if symbol in positions:
+            return
+        if self._is_in_cooldown(symbol):
             return
 
         today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
@@ -270,7 +328,8 @@ class RealtimeMonitor:
             balance = get_balance()
             available = balance["krw"]
         except Exception as e:
-            await notify_error(f"잔고 조회 실패: {e}")
+            self._set_cooldown(symbol)
+            await self._handle_error(f"balance_{symbol}", f"잔고 조회 실패: {e}")
             return
 
         slots_empty = MAX_POSITIONS - len(positions)
@@ -290,8 +349,11 @@ class RealtimeMonitor:
                 exec_price = order.get("price") or price
                 print(f"  매수 체결: {exec_price:,.0f}")
             except Exception as e:
-                await notify_error(f"{symbol} 매수 실패: {e}")
+                self._set_cooldown(symbol)
+                await self._handle_error(f"buy_{symbol}", f"{symbol} 매수 실패: {e}")
                 return
+
+        self._reset_errors()
 
         positions[symbol] = {
             "entry_date": today,
@@ -302,6 +364,10 @@ class RealtimeMonitor:
         }
         self.state["positions"] = positions
         save_state(self.state)
+
+        # 돌파 후 동일 종목 재매수 방지 (레벨에서 제거)
+        if symbol in self.levels:
+            del self.levels[symbol]
 
         append_log({"action": "BUY", "symbol": symbol, "price": exec_price,
                      "amount_krw": order_amount, "trigger": "realtime"})
@@ -318,6 +384,8 @@ class RealtimeMonitor:
         positions = self.state.get("positions", {})
         if symbol not in positions:
             return
+        if self._is_in_cooldown(symbol):
+            return
 
         pos = positions[symbol]
         today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
@@ -330,22 +398,26 @@ class RealtimeMonitor:
         else:
             try:
                 coin_id = symbol.split("/")[0]
-                from services.execution.upbit_client import _create_exchange
                 ex = _create_exchange()
                 bal = ex.fetch_balance()
                 coin_amount = float(bal.get(coin_id, {}).get("free", 0))
 
                 if coin_amount <= 0:
                     print(f"  {symbol} 잔고 없음")
+                    del positions[symbol]
+                    self.state["positions"] = positions
+                    save_state(self.state)
                     return
 
                 order = sell_market_coin(symbol, coin_amount)
                 exec_price = order.get("price") or price
                 print(f"  매도 체결: {exec_price:,.0f}")
             except Exception as e:
-                await notify_error(f"{symbol} 매도 실패: {e}")
+                self._set_cooldown(symbol)
+                await self._handle_error(f"sell_{symbol}", f"{symbol} 매도 실패: {e}")
                 return
 
+        self._reset_errors()
         ret_pct = (exec_price / pos["entry_price"] - 1) * 100
 
         self.state.setdefault("closed_trades", []).append({
