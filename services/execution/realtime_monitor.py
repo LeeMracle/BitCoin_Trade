@@ -63,12 +63,12 @@ class RealtimeMonitor:
         self.last_alert_time: dict[str, float] = {}   # {error_key: timestamp}
 
     async def start(self):
-        print("=" * 60)
-        print("실시간 모니터 시작")
-        print(f"  전략: Donchian({DONCHIAN_PERIOD}) + ATR({ATR_PERIOD})x{ATR_MULTIPLIER}")
-        print(f"  최대 포지션: {MAX_POSITIONS}")
-        print(f"  DRY-RUN: {DRY_RUN}")
-        print("=" * 60)
+        print("=" * 60, flush=True)
+        print("실시간 모니터 시작", flush=True)
+        print(f"  전략: Donchian({DONCHIAN_PERIOD}) + ATR({ATR_PERIOD})x{ATR_MULTIPLIER}", flush=True)
+        print(f"  최대 포지션: {MAX_POSITIONS}", flush=True)
+        print(f"  DRY-RUN: {DRY_RUN}", flush=True)
+        print("=" * 60, flush=True)
 
         await self._refresh_levels()
         await self._run_websocket()
@@ -185,9 +185,9 @@ class RealtimeMonitor:
         """웹소켓 연결 및 실시간 체결가 수신."""
         while self.running:
             try:
-                print("\n웹소켓 연결 중...")
+                print("\n웹소켓 연결 중...", flush=True)
                 async with aiohttp.ClientSession() as session:
-                    async with session.ws_connect(UPBIT_WS_URL, heartbeat=30) as ws:
+                    async with session.ws_connect(UPBIT_WS_URL, heartbeat=30, timeout=30) as ws:
                         # 구독 요청
                         market_codes = [
                             sym.replace("/", "-").replace("KRW-", "KRW-")
@@ -204,7 +204,7 @@ class RealtimeMonitor:
                             {"type": "ticker", "codes": upbit_codes, "isOnlyRealtime": True},
                         ]
                         await ws.send_json(subscribe)
-                        print(f"  구독 완료: {len(upbit_codes)}개 종목")
+                        print(f"  구독 완료: {len(upbit_codes)}개 종목", flush=True)
 
                         async for msg in ws:
                             if not self.running:

@@ -194,8 +194,8 @@ async def run(dry_run: bool = False):
                 print(f"    트레일링스탑: {sig['trail_stop']:,.0f}  금액: {order_amount:,.0f} KRW")
 
                 if dry_run:
-                    print(f"  [DRY-RUN] 매수 생략")
-                    exec_price = sig["price"]
+                    print(f"  [DRY-RUN] 매수 생략 (상태 저장 안 함)")
+                    continue
                 else:
                     try:
                         order = buy_market_coin(symbol, order_amount)
@@ -332,12 +332,21 @@ async def scan_only():
     print("=" * 60)
 
 
+def reset_state():
+    """상태 초기화."""
+    state = {"positions": {}, "closed_trades": [], "last_updated": ""}
+    save_state(state)
+    print("상태 초기화 완료.")
+
+
 if __name__ == "__main__":
     args = sys.argv[1:]
     if "--status" in args:
         show_status()
     elif "--scan" in args:
         asyncio.run(scan_only())
+    elif "--reset" in args:
+        reset_state()
     elif "--dry-run" in args:
         asyncio.run(run(dry_run=True))
     else:
