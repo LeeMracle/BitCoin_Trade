@@ -110,6 +110,7 @@ class TelegramCommandHandler:
             "/stop": self._cmd_stop,
             "/start": self._cmd_start,
             "/mode": self._cmd_mode,
+            "/dryrun": self._cmd_dryrun,
             "/config": self._cmd_config,
             "/reset": self._cmd_reset,
             "/help": self._cmd_help,
@@ -135,6 +136,7 @@ class TelegramCommandHandler:
             "  `5m` `10m` `30m` 분단위\n"
             "  `1h` `4h` 시간단위\n"
             "  `daily` 하루 1회\n"
+            "/dryrun — 테스트/실전 모드 전환\n"
             "/config — 현재 설정 확인\n"
             "/reset — 상태 초기화\n"
             "/help — 이 메시지"
@@ -263,6 +265,27 @@ class TelegramCommandHandler:
             )
         except Exception as e:
             await send_message(f"⚠️ 설정 변경 실패: {e}")
+
+    async def _cmd_dryrun(self, args):
+        if not args:
+            from services.execution.config import DRY_RUN
+            status = "🟡 테스트 모드 (주문 안 함)" if DRY_RUN else "🟢 실전 모드 (주문 실행)"
+            await send_message(
+                f"현재: {status}\n\n"
+                "`/dryrun on` — 테스트 모드\n"
+                "`/dryrun off` — 실전 모드"
+            )
+            return
+
+        switch = args[0].lower()
+        if switch == "on":
+            _update_config("DRY_RUN", "True")
+            await send_message("🟡 *테스트 모드 전환*\n주문이 실행되지 않습니다.\n\n재시작 필요:\n`sudo systemctl restart btc-trader`")
+        elif switch == "off":
+            _update_config("DRY_RUN", "False")
+            await send_message("🟢 *실전 모드 전환*\n실제 주문이 실행됩니다.\n\n재시작 필요:\n`sudo systemctl restart btc-trader`")
+        else:
+            await send_message("사용법: `/dryrun on` 또는 `/dryrun off`")
 
     async def _cmd_config(self, args):
         try:
