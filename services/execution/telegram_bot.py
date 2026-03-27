@@ -239,6 +239,9 @@ class TelegramCommandHandler:
                 f"현재 모드: *{MONITOR_MODE}*\n\n"
                 "변경: `/mode [옵션]`\n"
                 "  `realtime` — 실시간 웹소켓\n"
+                "  `5m` — 5분마다\n"
+                "  `10m` — 10분마다\n"
+                "  `30m` — 30분마다\n"
                 "  `1h` — 1시간마다\n"
                 "  `4h` — 4시간마다\n"
                 "  `daily` — 하루 1회"
@@ -246,7 +249,7 @@ class TelegramCommandHandler:
             return
 
         new_mode = args[0].lower()
-        valid_modes = ["realtime", "1h", "4h", "daily"]
+        valid_modes = ["realtime", "5m", "10m", "30m", "1h", "4h", "daily"]
         if new_mode not in valid_modes:
             await send_message(f"유효하지 않은 모드: {new_mode}\n옵션: {', '.join(valid_modes)}")
             return

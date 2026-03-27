@@ -2,9 +2,12 @@
 
 config.py의 MONITOR_MODE에 따라 동작:
   "realtime" — 웹소켓 실시간 감시 (상시 실행)
-  "1h"       — 1시간마다 스캔 (cron: 매시 5분)
-  "4h"       — 4시간마다 스캔 (cron: 0,4,8,12,16,20시 5분)
-  "daily"    — 하루 1회 (cron: 09:05 KST)
+  "5m"       — 5분마다 스캔
+  "10m"      — 10분마다 스캔
+  "30m"      — 30분마다 스캔
+  "1h"       — 1시간마다 스캔
+  "4h"       — 4시간마다 스캔
+  "daily"    — 하루 1회
 
 실행:
   python scripts/daily_live.py             (config 설정대로)
@@ -21,6 +24,38 @@ sys.path.insert(0, str(ROOT))
 
 from services.execution.config import MONITOR_MODE
 
+INTERVAL_MAP = {
+    "5m": 300,
+    "10m": 600,
+    "30m": 1800,
+    "1h": 3600,
+    "4h": 14400,
+    "daily": 86400,
+}
+
+
+async def run_interval(seconds: int, mode: str):
+    """주기적 스캔 + 텔레그램 명령어 동시 실행."""
+    from services.execution.multi_trader import run
+    from services.execution.telegram_bot import TelegramCommandHandler
+
+    cmd_handler = TelegramCommandHandler()
+    polling_task = asyncio.create_task(cmd_handler.start_polling())
+
+    print(f"주기 모드: {mode} ({seconds}초 간격)", flush=True)
+
+    while True:
+        try:
+            print(f"\n{'='*60}", flush=True)
+            print(f"스캔 실행 ({mode})", flush=True)
+            print(f"{'='*60}", flush=True)
+            await run(dry_run=False)
+        except Exception as e:
+            print(f"스캔 오류: {e}", flush=True)
+
+        print(f"\n다음 스캔까지 {seconds}초 대기...", flush=True)
+        await asyncio.sleep(seconds)
+
 
 async def main():
     args = sys.argv[1:]
@@ -36,14 +71,18 @@ async def main():
         from services.execution.realtime_monitor import main as rt_main
         await rt_main()
 
-    else:
-        # 1회 스캔 (cron에서 호출)
+    elif mode == "scan":
         from services.execution.multi_trader import run
-        print("=" * 60)
-        print(f"자동매매 스캔 실행 (모드: {mode})")
-        print("=" * 60)
+        print("=" * 60, flush=True)
+        print("1회 스캔", flush=True)
+        print("=" * 60, flush=True)
         await run(dry_run=False)
-        print("=" * 60)
+
+    elif mode in INTERVAL_MAP:
+        await run_interval(INTERVAL_MAP[mode], mode)
+
+    else:
+        print(f"알 수 없는 모드: {mode}", flush=True)
 
 
 if __name__ == "__main__":
