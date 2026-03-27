@@ -91,7 +91,8 @@ class RealtimeMonitor:
         end_str = end.strftime("%Y-%m-%dT00:00:00Z")
 
         new_levels = {}
-        for coin in coins:
+        total = len(coins)
+        for idx, coin in enumerate(coins, 1):
             symbol = coin["symbol"]
             try:
                 raw = await fetch_ohlcv(symbol, "1d", start_str, end_str, use_cache=False)
@@ -119,8 +120,11 @@ class RealtimeMonitor:
             except Exception:
                 continue
 
+            if idx % 10 == 0 or idx == total:
+                print(f"  진행: {idx}/{total} ({len(new_levels)}개 등록)", flush=True)
+
         self.levels = new_levels
-        print(f"  레벨 계산 완료: {len(self.levels)}개 종목")
+        print(f"  레벨 계산 완료: {len(self.levels)}개 종목", flush=True)
 
         # 보유 종목 트레일링스탑 갱신
         positions = self.state.get("positions", {})
