@@ -128,6 +128,7 @@ class TelegramCommandHandler:
             "/stop": self._cmd_stop,
             "/start": self._cmd_start,
             "/mode": self._cmd_mode,
+            "/strategy": self._cmd_strategy,
             "/dryrun": self._cmd_dryrun,
             "/config": self._cmd_config,
             "/reset": self._cmd_reset,
@@ -152,12 +153,12 @@ class TelegramCommandHandler:
             "/scan — 현재 돌파/근접 종목\n"
             "/stop — 봇 중지\n"
             "/start — 봇 재시작\n"
-            "/mode — 거래 주기 변경\n"
-            "  `realtime` 실시간\n"
-            "  `5m` `10m` `30m` 분단위\n"
-            "  `1h` `4h` 시간단위\n"
-            "  `daily` 하루 1회\n"
-            "/dryrun — 테스트/실전 모드 전환\n"
+            "/strategy — 전략 변경\n"
+            "  `20` 단기 `30` 중기 `50` 장기\n"
+            "/mode — 감시 주기 변경\n"
+            "  `realtime` `5m` `10m` `30m`\n"
+            "  `1h` `4h` `daily`\n"
+            "/dryrun — 테스트/실전 전환\n"
             "/config — 현재 설정 확인\n"
             "/reset — 상태 초기화\n"
             "/help — 이 메시지"
@@ -276,6 +277,37 @@ class TelegramCommandHandler:
             subprocess.Popen(["sudo", "systemctl", "restart", "btc-trader"])
         except Exception as e:
             await send_message(f"⚠️ 설정 변경 실패: {e}")
+
+    async def _cmd_strategy(self, args):
+        if not args:
+            from services.execution.config import DONCHIAN_PERIOD, ATR_MULTIPLIER
+            await send_message(
+                f"현재 전략: *DC({DONCHIAN_PERIOD}) + ATR x{ATR_MULTIPLIER}*\n\n"
+                "변경: `/strategy [옵션]`\n"
+                "  `20` — 단기 (거래 많음, 연 10+회)\n"
+                "  `30` — 중기 (연 7~8회)\n"
+                "  `50` — 장기 (거래 적음, 연 3~4회)\n\n"
+                "숫자가 작을수록 신호가 자주 발생"
+            )
+            return
+
+        try:
+            period = int(args[0])
+        except ValueError:
+            await send_message("숫자로 입력: `/strategy 20`")
+            return
+
+        if period not in [20, 30, 50]:
+            await send_message("옵션: `20`, `30`, `50`")
+            return
+
+        try:
+            _update_config("DONCHIAN_PERIOD", str(period))
+            await send_message(f"✅ 전략 변경: *DC({period})*\n재시작 중...")
+            import subprocess
+            subprocess.Popen(["sudo", "systemctl", "restart", "btc-trader"])
+        except Exception as e:
+            await send_message(f"⚠️ 변경 실패: {e}")
 
     async def _cmd_dryrun(self, args):
         if not args:
