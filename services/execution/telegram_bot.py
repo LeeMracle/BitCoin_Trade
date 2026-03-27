@@ -61,14 +61,26 @@ class TelegramCommandHandler:
     async def start_polling(self):
         """텔레그램 명령어 폴링 시작."""
         print("텔레그램 명령어 수신 대기 중...", flush=True)
+
+        # 시작 시 기존 업데이트 건너뛰기 (밀린 명령 무시)
+        try:
+            skip = await self._get_updates()
+            if skip:
+                print(f"  기존 메시지 {len(skip)}개 건너뜀", flush=True)
+        except Exception:
+            pass
+
         while self.running:
             try:
                 updates = await self._get_updates()
                 for update in updates:
-                    await self._handle_update(update)
+                    try:
+                        await self._handle_update(update)
+                    except Exception as e:
+                        print(f"명령 처리 오류: {e}", flush=True)
             except Exception as e:
                 print(f"텔레그램 폴링 오류: {e}", flush=True)
-            await asyncio.sleep(2)
+            await asyncio.sleep(1)
 
     async def _get_updates(self) -> list:
         token = _token()
@@ -95,10 +107,16 @@ class TelegramCommandHandler:
 
         # 본인 chat_id만 허용
         if chat_id != _chat_id():
+            print(f"  무시: chat_id 불일치 ({chat_id})", flush=True)
+            return
+
+        if not text:
             return
 
         if not text.startswith("/"):
             return
+
+        print(f"  명령 수신: {text}", flush=True)
 
         parts = text.split()
         cmd = parts[0].lower().split("@")[0]  # /command@botname 처리
@@ -118,8 +136,11 @@ class TelegramCommandHandler:
 
         handler = handlers.get(cmd)
         if handler:
+            print(f"  처리: {cmd}", flush=True)
             await handler(args)
+            print(f"  완료: {cmd}", flush=True)
         else:
+            print(f"  알 수 없는 명령: {cmd}", flush=True)
             await send_message(f"알 수 없는 명령: {cmd}\n/help 로 명령어 확인")
 
     # ── 명령어 구현 ──────────────────────────────────────
