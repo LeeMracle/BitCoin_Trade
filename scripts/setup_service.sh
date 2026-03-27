@@ -14,10 +14,11 @@ After=network.target
 Type=simple
 User=ubuntu
 WorkingDirectory=/home/ubuntu/BitCoin_Trade
-ExecStart=/home/ubuntu/BitCoin_Trade/.venv/bin/python scripts/daily_live.py --realtime
+ExecStart=/home/ubuntu/BitCoin_Trade/.venv/bin/python -u scripts/daily_live.py --realtime
 Restart=always
 RestartSec=10
 Environment=PYTHONUTF8=1
+Environment=PYTHONUNBUFFERED=1
 
 [Install]
 WantedBy=multi-user.target
