@@ -243,17 +243,9 @@ class TelegramCommandHandler:
             await send_message("봇 참조 없음")
 
     async def _cmd_start(self, args):
-        if self.monitor:
-            if self.monitor.running:
-                await send_message("이미 실행 중입니다")
-            else:
-                await send_message(
-                    "🟢 *봇 재시작 중...*\n"
-                    "서버에서 재시작 필요:\n"
-                    "`sudo systemctl restart btc-trader`"
-                )
-        else:
-            await send_message("봇 참조 없음")
+        await send_message("🟢 *봇 재시작 중...*")
+        import subprocess
+        subprocess.Popen(["sudo", "systemctl", "restart", "btc-trader"])
 
     async def _cmd_mode(self, args):
         if not args:
@@ -279,11 +271,9 @@ class TelegramCommandHandler:
 
         try:
             _update_config("MONITOR_MODE", f'"{new_mode}"')
-            await send_message(
-                f"✅ 모드 변경: *{new_mode}*\n\n"
-                "적용하려면 재시작 필요:\n"
-                "`sudo systemctl restart btc-trader`"
-            )
+            await send_message(f"✅ 모드 변경: *{new_mode}*\n재시작 중...")
+            import subprocess
+            subprocess.Popen(["sudo", "systemctl", "restart", "btc-trader"])
         except Exception as e:
             await send_message(f"⚠️ 설정 변경 실패: {e}")
 
@@ -301,10 +291,14 @@ class TelegramCommandHandler:
         switch = args[0].lower()
         if switch == "on":
             _update_config("DRY_RUN", "True")
-            await send_message("🟡 *테스트 모드 전환*\n주문이 실행되지 않습니다.\n\n재시작 필요:\n`sudo systemctl restart btc-trader`")
+            await send_message("🟡 *테스트 모드 전환*\n재시작 중...")
+            import subprocess
+            subprocess.Popen(["sudo", "systemctl", "restart", "btc-trader"])
         elif switch == "off":
             _update_config("DRY_RUN", "False")
-            await send_message("🟢 *실전 모드 전환*\n실제 주문이 실행됩니다.\n\n재시작 필요:\n`sudo systemctl restart btc-trader`")
+            await send_message("🟢 *실전 모드 전환*\n재시작 중...")
+            import subprocess
+            subprocess.Popen(["sudo", "systemctl", "restart", "btc-trader"])
         else:
             await send_message("사용법: `/dryrun on` 또는 `/dryrun off`")
 
