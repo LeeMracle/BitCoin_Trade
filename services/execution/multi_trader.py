@@ -243,14 +243,8 @@ async def run(dry_run: bool = False):
 
 def sell_market_coin(symbol: str, amount: float) -> dict:
     """특정 코인 시장가 매도."""
-    import os
-    from dotenv import load_dotenv
-    load_dotenv(Path(__file__).resolve().parents[1] / ".env")
-    exchange = ccxt.upbit({
-        "apiKey": os.environ.get("UPBIT_ACCESS_KEY"),
-        "secret": os.environ.get("UPBIT_SECRET_KEY"),
-        "enableRateLimit": True,
-    })
+    from services.execution.upbit_client import _create_exchange
+    exchange = _create_exchange()
     order = exchange.create_market_sell_order(symbol, amount)
     return {"id": order.get("id"), "price": order.get("average") or order.get("price"),
             "amount": order.get("amount"), "status": order.get("status")}
@@ -258,14 +252,8 @@ def sell_market_coin(symbol: str, amount: float) -> dict:
 
 def buy_market_coin(symbol: str, amount_krw: float) -> dict:
     """특정 코인 시장가 매수."""
-    import os
-    from dotenv import load_dotenv
-    load_dotenv(Path(__file__).resolve().parents[1] / ".env")
-    exchange = ccxt.upbit({
-        "apiKey": os.environ.get("UPBIT_ACCESS_KEY"),
-        "secret": os.environ.get("UPBIT_SECRET_KEY"),
-        "enableRateLimit": True,
-    })
+    from services.execution.upbit_client import _create_exchange
+    exchange = _create_exchange()
     order = exchange.create_market_buy_order(symbol, None, params={"cost": amount_krw})
     return {"id": order.get("id"), "price": order.get("average") or order.get("price"),
             "amount": order.get("amount"), "status": order.get("status")}
