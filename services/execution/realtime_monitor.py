@@ -447,7 +447,15 @@ class RealtimeMonitor:
 
 async def main():
     monitor = RealtimeMonitor()
-    await monitor.start()
+
+    # 텔레그램 명령어 핸들러 동시 실행
+    from services.execution.telegram_bot import TelegramCommandHandler
+    cmd_handler = TelegramCommandHandler(monitor=monitor)
+
+    await asyncio.gather(
+        monitor.start(),
+        cmd_handler.start_polling(),
+    )
 
 
 if __name__ == "__main__":
