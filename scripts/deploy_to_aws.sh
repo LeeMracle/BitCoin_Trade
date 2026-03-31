@@ -9,7 +9,7 @@
 set -e
 
 # ── 설정 ──────────────────────────────────────────────
-AWS_HOST="13.209.165.58"
+AWS_HOST="13.124.82.122"
 AWS_USER="ubuntu"
 PEM_KEY="$HOME/upbit-trading-key-seoul.pem"  # PEM 파일 경로 수정 필요
 PROJECT_DIR="/home/ubuntu/BitCoin_Trade"
@@ -29,6 +29,15 @@ echo "=== AWS 서버 배포 시작 ==="
 echo "  서버: $AWS_USER@$AWS_HOST"
 echo "  로컬: $LOCAL_DIR"
 echo "  원격: $PROJECT_DIR"
+
+# 0. 배포 전 검증 (시행착오 기반 자동 체크)
+echo ""
+echo "[0/5] 배포 전 검증..."
+PYTHONUTF8=1 python "$LOCAL_DIR/scripts/pre_deploy_check.py"
+if [ $? -ne 0 ]; then
+    echo "배포 전 검증 실패. 배포를 중단합니다."
+    exit 1
+fi
 
 # 1. 서버에 프로젝트 디렉토리 생성
 echo ""

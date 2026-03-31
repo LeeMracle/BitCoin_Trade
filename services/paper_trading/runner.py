@@ -1,8 +1,8 @@
-"""페이퍼 트레이딩 일일 러너.
+"""페이퍼 트레이딩 일일 러너 — 전략 옵션 시스템 지원.
 
 매일 1회 실행하여:
   1. 최신 OHLCV 데이터 수집 (공개 API, 인증 불필요)
-  2. 전략 신호 확인 (Donchian 50 + ATR 3.0)
+  2. 전략 신호 확인 (config.py 의 STRATEGY 설정 사용)
   3. 가상 매매 실행 및 상태 저장
   4. 텔레그램 알림 발송
 
@@ -10,6 +10,9 @@
   python -m services.paper_trading.runner          (일일 체크)
   python -m services.paper_trading.runner --status  (현재 상태 조회)
   python -m services.paper_trading.runner --reset   (상태 초기화)
+
+전략 변경:
+  services/execution/config.py 의 STRATEGY 값을 수정
 """
 from __future__ import annotations
 
@@ -21,16 +24,16 @@ from datetime import datetime, timedelta, timezone
 import pandas as pd
 
 from services.market_data.fetcher import fetch_ohlcv
-from services.paper_trading.strategy import (
-    check_entry, check_exit, get_strategy_info,
-    DONCHIAN_PERIOD, ATR_PERIOD,
-)
+from services.strategies import get_strategy
+from services.execution.config import STRATEGY, STRATEGY_KWARGS
+# Donchian 상단 거리 정보 표시용 — 참고 목적
+from services.paper_trading.strategy import calc_donchian_upper
 from services.paper_trading.state import load_state, save_state, PaperState
 from services.alerting.notifier import send, notify_trade, notify_daily_summary, notify_error
 
 
-# 데이터 수집에 필요한 최소 일수 (워밍업)
-MIN_BARS = max(DONCHIAN_PERIOD, ATR_PERIOD) + 10
+# 넉넉한 워밍업 기간 (EMA 200 전략 등 고려)
+MIN_BARS = 210
 
 
 async def fetch_recent_ohlcv(days: int = MIN_BARS + 5) -> pd.DataFrame:
@@ -50,10 +53,9 @@ async def run_daily():
     """일일 페이퍼 트레이딩 체크."""
     state = load_state()
     today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
-    strategy_info = get_strategy_info()
 
     print(f"[{today}] 페이퍼 트레이딩 일일 체크")
-    print(f"  전략: {strategy_info['name']}")
+    print(f"  전략: {STRATEGY}")
 
     try:
         df = await fetch_recent_ohlcv()
@@ -78,16 +80,21 @@ async def run_daily():
 
     action = None
 
+    # 전략 함수 호출 — signal Series (0 또는 1) 반환
+    strategy_fn = get_strategy(STRATEGY, **STRATEGY_KWARGS)
+    signals = strategy_fn(df)
+    latest_signal = int(signals.iloc[-1])
+    prev_signal = int(signals.iloc[-2]) if len(signals) > 1 else 0
+
     if not state.is_holding:
-        # 진입 확인
-        if check_entry(df):
+        # 진입 확인 — 이전 봉 signal=0 → 현재 봉 signal=1 : 신규 매수 신호
+        if prev_signal == 0 and latest_signal == 1:
             state.open_position(latest_close, latest_date)
             action = "BUY"
             print(f"  *** 매수 신호! 가격: {latest_close:,.0f} KRW ***")
             await notify_trade("BUY", latest_close, state.equity, f"paper_{latest_date}")
         else:
-            # Donchian 상단까지 거리 표시
-            from services.paper_trading.strategy import calc_donchian_upper
+            # Donchian 상단까지 거리 표시 (정보 제공 목적)
             upper = calc_donchian_upper(df)
             if not pd.isna(upper.iloc[-1]):
                 dist = (upper.iloc[-1] - latest_close) / latest_close * 100
@@ -95,17 +102,16 @@ async def run_daily():
             print("  신호 없음 — 대기 유지")
 
     else:
-        # 청산 확인
-        should_exit, new_stop = check_exit(df, state.highest_since_entry)
+        # 청산 확인 — signal=0 으로 전환되면 매도
+        should_exit = (latest_signal == 0)
 
-        # 고점 갱신
+        # 트레일링스탑 — 정보 표시 목적으로 유지 (state 내 값 갱신)
         if latest_close > state.highest_since_entry:
             state.highest_since_entry = latest_close
-        state.trailing_stop = new_stop
 
         unrealized = (latest_close / state.entry_price - 1) * 100
         print(f"  진입가: {state.entry_price:,.0f}  미실현: {unrealized:+.1f}%")
-        print(f"  고점: {state.highest_since_entry:,.0f}  트레일링스탑: {new_stop:,.0f}")
+        print(f"  고점: {state.highest_since_entry:,.0f}  트레일링스탑: {state.trailing_stop:,.0f}")
 
         if should_exit:
             state.close_position(latest_close, latest_date)
@@ -134,12 +140,11 @@ async def run_daily():
 def show_status():
     """현재 페이퍼 트레이딩 상태 출력."""
     state = load_state()
-    strategy_info = get_strategy_info()
 
     print("=" * 60)
     print(f"페이퍼 트레이딩 상태")
     print("=" * 60)
-    print(f"  전략: {strategy_info['name']}")
+    print(f"  전략: {STRATEGY}")
     print(f"  마지막 업데이트: {state.last_updated}")
     print(f"  포지션: {'보유중' if state.is_holding else '대기중'}")
 

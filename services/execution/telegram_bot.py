@@ -154,7 +154,9 @@ class TelegramCommandHandler:
             "/stop — 봇 중지\n"
             "/start — 봇 재시작\n"
             "/strategy — 전략 변경\n"
-            "  `20` 단기 `30` 중기 `50` 장기\n"
+            "  `dc_atr` `rsi_ema` `ensemble`\n"
+            "  `regime` `mtf` `volume` `composite`\n"
+            "  `daytrading` (4h 단타)\n"
             "/mode — 감시 주기 변경\n"
             "  `realtime` `5m` `10m` `30m`\n"
             "  `1h` `4h` `daily`\n"
@@ -279,31 +281,37 @@ class TelegramCommandHandler:
             await send_message(f"⚠️ 설정 변경 실패: {e}")
 
     async def _cmd_strategy(self, args):
+        from services.strategies import STRATEGY_REGISTRY
+        valid = list(STRATEGY_REGISTRY.keys())
+
         if not args:
-            from services.execution.config import DONCHIAN_PERIOD, ATR_MULTIPLIER
-            await send_message(
-                f"현재 전략: *DC({DONCHIAN_PERIOD}) + ATR x{ATR_MULTIPLIER}*\n\n"
-                "변경: `/strategy [옵션]`\n"
-                "  `20` — 단기 (거래 많음, 연 10+회)\n"
-                "  `30` — 중기 (연 7~8회)\n"
-                "  `50` — 장기 (거래 적음, 연 3~4회)\n\n"
-                "숫자가 작을수록 신호가 자주 발생"
-            )
+            from services.execution.config import STRATEGY
+            desc_map = {
+                "dc_atr": "DC(50)+ATR 추세추종",
+                "rsi_ema": "RSI(10)+EMA(150) 모멘텀",
+                "ensemble": "DC+ATR & RSI+EMA 앙상블",
+                "regime": "변동성 레짐 적응형",
+                "mtf": "EMA(200)+DC(30) 멀티타임프레임",
+                "volume": "DC(50)+거래량 확인",
+                "composite": "복합전략",
+                "daytrading": "4h 단타 (거래량돌파+트레일)",
+            }
+            lines = [f"현재 전략: *{STRATEGY}*\n"]
+            lines.append("변경: `/strategy [이름]`\n")
+            for k in valid:
+                marker = " 👈" if k == STRATEGY else ""
+                lines.append(f"  `{k}` — {desc_map.get(k, k)}{marker}")
+            await send_message("\n".join(lines))
+            return
+
+        name = args[0].lower()
+        if name not in valid:
+            await send_message(f"유효하지 않은 전략: {name}\n옵션: {', '.join(valid)}")
             return
 
         try:
-            period = int(args[0])
-        except ValueError:
-            await send_message("숫자로 입력: `/strategy 20`")
-            return
-
-        if period not in [20, 30, 50]:
-            await send_message("옵션: `20`, `30`, `50`")
-            return
-
-        try:
-            _update_config("DONCHIAN_PERIOD", str(period))
-            await send_message(f"✅ 전략 변경: *DC({period})*\n재시작 중...")
+            _update_config("STRATEGY", f'"{name}"')
+            await send_message(f"✅ 전략 변경: *{name}*\n재시작 중...")
             import subprocess
             subprocess.Popen(["sudo", "systemctl", "restart", "btc-trader"])
         except Exception as e:
@@ -340,7 +348,8 @@ class TelegramCommandHandler:
             msg = (
                 f"⚙️ *현재 설정*\n\n"
                 f"모드: `{config.MONITOR_MODE}`\n"
-                f"전략: Donchian({config.DONCHIAN_PERIOD})+ATR({config.ATR_PERIOD})x{config.ATR_MULTIPLIER}\n"
+                f"전략: `{config.STRATEGY}`\n"
+                f"DC: {config.DONCHIAN_PERIOD} | ATR: {config.ATR_PERIOD}x{config.ATR_MULTIPLIER}\n"
                 f"최대 포지션: {config.MAX_POSITIONS}\n"
                 f"최소 거래대금: {config.MIN_VOLUME_KRW/1e8:.0f}억\n"
                 f"DRY-RUN: {config.DRY_RUN}\n"

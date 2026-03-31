@@ -26,6 +26,7 @@ from services.execution.scanner import (
     get_krw_market_coins, scan_entry_signals, check_exit_signal,
 )
 from services.execution.upbit_client import get_balance, buy_market, sell_market
+from services.execution.config import STRATEGY
 from services.alerting.notifier import send, notify_error
 
 # 설정
@@ -64,7 +65,7 @@ async def run(dry_run: bool = False):
     positions = state.get("positions", {})
 
     print(f"[{today}] 멀티코인 자동매매 {'(DRY-RUN)' if dry_run else ''}")
-    print(f"  전략: Donchian(50) + ATR(14)x3.0")
+    print(f"  전략: {STRATEGY}  (변경: services/execution/config.py)")
     print(f"  현재 보유: {len(positions)}종목 / 최대 {MAX_POSITIONS}종목")
 
     # ── 잔고 확인 ──────────────────────────────────────
@@ -267,7 +268,7 @@ def show_status():
     print("=" * 60)
     print("멀티코인 자동매매 상태")
     print("=" * 60)
-    print(f"  전략: Donchian(50) + ATR(14)x3.0 (전체 스캔)")
+    print(f"  전략: {STRATEGY}  (변경: services/execution/config.py)")
     print(f"  마지막: {state.get('last_updated', 'N/A')}")
     print(f"  보유: {len(positions)} / {MAX_POSITIONS}")
 

@@ -27,6 +27,7 @@ import numpy as np
 import pandas as pd
 
 from services.execution.config import (
+    STRATEGY, STRATEGY_KWARGS,
     DONCHIAN_PERIOD, ATR_PERIOD, ATR_MULTIPLIER,
     MAX_POSITIONS, POSITION_RATIO, MIN_VOLUME_KRW,
     MIN_ORDER_KRW, DRY_RUN, EXCLUDE_SYMBOLS, MIN_LISTING_DAYS,
@@ -45,10 +46,28 @@ from services.alerting.notifier import send, notify_error
 UPBIT_WS_URL = "wss://api.upbit.com/websocket/v1"
 REFRESH_HOUR_UTC = 0  # UTC 00:00 = KST 09:00
 
+# daytrading 전략: 4시간봉 사용, 4시간마다 갱신
+IS_DAYTRADING = STRATEGY == "daytrading"
+_DT_TIMEFRAME = "4h" if IS_DAYTRADING else "1d"
+_DT_LOOKBACK_DAYS = 120 if IS_DAYTRADING else max(MIN_LISTING_DAYS + 10, DONCHIAN_PERIOD + 80)
+_DT_DC_PERIOD = STRATEGY_KWARGS.get("dc_period", 15 if IS_DAYTRADING else DONCHIAN_PERIOD)
+_DT_VOL_THRESHOLD = STRATEGY_KWARGS.get("vol_threshold", 2.5 if IS_DAYTRADING else 1.5)
+_DT_TRAIL_PCT = STRATEGY_KWARGS.get("trail_pct", 0.02)  # daytrading: 2% 고정
+_DT_SL_PCT = STRATEGY_KWARGS.get("sl_pct", 0.015)       # daytrading: 1.5% 손절
+_DT_MAX_BARS = STRATEGY_KWARGS.get("max_bars", 12)       # daytrading: 12봉(48h)
+_DT_TREND_PERIOD = STRATEGY_KWARGS.get("trend_period", 50)
+
 # ── 안전장치 설정 ─────────────────────────────────────
 MAX_CONSECUTIVE_ERRORS = 5     # 연속 오류 N회 시 봇 중지
 ERROR_COOLDOWN_SEC = 60        # 오류 발생 후 동일 종목 재시도 대기 (초)
 ALERT_COOLDOWN_SEC = 300       # 동일 오류 알림 간격 (5분)
+
+
+VR_STATE_FILE = Path(__file__).resolve().parents[2] / "workspace" / "vol_reversal_dryrun_state.json"
+VR_TP = 0.03     # vol_reversal 익절 +3%
+VR_TRAIL = 0.015  # vol_reversal 트레일링 1.5%
+VR_SL = 0.02      # vol_reversal 손절 -2%
+VR_MAX_HOURS = 32  # vol_reversal 시간제한 32시간
 
 
 class RealtimeMonitor:
@@ -65,7 +84,10 @@ class RealtimeMonitor:
     async def start(self):
         print("=" * 60, flush=True)
         print("실시간 모니터 시작", flush=True)
-        print(f"  전략: Donchian({DONCHIAN_PERIOD}) + ATR({ATR_PERIOD})x{ATR_MULTIPLIER}", flush=True)
+        if IS_DAYTRADING:
+            print(f"  전략: daytrading DC({_DT_DC_PERIOD})+Vol{_DT_VOL_THRESHOLD}x+Trail{_DT_TRAIL_PCT*100}% (4h)", flush=True)
+        else:
+            print(f"  전략: {STRATEGY} Donchian({DONCHIAN_PERIOD}) + ATR({ATR_PERIOD})x{ATR_MULTIPLIER}", flush=True)
         print(f"  최대 포지션: {MAX_POSITIONS}", flush=True)
         print(f"  DRY-RUN: {DRY_RUN}", flush=True)
         print("=" * 60, flush=True)
@@ -74,19 +96,27 @@ class RealtimeMonitor:
         await self._run_websocket()
 
     async def _refresh_levels(self):
-        """전체 종목 Donchian 상단 + ATR 계산."""
-        today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
-        if self.last_refresh_date == today:
-            return
-        self.last_refresh_date = today
+        """전체 종목 레벨 갱신 (전략에 따라 일봉 또는 4시간봉)."""
+        now = datetime.now(tz=timezone.utc)
+        refresh_key = now.strftime("%Y-%m-%d") if not IS_DAYTRADING else now.strftime("%Y-%m-%d-%H")
 
-        print(f"\n[{today}] Donchian/ATR 레벨 갱신 중...")
+        # daytrading: 4시간마다 갱신, 기타: 일 1회
+        if IS_DAYTRADING:
+            if (self.last_refresh_date == refresh_key[:13]):  # 같은 시간대면 스킵
+                return
+        else:
+            if self.last_refresh_date == refresh_key:
+                return
+        self.last_refresh_date = refresh_key[:13] if IS_DAYTRADING else refresh_key
+
+        tf_label = _DT_TIMEFRAME
+        print(f"\n[{now.strftime('%Y-%m-%d %H:%M')}] 레벨 갱신 ({tf_label}, DC{_DT_DC_PERIOD})...")
 
         coins = get_krw_market_coins()
         print(f"  거래대금 필터 통과: {len(coins)}개")
 
-        end = datetime.now(tz=timezone.utc)
-        start = end - timedelta(days=MIN_LISTING_DAYS + 10)
+        end = now
+        start = end - timedelta(days=_DT_LOOKBACK_DAYS)
         start_str = start.strftime("%Y-%m-%dT00:00:00Z")
         end_str = end.strftime("%Y-%m-%dT00:00:00Z")
 
@@ -95,27 +125,41 @@ class RealtimeMonitor:
         for idx, coin in enumerate(coins, 1):
             symbol = coin["symbol"]
             try:
-                raw = await fetch_ohlcv(symbol, "1d", start_str, end_str, use_cache=False)
+                raw = await fetch_ohlcv(symbol, _DT_TIMEFRAME, start_str, end_str, use_cache=False)
                 df = pd.DataFrame(raw)
-                if len(df) < MIN_LISTING_DAYS:
+                min_bars = _DT_DC_PERIOD + _DT_TREND_PERIOD + 5
+                if len(df) < min_bars:
                     continue
 
-                upper = calc_donchian_upper(df, DONCHIAN_PERIOD)
+                upper = calc_donchian_upper(df, _DT_DC_PERIOD)
                 atr = calc_atr(df, ATR_PERIOD)
 
                 latest_upper = upper.iloc[-1]
                 latest_atr = atr.iloc[-1]
+                latest_close = float(df["close"].iloc[-1])
 
                 if np.isnan(latest_upper) or np.isnan(latest_atr):
                     continue
 
-                new_levels[symbol] = {
+                level = {
                     "upper": float(latest_upper),
                     "atr": float(latest_atr),
-                    "close": float(df["close"].iloc[-1]),
+                    "close": latest_close,
                     "volume_krw": coin["volume_krw"],
                 }
 
+                # daytrading: 추세 필터 + 거래량 조건 사전 계산
+                if IS_DAYTRADING:
+                    sma_trend = float(pd.Series(df["close"]).rolling(_DT_TREND_PERIOD).mean().iloc[-1])
+                    vol_sma = float(pd.Series(df["volume"]).rolling(20).mean().iloc[-1])
+                    latest_vol = float(df["volume"].iloc[-1])
+                    level["sma_trend"] = sma_trend
+                    level["vol_sma"] = vol_sma
+                    level["latest_vol"] = latest_vol
+                    level["trend_ok"] = latest_close > sma_trend
+                    level["vol_ok"] = latest_vol > vol_sma * _DT_VOL_THRESHOLD
+
+                new_levels[symbol] = level
                 await asyncio.sleep(0.12)
             except Exception:
                 continue
@@ -126,58 +170,196 @@ class RealtimeMonitor:
         self.levels = new_levels
         print(f"  레벨 계산 완료: {len(self.levels)}개 종목", flush=True)
 
-        # 보유 종목 트레일링스탑 갱신
+        # 보유 종목 트레일링스탑 갱신 (전략 전환 시 기존 스탑 보존)
         positions = self.state.get("positions", {})
         for symbol, pos in positions.items():
-            if symbol in self.levels:
+            old_stop = pos.get("trail_stop", 0)
+            if IS_DAYTRADING:
+                new_stop = pos["highest"] * (1 - _DT_TRAIL_PCT)
+                # 기존 스탑이 더 넓으면(낮으면) 보존 — 전략 전환 보호
+                pos["trail_stop"] = min(old_stop, new_stop) if old_stop > 0 else new_stop
+            elif symbol in self.levels:
                 atr_val = self.levels[symbol]["atr"]
-                pos["trail_stop"] = pos["highest"] - atr_val * ATR_MULTIPLIER
+                new_stop = pos["highest"] - atr_val * ATR_MULTIPLIER
+                pos["trail_stop"] = min(old_stop, new_stop) if old_stop > 0 else new_stop
+
+        # daytrading: 시간 초과 포지션 청산 체크
+        if IS_DAYTRADING:
+            now = datetime.now(tz=timezone.utc)
+            expired = []
+            for symbol, pos in positions.items():
+                try:
+                    entry_dt = datetime.strptime(pos["entry_date"], "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+                    hours_held = (now - entry_dt).total_seconds() / 3600
+                    max_hours = _DT_MAX_BARS * 4  # 12봉 × 4시간 = 48시간
+                    if hours_held >= max_hours:
+                        expired.append(symbol)
+                        print(f"  ⏰ {symbol} 시간초과 ({hours_held:.0f}h >= {max_hours}h)")
+                except (ValueError, KeyError):
+                    pass
+            for symbol in expired:
+                price = self.levels.get(symbol, {}).get("close", pos.get("entry_price", 0))
+                await self._execute_sell(symbol, price)
 
         save_state(self.state)
 
-        # 일일 리포트
-        if NOTIFY_DAILY_REPORT:
-            await self._send_daily_report()
+        # 정기 분석 보고 (4시간마다)
+        try:
+            await self._send_periodic_report()
+        except Exception as e:
+            print(f"  보고 전송 오류: {e}", flush=True)
 
-    async def _send_daily_report(self):
+    async def _send_periodic_report(self):
+        """4시간 정기 분석 보고 — 검증 플랜 누적 성적 포함."""
         positions = self.state.get("positions", {})
         closed = self.state.get("closed_trades", [])
-        today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+        now = datetime.now(tz=timezone.utc)
+        now_str = now.strftime("%m/%d %H:%M UTC")
 
         try:
             balance = get_balance()
             krw = balance["krw"]
+            total = balance["total_krw"]
         except Exception:
             krw = 0
+            total = 0
 
-        near = [
-            (sym, lv) for sym, lv in self.levels.items()
-            if sym not in positions
-            and lv["close"] > 0
-            and (lv["upper"] - lv["close"]) / lv["close"] <= 0.03
-        ]
+        # ── 누적 성적표 (현재 전략 기간만 집계) ──
+        # 전략 전환 시점 이후 거래만 카운트
+        strategy_start = self.state.get("strategy_start", "2026-03-29")
+        current_trades = [t for t in closed if t.get("exit_date", "") >= strategy_start]
 
-        msg = f"📊 *일일 리포트* ({today})\n"
-        msg += f"감시: {len(self.levels)}종목\n"
-        msg += f"보유: {len(positions)}/{MAX_POSITIONS}\n"
+        n_trades = len(current_trades)
+        wins = [t for t in current_trades if t["return_pct"] > 0]
+        losses = [t for t in current_trades if t["return_pct"] <= 0]
+        win_rate = len(wins) / n_trades * 100 if n_trades > 0 else 0
+        avg_ret = sum(t["return_pct"] for t in current_trades) / n_trades if n_trades > 0 else 0
+        total_ret = sum(t["return_pct"] for t in current_trades)
 
-        for sym, pos in positions.items():
-            price = self.levels.get(sym, {}).get("close", 0)
-            if price > 0 and pos["entry_price"] > 0:
-                ret = (price / pos["entry_price"] - 1) * 100
-                msg += f"  {sym} {ret:+.1f}%\n"
+        # 연속 손실 카운트 (현재 전략 거래만)
+        consec_loss = 0
+        for t in reversed(current_trades):
+            if t["return_pct"] <= 0:
+                consec_loss += 1
+            else:
+                break
 
-        if near and NOTIFY_NEAR_SIGNAL:
-            msg += f"\n근접({len(near)}개):\n"
-            for sym, lv in near[:5]:
-                dist = (lv["upper"] - lv["close"]) / lv["close"] * 100
-                msg += f"  {sym} ({dist:+.1f}%)\n"
+        # ── 검증 플랜 기준일 ──
+        start_date_str = self.state.get("strategy_start", "2026-03-29")
+        start_date = datetime.strptime(start_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        days_elapsed = (now - start_date).days
 
-        wins = [t for t in closed if t["return_pct"] > 0]
-        msg += f"\n거래: {len(closed)}회"
-        if closed:
-            msg += f" 승률: {len(wins)/len(closed)*100:.0f}%"
-        msg += f"\nKRW: {krw:,.0f}"
+        # 체크포인트 판정
+        checkpoint = ""
+        if days_elapsed >= 7:
+            if n_trades >= 15:
+                verdict = "PASS" if win_rate >= 35 else "FAIL"
+                checkpoint = f"\n🏁 *7일 최종판정*: {verdict} ({n_trades}건, {win_rate:.0f}%)"
+                if win_rate >= 35:
+                    checkpoint += "\n→ 증액 검토 가능"
+                else:
+                    checkpoint += "\n→ 전략 변경 권장"
+            else:
+                checkpoint = f"\n📅 7일차 — 거래 {n_trades}건 (15건 미달, 계속 관찰)"
+        elif days_elapsed >= 5:
+            if n_trades >= 10:
+                verdict = "OK" if win_rate >= 30 else "경고"
+                checkpoint = f"\n📅 5일 중간점검: {verdict} ({n_trades}건, {win_rate:.0f}%)"
+                if win_rate < 30:
+                    checkpoint += "\n→ 전략 수정 검토 필요"
+            else:
+                checkpoint = f"\n📅 5일차 — 거래 {n_trades}건 (10건 미달)"
+        elif days_elapsed >= 3:
+            if n_trades >= 5 and win_rate == 0:
+                checkpoint = f"\n🚨 3일 긴급: 전패 ({n_trades}건 0승) → 중단 권장"
+            elif n_trades >= 5:
+                checkpoint = f"\n📅 3일 방향확인: {n_trades}건, {win_rate:.0f}% — 계속 진행"
+            else:
+                checkpoint = f"\n📅 {days_elapsed}일차 — 거래 {n_trades}건"
+
+        # ── 5연패 자동 중단 ──
+        if consec_loss >= 5:
+            self.running = False
+            await send(
+                f"🛑 *5연패 자동 중단*\n"
+                f"연속 {consec_loss}건 손실 — 검증 플랜 조기 탈출\n"
+                f"승률: {win_rate:.0f}% ({len(wins)}/{n_trades})\n"
+                f"원인 분석 후 전략 수정 필요\n"
+                f"재시작: `sudo systemctl restart btc-trader`"
+            )
+            print(f"\n!!! 5연패 자동 중단 !!!", flush=True)
+            return
+
+        # ── 시장 분석 ──
+        market_msg = ""
+        try:
+            import urllib.request, json as _json
+            # BTC 시세
+            _ex = ccxt.upbit({"enableRateLimit": True})
+            _btc = _ex.fetch_ticker("BTC/KRW")
+            btc_price = _btc["last"]
+            btc_chg = _btc.get("percentage", 0) or 0
+            # Fear & Greed
+            _fg = _json.loads(urllib.request.urlopen(
+                "https://api.alternative.me/fng/?limit=1", timeout=5
+            ).read())
+            fg_val = _fg["data"][0]["value"]
+            fg_label = _fg["data"][0]["value_classification"]
+            market_msg = (
+                f"\n*시장*\n"
+                f"  BTC: {btc_price:,.0f} ({btc_chg:+.1f}%)\n"
+                f"  F&G: {fg_val} ({fg_label})\n"
+            )
+        except Exception:
+            market_msg = "\n*시장* 조회 실패\n"
+
+        # ── 메시지 조합 ──
+        msg = f"📋 *정기 분석* ({now_str})\n"
+        msg += market_msg
+
+        # 포지션
+        msg += f"\n*보유 {len(positions)}/5*\n"
+        if positions:
+            for sym, pos in positions.items():
+                price = self.levels.get(sym, {}).get("close", 0)
+                if price > 0 and pos["entry_price"] > 0:
+                    ret = (price / pos["entry_price"] - 1) * 100
+                    try:
+                        entry_dt = datetime.strptime(pos["entry_date"], "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+                        hours = (now - entry_dt).total_seconds() / 3600
+                        msg += f"  {sym} {ret:+.1f}% ({hours:.0f}h/48h)\n"
+                    except (ValueError, KeyError):
+                        msg += f"  {sym} {ret:+.1f}%\n"
+                else:
+                    msg += f"  {sym}\n"
+        else:
+            msg += "  없음\n"
+
+        # 누적 성적
+        msg += f"\n*누적 성적* ({days_elapsed}일차)\n"
+        msg += f"  거래: {n_trades}건\n"
+        msg += f"  승률: {win_rate:.0f}% ({len(wins)}승 {len(losses)}패)\n"
+        msg += f"  평균: {avg_ret:+.1f}% | 합계: {total_ret:+.1f}%\n"
+        if consec_loss > 0:
+            msg += f"  연속손실: {consec_loss}건 ({'⚠️' if consec_loss >= 3 else ''})\n"
+
+        # 백테스트 대비
+        msg += f"\n*백테스트 대비*\n"
+        msg += f"  승률: {win_rate:.0f}% (목표 35%+)\n"
+        msg += f"  평균: {avg_ret:+.1f}% (목표 +0.5%+)\n"
+
+        # 체크포인트
+        if checkpoint:
+            msg += checkpoint
+
+        # 잔고
+        msg += f"\n\nKRW: {krw:,.0f} | 평가: {total:,.0f}"
+
+        # 다음 보고 시각
+        next_h = ((now.hour // 4) + 1) * 4
+        if next_h >= 24:
+            next_h = 0
+        msg += f"\n⏰ 다음: {next_h:02d}:05 UTC ({next_h+9:02d}:05 KST)"
 
         await send(msg)
 
@@ -199,6 +381,18 @@ class RealtimeMonitor:
                             coin = sym.split("/")[0]
                             upbit_codes.append(f"KRW-{coin}")
 
+                        # vol_reversal DRY-RUN 보유종목도 구독에 추가
+                        try:
+                            if VR_STATE_FILE.exists():
+                                with open(VR_STATE_FILE, "r", encoding="utf-8") as _vrf:
+                                    _vr = json.load(_vrf)
+                                for sym in _vr.get("positions", {}).keys():
+                                    code = f"KRW-{sym.split('/')[0]}"
+                                    if code not in upbit_codes:
+                                        upbit_codes.append(code)
+                        except Exception:
+                            pass
+
                         subscribe = [
                             {"ticket": str(uuid.uuid4())[:8]},
                             {"type": "ticker", "codes": upbit_codes, "isOnlyRealtime": True},
@@ -219,13 +413,19 @@ class RealtimeMonitor:
                                 print("웹소켓 연결 종료")
                                 break
 
-                            # 매일 갱신 체크
+                            # 갱신 체크: daytrading은 4시간마다, 기타는 일 1회
                             now_utc = datetime.now(tz=timezone.utc)
-                            if (now_utc.hour == REFRESH_HOUR_UTC and
-                                    now_utc.strftime("%Y-%m-%d") != self.last_refresh_date):
-                                await self._refresh_levels()
-                                # 재구독 필요 → 루프 탈출 후 재연결
-                                break
+                            if IS_DAYTRADING:
+                                # 4시간봉 마감 시점(0,4,8,12,16,20시) + 5분에 갱신
+                                if (now_utc.hour % 4 == 0 and now_utc.minute >= 5 and
+                                        now_utc.strftime("%Y-%m-%d-%H") != self.last_refresh_date):
+                                    await self._refresh_levels()
+                                    break
+                            else:
+                                if (now_utc.hour == REFRESH_HOUR_UTC and
+                                        now_utc.strftime("%Y-%m-%d") != self.last_refresh_date):
+                                    await self._refresh_levels()
+                                    break
 
             except Exception as e:
                 print(f"웹소켓 오류: {e}")
@@ -256,9 +456,30 @@ class RealtimeMonitor:
             # 고점 갱신
             if price > pos["highest"]:
                 pos["highest"] = price
-                if symbol in self.levels:
+                if IS_DAYTRADING:
+                    pos["trail_stop"] = price * (1 - _DT_TRAIL_PCT)
+                elif symbol in self.levels:
                     atr_val = self.levels[symbol]["atr"]
                     pos["trail_stop"] = price - atr_val * ATR_MULTIPLIER
+
+            # daytrading: 고정 손절 + 시간 제한 확인
+            if IS_DAYTRADING:
+                ret = price / pos["entry_price"] - 1
+                if ret <= -_DT_SL_PCT:
+                    print(f"  🛑 {symbol} 손절! {ret*100:+.1f}%")
+                    await self._execute_sell(symbol, price)
+                    return
+
+                # 시간 초과 체크 (실시간)
+                try:
+                    entry_dt = datetime.strptime(pos["entry_date"], "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+                    hours_held = (datetime.now(tz=timezone.utc) - entry_dt).total_seconds() / 3600
+                    if hours_held >= _DT_MAX_BARS * 4:
+                        print(f"  ⏰ {symbol} 시간초과 {hours_held:.0f}h → 청산")
+                        await self._execute_sell(symbol, price)
+                        return
+                except (ValueError, KeyError):
+                    pass
 
             # 트레일링스탑 이탈
             if price < pos.get("trail_stop", 0):
@@ -273,8 +494,91 @@ class RealtimeMonitor:
             return
 
         level = self.levels[symbol]
-        if price > level["upper"]:
-            await self._execute_buy(symbol, price, level)
+
+        if IS_DAYTRADING:
+            # daytrading: DC돌파 + 추세(SMA50) + 거래량(사전계산)
+            if (price > level["upper"] and
+                    level.get("trend_ok", False) and
+                    level.get("vol_ok", False)):
+                await self._execute_buy(symbol, price, level)
+        else:
+            if price > level["upper"]:
+                await self._execute_buy(symbol, price, level)
+
+        # ── vol_reversal DRY-RUN 보유종목: 실시간 청산 감시 ──
+        await self._check_vr_exit(symbol, price)
+
+    async def _check_vr_exit(self, symbol: str, price: float):
+        """vol_reversal DRY-RUN 보유종목의 실시간 청산 확인."""
+        try:
+            if not VR_STATE_FILE.exists():
+                return
+            with open(VR_STATE_FILE, "r", encoding="utf-8") as f:
+                vr_state = json.load(f)
+
+            vr_positions = vr_state.get("positions", {})
+            if symbol not in vr_positions:
+                return
+
+            pos = vr_positions[symbol]
+            entry_price = pos["entry_price"]
+            highest = max(pos.get("highest", entry_price), price)
+            pos["highest"] = highest
+
+            ret = price / entry_price - 1
+            trail_stop = highest * (1 - VR_TRAIL)
+
+            # 청산 조건
+            reason = None
+            if ret >= VR_TP:
+                reason = f"익절 {ret*100:+.1f}%"
+            elif price < trail_stop:
+                reason = f"트레일 {ret*100:+.1f}%"
+            elif ret <= -VR_SL:
+                reason = f"손절 {ret*100:+.1f}%"
+            else:
+                # 시간 제한
+                try:
+                    entry_dt = datetime.strptime(pos["entry_date"], "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+                    hours = (datetime.now(tz=timezone.utc) - entry_dt).total_seconds() / 3600
+                    if hours >= VR_MAX_HOURS:
+                        reason = f"시간초과 {hours:.0f}h"
+                except (ValueError, KeyError):
+                    pass
+
+            if reason:
+                ret_pct = round(ret * 100, 2)
+                vr_state["closed_trades"].append({
+                    "symbol": symbol,
+                    "entry_date": pos["entry_date"],
+                    "entry_price": entry_price,
+                    "exit_date": datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M"),
+                    "exit_price": price,
+                    "return_pct": ret_pct,
+                })
+                invested = pos.get("amount_krw", 0)
+                vr_state["capital"] = vr_state.get("capital", 0) + invested * (1 + ret / 100)
+                del vr_positions[symbol]
+                vr_state["positions"] = vr_positions
+
+                with open(VR_STATE_FILE, "w", encoding="utf-8") as f:
+                    json.dump(vr_state, f, ensure_ascii=False, indent=2)
+
+                emoji = "🟢" if ret_pct > 0 else "🔴"
+                print(f"  [VR-DRY] {emoji} {symbol} {reason} @ {price:,.0f}", flush=True)
+                await send(
+                    f"🔬 *vol\\_reversal DRY*\n"
+                    f"{emoji} {symbol} {reason}\n"
+                    f"가격: {price:,.0f} (진입 {entry_price:,.0f})\n"
+                    f"수익: {ret_pct:+.1f}%"
+                )
+            else:
+                # 고점만 갱신하여 저장
+                with open(VR_STATE_FILE, "w", encoding="utf-8") as f:
+                    json.dump(vr_state, f, ensure_ascii=False, indent=2)
+
+        except Exception:
+            pass  # DRY-RUN 감시 오류는 무시 (메인 매매에 영향 없도록)
 
     # ── 안전장치 메서드 ─────────────────────────────────
     def _is_in_cooldown(self, symbol: str) -> bool:
@@ -326,7 +630,10 @@ class RealtimeMonitor:
             return
 
         today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
-        trail_stop = price - level["atr"] * ATR_MULTIPLIER
+        if IS_DAYTRADING:
+            trail_stop = price * (1 - _DT_TRAIL_PCT)
+        else:
+            trail_stop = price - level["atr"] * ATR_MULTIPLIER
 
         try:
             balance = get_balance()
@@ -342,7 +649,13 @@ class RealtimeMonitor:
         if order_amount < MIN_ORDER_KRW:
             return
 
-        print(f"\n  *** {symbol} 돌파! 가격: {price:,.0f}  상단: {level['upper']:,.0f} ***")
+        # 상세 조건 로깅
+        if IS_DAYTRADING:
+            print(f"\n  *** {symbol} 돌파! 가격: {price:,.0f}  상단: {level['upper']:,.0f} "
+                  f"추세:{level.get('trend_ok','?')} 거래량:{level.get('vol_ok','?')} "
+                  f"(vol:{level.get('latest_vol',0):.0f} / sma:{level.get('vol_sma',0):.0f} x{_DT_VOL_THRESHOLD}) ***")
+        else:
+            print(f"\n  *** {symbol} 돌파! 가격: {price:,.0f}  상단: {level['upper']:,.0f} ***")
 
         if DRY_RUN:
             print(f"  [DRY-RUN] 매수 생략")

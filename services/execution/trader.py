@@ -1,4 +1,4 @@
-"""실전 자동매매 러너 — Donchian(50) + ATR(14)x3.0.
+"""실전 자동매매 러너 — 전략 옵션 시스템 지원.
 
 매일 1회 실행:
   1. 업비트 잔고 조회
@@ -10,6 +10,9 @@
   python -m services.execution.trader            (일일 실행)
   python -m services.execution.trader --status   (상태 조회)
   python -m services.execution.trader --dry-run  (주문 없이 신호만 확인)
+
+전략 변경:
+  services/execution/config.py 의 STRATEGY 값을 수정
 """
 from __future__ import annotations
 
@@ -24,10 +27,10 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from services.market_data.fetcher import fetch_ohlcv
-from services.paper_trading.strategy import (
-    check_entry, check_exit, calc_donchian_upper, calc_atr,
-    DONCHIAN_PERIOD, ATR_PERIOD, ATR_MULTIPLIER, get_strategy_info,
-)
+from services.strategies import get_strategy
+from services.execution.config import STRATEGY, STRATEGY_KWARGS, DONCHIAN_PERIOD, ATR_PERIOD, ATR_MULTIPLIER
+# Donchian 상단 거리 표시용 — 정보 제공 목적
+from services.paper_trading.strategy import calc_donchian_upper, calc_atr
 from services.execution.upbit_client import get_balance, buy_market, sell_market
 from services.alerting.notifier import send, notify_trade, notify_error
 
@@ -35,7 +38,8 @@ from services.alerting.notifier import send, notify_trade, notify_error
 STATE_FILE = Path(__file__).resolve().parents[2] / "workspace" / "live_trading_state.json"
 LOG_FILE = Path(__file__).resolve().parents[2] / "workspace" / "live_trading_log.jsonl"
 
-MIN_BARS = max(DONCHIAN_PERIOD, ATR_PERIOD) + 10
+# 넉넉한 워밍업 기간 (EMA 200 전략 등 고려)
+MIN_BARS = 210
 MIN_ORDER_KRW = 5_000  # 업비트 최소 주문
 
 
@@ -88,10 +92,9 @@ async def fetch_recent() -> pd.DataFrame:
 async def run(dry_run: bool = False):
     state = load_state()
     today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
-    info = get_strategy_info()
 
     print(f"[{today}] 실전 매매 {'(DRY-RUN)' if dry_run else ''}")
-    print(f"  전략: {info['name']}")
+    print(f"  전략: {STRATEGY}")
 
     # 잔고 확인
     try:
@@ -128,9 +131,16 @@ async def run(dry_run: bool = False):
 
     action = None
 
+    # 전략 함수 호출 — signal Series (0 또는 1) 반환
+    strategy_fn = get_strategy(STRATEGY, **STRATEGY_KWARGS)
+    signals = strategy_fn(df)
+    latest_signal = int(signals.iloc[-1])
+    prev_signal = int(signals.iloc[-2]) if len(signals) > 1 else 0
+
     if not state["is_holding"]:
         # ── 진입 확인 ──
-        if check_entry(df):
+        # 이전 봉 signal=0 → 현재 봉 signal=1 : 신규 매수 신호 발생
+        if prev_signal == 0 and latest_signal == 1:
             available_krw = balance["krw"]
             if available_krw < MIN_ORDER_KRW:
                 print(f"  매수 신호 발생! 그러나 잔고 부족: {available_krw:,.0f} KRW")
@@ -167,6 +177,7 @@ async def run(dry_run: bool = False):
                 await notify_trade("BUY", exec_price, balance["total_krw"], f"live_{today}")
 
         else:
+            # 신호 없음 — Donchian 상단 거리 정보 표시 (참고용)
             upper = calc_donchian_upper(df)
             if not pd.isna(upper.iloc[-1]):
                 dist = (upper.iloc[-1] - latest_close) / latest_close * 100
@@ -175,10 +186,14 @@ async def run(dry_run: bool = False):
 
     else:
         # ── 청산 확인 ──
-        should_exit, new_stop = check_exit(df, state["highest_since_entry"])
+        # signal=0 으로 전환되면 매도
+        should_exit = (latest_signal == 0)
 
+        # 고점 및 트레일링스탑 — 정보 표시 목적으로 유지
         if latest_close > state["highest_since_entry"]:
             state["highest_since_entry"] = latest_close
+        atr = calc_atr(df, ATR_PERIOD)
+        new_stop = state["highest_since_entry"] - float(atr.iloc[-1]) * ATR_MULTIPLIER
         state["trailing_stop"] = new_stop
 
         unrealized = (latest_close / state["entry_price"] - 1) * 100
@@ -255,12 +270,11 @@ async def run(dry_run: bool = False):
 
 def show_status():
     state = load_state()
-    info = get_strategy_info()
 
     print("=" * 60)
     print("실전 매매 상태")
     print("=" * 60)
-    print(f"  전략: {info['name']}")
+    print(f"  전략: {STRATEGY}")
     print(f"  마지막 업데이트: {state.get('last_updated', 'N/A')}")
     print(f"  포지션: {'보유중' if state['is_holding'] else '대기중'}")
 
