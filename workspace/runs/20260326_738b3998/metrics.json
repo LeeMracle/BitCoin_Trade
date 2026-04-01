@@ -1,9 +1,0 @@
-{
-  "sharpe": 0.5298,
-  "calmar": 1.5333,
-  "max_drawdown": -0.0653,
-  "total_return": 0.1002,
-  "n_trades": 2,
-  "win_rate": 1.0,
-  "avg_trade_return": 0.0491
-}

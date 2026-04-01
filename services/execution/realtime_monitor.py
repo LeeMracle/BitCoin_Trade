@@ -32,6 +32,8 @@ from services.execution.config import (
     MAX_POSITIONS, POSITION_RATIO, MIN_VOLUME_KRW,
     MIN_ORDER_KRW, DRY_RUN, EXCLUDE_SYMBOLS, MIN_LISTING_DAYS,
     NOTIFY_ON_BUY, NOTIFY_ON_SELL, NOTIFY_DAILY_REPORT, NOTIFY_NEAR_SIGNAL,
+    VB_ENABLED, VB_DRY_RUN, VB_K_BULL, VB_K_NEUTRAL, VB_K_BEAR,
+    VB_SL_PCT, VB_SMA_PERIOD, VB_MAX_POSITIONS, VB_POSITION_RATIO,
 )
 from services.execution.multi_trader import (
     load_state, save_state, append_log,
@@ -64,6 +66,7 @@ ALERT_COOLDOWN_SEC = 300       # 동일 오류 알림 간격 (5분)
 
 
 VR_STATE_FILE = Path(__file__).resolve().parents[2] / "workspace" / "vol_reversal_dryrun_state.json"
+VB_STATE_FILE = Path(__file__).resolve().parents[2] / "workspace" / "vb_state.json"
 VR_TP = 0.03     # vol_reversal 익절 +3%
 VR_TRAIL = 0.015  # vol_reversal 트레일링 1.5%
 VR_SL = 0.02      # vol_reversal 손절 -2%
@@ -76,6 +79,9 @@ class RealtimeMonitor:
         self.state: dict = load_state()
         self.running = True
         self.last_refresh_date = ""
+        # VB(변동성 돌파) 상태
+        self._vb_positions: dict[str, dict] = {}  # 메모리 캐시
+        self._load_vb_state()
         # 안전장치
         self.consecutive_errors = 0
         self.error_cooldown: dict[str, float] = {}   # {symbol: timestamp}
@@ -90,6 +96,9 @@ class RealtimeMonitor:
             print(f"  전략: {STRATEGY} Donchian({DONCHIAN_PERIOD}) + ATR({ATR_PERIOD})x{ATR_MULTIPLIER}", flush=True)
         print(f"  최대 포지션: {MAX_POSITIONS}", flush=True)
         print(f"  DRY-RUN: {DRY_RUN}", flush=True)
+        if VB_ENABLED:
+            mode = "DRY-RUN" if VB_DRY_RUN else "실전"
+            print(f"  VB(변동성돌파): {mode}, K={VB_K_BULL}/{VB_K_BEAR}, 슬롯={VB_MAX_POSITIONS}", flush=True)
         print("=" * 60, flush=True)
 
         await self._refresh_levels()
@@ -148,6 +157,15 @@ class RealtimeMonitor:
                     "volume_krw": coin["volume_krw"],
                 }
 
+                # VB용 데이터: 전일 변동폭, SMA50, 시가
+                if VB_ENABLED and not IS_DAYTRADING and len(df) >= VB_SMA_PERIOD + 2:
+                    prev_range = float(df["high"].iloc[-2]) - float(df["low"].iloc[-2])
+                    prev_open = float(df["open"].iloc[-1])
+                    sma50 = float(pd.Series(df["close"]).rolling(VB_SMA_PERIOD).mean().iloc[-1])
+                    level["vb_prev_range"] = prev_range
+                    level["vb_open"] = prev_open
+                    level["vb_sma50"] = sma50
+
                 # daytrading: 추세 필터 + 거래량 조건 사전 계산
                 if IS_DAYTRADING:
                     sma_trend = float(pd.Series(df["close"]).rolling(_DT_TREND_PERIOD).mean().iloc[-1])
@@ -169,6 +187,10 @@ class RealtimeMonitor:
 
         self.levels = new_levels
         print(f"  레벨 계산 완료: {len(self.levels)}개 종목", flush=True)
+
+        # ── VB(변동성 돌파) 일일 회전 처리 ──
+        if VB_ENABLED and not IS_DAYTRADING:
+            await self._vb_daily_rotation()
 
         # 보유 종목 트레일링스탑 갱신 (전략 전환 시 기존 스탑 보존)
         positions = self.state.get("positions", {})
@@ -508,6 +530,10 @@ class RealtimeMonitor:
         # ── vol_reversal DRY-RUN 보유종목: 실시간 청산 감시 ──
         await self._check_vr_exit(symbol, price)
 
+        # ── VB(변동성 돌파) 보유종목: 실시간 손절 감시 ──
+        if VB_ENABLED:
+            await self._check_vb_exit(symbol, price)
+
     async def _check_vr_exit(self, symbol: str, price: float):
         """vol_reversal DRY-RUN 보유종목의 실시간 청산 확인."""
         try:
@@ -579,6 +605,187 @@ class RealtimeMonitor:
 
         except Exception:
             pass  # DRY-RUN 감시 오류는 무시 (메인 매매에 영향 없도록)
+
+    # ── VB(변동성 돌파) 메서드 ──────────────────────────
+
+    def _load_vb_state(self):
+        """VB 상태 파일 로드."""
+        try:
+            if VB_STATE_FILE.exists():
+                with open(VB_STATE_FILE, "r", encoding="utf-8") as f:
+                    state = json.load(f)
+                self._vb_positions = state.get("positions", {})
+            else:
+                self._vb_positions = {}
+        except Exception:
+            self._vb_positions = {}
+
+    def _save_vb_state(self):
+        """VB 상태 파일 저장."""
+        try:
+            existing = {}
+            if VB_STATE_FILE.exists():
+                with open(VB_STATE_FILE, "r", encoding="utf-8") as f:
+                    existing = json.load(f)
+            existing["positions"] = self._vb_positions
+            if "history" not in existing:
+                existing["history"] = []
+            VB_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(VB_STATE_FILE, "w", encoding="utf-8") as f:
+                json.dump(existing, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"  [VB] 상태 저장 오류: {e}", flush=True)
+
+    async def _vb_daily_rotation(self):
+        """VB 일일 회전: 기존 포지션 청산 → 새 신호 매수."""
+        now_str = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
+
+        # 1. 기존 VB 포지션 전량 청산
+        closed = 0
+        for sym in list(self._vb_positions):
+            pos = self._vb_positions[sym]
+            current_price = self.levels.get(sym, {}).get("close", pos["entry_price"])
+            ret = current_price / pos["entry_price"] - 1
+            ret_pct = round(ret * 100, 2)
+
+            # 히스토리에 기록
+            self._append_vb_history(sym, pos, current_price, "1일 회전")
+
+            if not VB_DRY_RUN:
+                try:
+                    await self._execute_sell(sym, current_price)
+                except Exception as e:
+                    print(f"  [VB] {sym} 청산 오류: {e}", flush=True)
+
+            emoji = "🟢" if ret_pct > 0 else "🔴"
+            print(f"  [VB] {emoji} {sym} 청산 {ret_pct:+.1f}% @ {current_price:,.0f}", flush=True)
+            mode = "DRY" if VB_DRY_RUN else "LIVE"
+            await send(
+                f"🔬 *VB 청산* [{mode}]\n"
+                f"{emoji} {sym}\n"
+                f"진입: {pos['entry_price']:,.0f} → 청산: {current_price:,.0f}\n"
+                f"수익: {ret_pct:+.1f}%"
+            )
+            closed += 1
+
+        self._vb_positions.clear()
+
+        # 2. 새 VB 신호 스캔
+        signals = []
+        for sym, level in self.levels.items():
+            if "vb_prev_range" not in level:
+                continue
+            prev_range = level["vb_prev_range"]
+            prev_close = level["close"]
+            today_open = level["vb_open"]
+            sma50 = level["vb_sma50"]
+
+            if prev_range <= 0:
+                continue
+
+            # 레짐별 K값
+            if np.isnan(sma50):
+                k = VB_K_NEUTRAL
+            elif prev_close > sma50:
+                k = VB_K_BULL
+            else:
+                k = VB_K_BEAR
+
+            threshold = today_open + prev_range * k
+            if prev_close > threshold:
+                score = (prev_close - threshold) / prev_range  # 돌파 강도
+                signals.append((sym, level, score, k))
+
+        # 돌파 강도 순 정렬, 최대 슬롯만큼 매수
+        signals.sort(key=lambda x: x[2], reverse=True)
+        bought = 0
+
+        for sym, level, score, k in signals[:VB_MAX_POSITIONS]:
+            entry_price = level["close"]
+            self._vb_positions[sym] = {
+                "entry_price": entry_price,
+                "entry_date": now_str,
+                "k_value": k,
+            }
+
+            if not VB_DRY_RUN:
+                try:
+                    balance = get_balance()
+                    avail = balance.get("krw", 0)
+                    order_amt = avail * VB_POSITION_RATIO / VB_MAX_POSITIONS
+                    if order_amt >= MIN_ORDER_KRW:
+                        await self._execute_buy(sym, entry_price, level)
+                except Exception as e:
+                    print(f"  [VB] {sym} 매수 오류: {e}", flush=True)
+
+            mode = "DRY" if VB_DRY_RUN else "LIVE"
+            regime = "상승" if k == VB_K_BULL else ("하락" if k == VB_K_BEAR else "중립")
+            print(f"  [VB-{mode}] 📈 {sym} 매수 @ {entry_price:,.0f} (K={k}, score={score:.2f})", flush=True)
+            await send(
+                f"🔬 *VB 매수* [{mode}]\n"
+                f"📈 {sym} @ {entry_price:,.0f}\n"
+                f"레짐: {regime} (K={k})\n"
+                f"돌파강도: {score:.2f}"
+            )
+            bought += 1
+
+        self._save_vb_state()
+
+        mode = "DRY-RUN" if VB_DRY_RUN else "실전"
+        await send(
+            f"📊 *VB 일일 회전* ({mode})\n"
+            f"청산: {closed}건 / 매수: {bought}건\n"
+            f"감시: {len(self._vb_positions)}종목"
+        )
+        print(f"  [VB] 일일 회전 완료: 청산 {closed}건, 매수 {bought}건", flush=True)
+
+    def _append_vb_history(self, symbol, pos, exit_price, reason):
+        """VB 거래 히스토리에 추가."""
+        try:
+            existing = {}
+            if VB_STATE_FILE.exists():
+                with open(VB_STATE_FILE, "r", encoding="utf-8") as f:
+                    existing = json.load(f)
+            if "history" not in existing:
+                existing["history"] = []
+            ret = exit_price / pos["entry_price"] - 1
+            existing["history"].append({
+                "symbol": symbol,
+                "entry_date": pos["entry_date"],
+                "entry_price": pos["entry_price"],
+                "exit_date": datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M"),
+                "exit_price": exit_price,
+                "return_pct": round(ret * 100, 2),
+                "reason": reason,
+            })
+            with open(VB_STATE_FILE, "w", encoding="utf-8") as f:
+                json.dump(existing, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+    async def _check_vb_exit(self, symbol: str, price: float):
+        """VB 보유종목의 실시간 손절 감시."""
+        if symbol not in self._vb_positions:
+            return
+        pos = self._vb_positions[symbol]
+        ret = price / pos["entry_price"] - 1
+
+        if ret <= -VB_SL_PCT:
+            ret_pct = round(ret * 100, 2)
+            self._append_vb_history(symbol, pos, price, f"손절 {ret_pct:+.1f}%")
+
+            if not VB_DRY_RUN:
+                try:
+                    await self._execute_sell(symbol, price)
+                except Exception as e:
+                    print(f"  [VB] {symbol} 손절 매도 오류: {e}", flush=True)
+
+            del self._vb_positions[symbol]
+            self._save_vb_state()
+
+            mode = "DRY" if VB_DRY_RUN else "LIVE"
+            print(f"  [VB-{mode}] 🛑 {symbol} 손절 {ret_pct:+.1f}% @ {price:,.0f}", flush=True)
+            await send(f"🛑 *VB 손절* ({mode})\n{symbol} {ret_pct:+.1f}% @ {price:,.0f}")
 
     # ── 안전장치 메서드 ─────────────────────────────────
     def _is_in_cooldown(self, symbol: str) -> bool:

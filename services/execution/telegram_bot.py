@@ -130,6 +130,7 @@ class TelegramCommandHandler:
             "/mode": self._cmd_mode,
             "/strategy": self._cmd_strategy,
             "/dryrun": self._cmd_dryrun,
+            "/vb": self._cmd_vb,
             "/config": self._cmd_config,
             "/reset": self._cmd_reset,
             "/help": self._cmd_help,
@@ -161,6 +162,8 @@ class TelegramCommandHandler:
             "  `realtime` `5m` `10m` `30m`\n"
             "  `1h` `4h` `daily`\n"
             "/dryrun — 테스트/실전 전환\n"
+            "/vb — VB(변동성돌파) 상태/제어\n"
+            "  `/vb` 상태 `/vb on` 실전 `/vb off` 중단 `/vb dry` DRY-RUN\n"
             "/config — 현재 설정 확인\n"
             "/reset — 상태 초기화\n"
             "/help — 이 메시지"
@@ -342,6 +345,63 @@ class TelegramCommandHandler:
         else:
             await send_message("사용법: `/dryrun on` 또는 `/dryrun off`")
 
+    async def _cmd_vb(self, args):
+        """VB(변동성 돌파) 상태 확인 및 제어."""
+        import json
+        vb_state_path = Path(__file__).resolve().parents[2] / "workspace" / "vb_state.json"
+
+        if not args:
+            # 상태 표시
+            from services.execution.config import VB_ENABLED, VB_DRY_RUN
+            lines = ["📊 *VB(변동성 돌파) 상태*\n"]
+            lines.append(f"활성: {'✅' if VB_ENABLED else '❌'}")
+            lines.append(f"모드: {'DRY-RUN' if VB_DRY_RUN else '실전'}")
+
+            if vb_state_path.exists():
+                with open(vb_state_path, "r", encoding="utf-8") as f:
+                    state = json.load(f)
+                positions = state.get("positions", {})
+                history = state.get("history", [])
+                lines.append(f"보유: {len(positions)}종목")
+                for sym, pos in positions.items():
+                    lines.append(f"  {sym} @ {pos['entry_price']:,.0f}")
+                if history:
+                    wins = sum(1 for h in history if h.get("return_pct", 0) > 0)
+                    total = len(history)
+                    avg_ret = sum(h.get("return_pct", 0) for h in history) / total if total else 0
+                    lines.append(f"\n거래: {total}건, 승률 {wins}/{total} ({wins*100//total if total else 0}%)")
+                    lines.append(f"평균수익: {avg_ret:+.2f}%")
+                    last3 = history[-3:]
+                    for h in last3:
+                        e = "🟢" if h.get("return_pct", 0) > 0 else "🔴"
+                        lines.append(f"  {e} {h['symbol']} {h['return_pct']:+.1f}% ({h.get('reason','')})")
+            else:
+                lines.append("데이터 없음 (아직 시작 전)")
+
+            await send_message("\n".join(lines))
+            return
+
+        switch = args[0].lower()
+        if switch == "on":
+            _update_config("VB_DRY_RUN", "False")
+            _update_config("VB_ENABLED", "True")
+            await send_message("🟢 *VB 실전 모드 전환*\n재시작 중...")
+            import subprocess
+            subprocess.Popen(["sudo", "systemctl", "restart", "btc-trader"])
+        elif switch == "off":
+            _update_config("VB_ENABLED", "False")
+            await send_message("❌ *VB 중단*\n재시작 중...")
+            import subprocess
+            subprocess.Popen(["sudo", "systemctl", "restart", "btc-trader"])
+        elif switch == "dry":
+            _update_config("VB_DRY_RUN", "True")
+            _update_config("VB_ENABLED", "True")
+            await send_message("🟡 *VB DRY-RUN 전환*\n재시작 중...")
+            import subprocess
+            subprocess.Popen(["sudo", "systemctl", "restart", "btc-trader"])
+        else:
+            await send_message("사용법: `/vb` 상태 | `/vb on` 실전 | `/vb off` 중단 | `/vb dry` DRY-RUN")
+
     async def _cmd_config(self, args):
         try:
             from services.execution import config
@@ -353,6 +413,7 @@ class TelegramCommandHandler:
                 f"최대 포지션: {config.MAX_POSITIONS}\n"
                 f"최소 거래대금: {config.MIN_VOLUME_KRW/1e8:.0f}억\n"
                 f"DRY-RUN: {config.DRY_RUN}\n"
+                f"VB: {'ON' if config.VB_ENABLED else 'OFF'} ({'DRY' if config.VB_DRY_RUN else 'LIVE'})\n"
                 f"오류 한도: {config.MAX_CONSECUTIVE_ERRORS}회\n"
             )
             await send_message(msg)
