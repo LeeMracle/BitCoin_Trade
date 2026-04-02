@@ -87,16 +87,19 @@ $SSH_CMD "cd $PROJECT_DIR && .venv/bin/python -m services.execution.trader --dry
 echo "[5/5] crontab 등록..."
 $SSH_CMD << 'CRON_SCRIPT'
 PROJECT_DIR="/home/ubuntu/BitCoin_Trade"
-CRON_JOB="5 0 * * * cd $PROJECT_DIR && $PROJECT_DIR/.venv/bin/python scripts/daily_live.py >> /var/log/btc_trader.log 2>&1"
+CRON_LIVE="5 0 * * * cd $PROJECT_DIR && $PROJECT_DIR/.venv/bin/python scripts/daily_live.py >> /var/log/btc_trader.log 2>&1"
+CRON_REPORT="10 0 * * * cd $PROJECT_DIR && PYTHONUTF8=1 $PROJECT_DIR/.venv/bin/python scripts/daily_report.py >> /var/log/btc_report.log 2>&1"
 
-# 기존 등록 확인 및 추가
-(crontab -l 2>/dev/null | grep -v "daily_live.py"; echo "$CRON_JOB") | crontab -
+# 기존 등록 제거 후 추가
+(crontab -l 2>/dev/null | grep -v "daily_live.py" | grep -v "daily_report.py"; echo "$CRON_LIVE"; echo "$CRON_REPORT") | crontab -
 echo "crontab 등록 완료:"
-crontab -l | grep btc_trader
+crontab -l | grep -E "btc_(trader|report)"
 CRON_SCRIPT
 
 echo ""
 echo "=== 배포 완료! ==="
-echo "  매일 KST 09:05 자동 실행"
+echo "  매일 KST 09:05 자동매매 실행"
+echo "  매일 KST 09:10 일일 보고 발송"
 echo "  로그: ssh -i $PEM_KEY $AWS_USER@$AWS_HOST 'tail -f /var/log/btc_trader.log'"
+echo "  보고: ssh -i $PEM_KEY $AWS_USER@$AWS_HOST 'tail -f /var/log/btc_report.log'"
 echo "  상태: ssh -i $PEM_KEY $AWS_USER@$AWS_HOST 'cd $PROJECT_DIR && .venv/bin/python -m services.execution.trader --status'"

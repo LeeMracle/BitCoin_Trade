@@ -21,3 +21,9 @@ services/.env
 workspace/paper_trading_state.json
 workspace/live_trading_state.json
 workspace/live_trading_log.jsonl
+
+# 백테스트 런 결과 (대량, 로컬 전용)
+workspace/runs/
+
+# 바이너리 캐시
+data/cache.duckdb
