@@ -88,4 +88,8 @@ __all__ = [
     "make_strategy_volume",
     "make_strategy_composite",
     "make_strategy_daytrading",
+    "make_strategy_vol_reversal",
+    "make_strategy_volatility_breakout",
+    "make_strategy_alt_pump_surf",
+    "make_strategy_rsi_divergence",
 ]

@@ -233,13 +233,12 @@ def make_strategy_regime(
 
     def strategy(df: pd.DataFrame) -> pd.Series:
         close = df["close"].values
-        atr = _calc_atr(df, atr_period).values
+        atr_series = _calc_atr(df, atr_period)
+        atr = atr_series.values
         dc_upper = _calc_donchian_upper(df, dc_period).values
 
-        # 정규화 변동성 (ATR / close)
-        close_series = df["close"]
-        atr_series = _calc_atr(df, atr_period)
-        norm_vol = atr_series / close_series
+        # 정규화 변동성 (ATR / close) — atr_series 재사용으로 중복 계산 제거
+        norm_vol = atr_series / df["close"]
         # 20일 이동평균으로 스무딩
         vol_ma = norm_vol.rolling(window=20, min_periods=20).mean().values
         # vol_lookback 기간 중앙값으로 레짐 구분
@@ -529,6 +528,8 @@ def make_strategy_composite(
     vol_mult: float = 1.5,
     atr_period: int = 14,
     vol_lookback: int = 60,
+    fg_gate: "float | None" = None,
+    btc_above_sma: bool = True,
 ) -> Callable[[pd.DataFrame], pd.Series]:
     """앙상블 + 변동성 적응형 트레일링스탑 복합 전략 (추천 조합).
 
@@ -544,9 +545,24 @@ def make_strategy_composite(
       trailing_stop = rolling_highest - ATR * adaptive_mult
 
     변동성이 높을수록 스탑이 넓어져 노이즈 청산을 방지.
+
+    v2 추가 파라미터:
+      fg_gate: F&G 값이 이 값 미만이면 신호를 0으로 차단. None이면 비활성 (기존 동작 유지).
+      btc_above_sma: False이면 진입 신호를 0으로 차단. True이면 기존 동작 유지.
+                     실행 레벨에서 BTC SMA(20) 계산 후 이 파라미터에 전달한다.
     """
+    # F&G 게이트 활성화 여부 판단
+    _fg_block = (fg_gate is not None) and (fg_gate < 20.0)
+    # BTC SMA 필터 차단 여부
+    _btc_block = not btc_above_sma
 
     def strategy(df: pd.DataFrame) -> pd.Series:
+        n = len(df)
+
+        # F&G 극공포 or BTC SMA 필터 차단 — 전체 신호를 0으로 반환
+        if _fg_block or _btc_block:
+            return pd.Series(np.zeros(n, dtype=np.int8), index=df.index, dtype=int)
+
         close_series = df["close"]
         close = close_series.values
         volume = df["volume"].values
@@ -561,9 +577,9 @@ def make_strategy_composite(
 
         def _percentile_rank(arr: np.ndarray, lookback: int) -> np.ndarray:
             """rolling percentile rank: 현재 값이 과거 lookback봉 중 몇 번째 백분위인지."""
-            n = len(arr)
-            ranks = np.full(n, np.nan)
-            for i in range(lookback - 1, n):
+            n_arr = len(arr)
+            ranks = np.full(n_arr, np.nan)
+            for i in range(lookback - 1, n_arr):
                 window = arr[i - lookback + 1: i + 1]
                 valid = window[~np.isnan(window)]
                 if len(valid) < lookback // 2:
@@ -576,7 +592,6 @@ def make_strategy_composite(
 
         pct_rank = _percentile_rank(norm_vol, vol_lookback)
 
-        n = len(df)
         signal = np.zeros(n, dtype=np.int8)
         in_position = False
         highest = 0.0
@@ -658,18 +673,26 @@ def make_strategy_volatility_breakout(
         signal = np.zeros(n, dtype=np.int8)
         in_position = False
         entry_price = 0.0
+        sl_triggered_count = 0  # 손절 발동 횟수 추적 (진단용)
 
         for i in range(1, n):
             c = close[i]
             o = open_[i]
 
             if in_position:
-                # 1봉 보유 후 무조건 청산 또는 손절
+                # 1봉 보유 후 무조건 청산
+                # 백테스트 엔진은 signal=0 → 다음 봉 시가에 청산하는 구조이므로
+                # 손절(봉 중간 -sl_pct 이탈)과 일반 청산 모두 signal[i]=0으로 동일하게 처리한다.
+                # 단, 손절 발동 시 실제 exit 가격은 entry_price*(1-sl_pct)이지만
+                # 현재 엔진 인터페이스(0/1 신호)에서는 별도 전달 수단이 없으므로
+                # 보수적 기준(close 기반 exit)으로 수익률을 평가한다.
                 ret = c / entry_price - 1
                 if ret <= -sl_pct:
-                    signal[i] = 0
-                else:
-                    signal[i] = 0  # 1봉 보유 후 청산
+                    # 손절 발동: close가 손절선 아래로 내려간 경우
+                    # 실제 손절가(entry_price*(1-sl_pct))보다 낙관적으로 평가될 수 있음
+                    sl_triggered_count += 1
+                # 손절·일반 청산 모두 다음 봉 시가에 exit (엔진 설계 준수)
+                signal[i] = 0
                 in_position = False
                 continue
 

@@ -45,9 +45,43 @@ V2.0 R35 채택 이유: 7일 3~4건으로 검증 가능 + 승률 56% + MDD -16.7
 - 상태: `workspace/vol_reversal_dryrun_state.json`
 
 ## 검증 플랜
+
 | 조건 | 조치 |
 |------|------|
 | 3건+ 전승 | 즉시 실전 전환 |
 | 5건+ 승률 50%+ | 실전 전환 |
 | 5건+ 승률 40% 미만 | 파라미터 수정 |
 | 3건 연속 손실 | 중단 |
+
+## DRY-RUN 병행 운영 설정
+
+> 병합: `20260329_vol_reversal_dryrun.md`
+
+### 운영 체계
+
+- **실전**: composite DC20 (일봉, 실시간 웹소켓) — 자본 보전
+- **가상**: vol_reversal DRY-RUN (4시간봉, cron 스캔) — 전략 검증
+
+### 운영 파일
+
+| 항목 | 경로 |
+|------|------|
+| 전략 코드 | `services/strategies/advanced.py` → `make_strategy_vol_reversal()` |
+| DRY-RUN 스크립트 | `scripts/dryrun_vol_reversal.py` |
+| 상태 파일 | `workspace/vol_reversal_dryrun_state.json` |
+| cron | 매 4시간 05분 (UTC 0/4/8/12/16/20) |
+| 로그 | `/var/log/vol_reversal_dryrun.log` |
+
+### QA 개선 (03-29 반영)
+
+- `scripts/qa_validate.py` 도입 (배포 전 자동 검증)
+- 레벨 계산 lookback 부족 버그 수정
+- 전략 전환 시 이전 거래 기록 분리
+
+### DRY-RUN 검증 기준 (세분화)
+
+| 시점 | 기준 |
+|------|------|
+| 3일 | 방향 확인 |
+| 5일 | 10건+ 시 1차 판단 |
+| 7일 | 최종 — 승률 50%+, 평균 +1%+면 실전 전환 |

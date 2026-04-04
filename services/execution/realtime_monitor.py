@@ -84,6 +84,9 @@ class RealtimeMonitor:
         self._load_vb_state()
         # 안전장치
         self.consecutive_errors = 0
+        # v2 필터 캐시 (레벨 갱신 시 1회 조회)
+        self._fg_value: "float | None" = None
+        self._btc_above_sma: bool = True
         self.error_cooldown: dict[str, float] = {}   # {symbol: timestamp}
         self.last_alert_time: dict[str, float] = {}   # {error_key: timestamp}
 
@@ -120,6 +123,19 @@ class RealtimeMonitor:
 
         tf_label = _DT_TIMEFRAME
         print(f"\n[{now.strftime('%Y-%m-%d %H:%M')}] 레벨 갱신 ({tf_label}, DC{_DT_DC_PERIOD})...")
+
+        # v2 필터: F&G + BTC SMA(20) 조회 (레벨 갱신 시 1회)
+        if not IS_DAYTRADING:
+            try:
+                from services.execution.scanner import fetch_fg_value, fetch_btc_above_sma
+                self._fg_value = fetch_fg_value()
+                self._btc_above_sma = fetch_btc_above_sma()
+                fg_disp = f"{self._fg_value:.0f}" if self._fg_value is not None else "N/A"
+                fg_blocked = self._fg_value is not None and self._fg_value < 20
+                print(f"  [v2] F&G={fg_disp} {'(진입차단)' if fg_blocked else '(허용)'}"
+                      f" | BTC>SMA20={self._btc_above_sma}", flush=True)
+            except Exception as e:
+                print(f"  [v2] 필터 조회 실패: {e} — 기본값 유지", flush=True)
 
         coins = get_krw_market_coins()
         print(f"  거래대금 필터 통과: {len(coins)}개")
@@ -637,7 +653,15 @@ class RealtimeMonitor:
             print(f"  [VB] 상태 저장 오류: {e}", flush=True)
 
     async def _vb_daily_rotation(self):
-        """VB 일일 회전: 기존 포지션 청산 → 새 신호 매수."""
+        """VB 일일 회전: 기존 포지션 청산 → 새 신호 매수. 1일 1회만 실행."""
+        today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
+        last_rotation = self.state.get("vb_last_rotation_date", "")
+        if last_rotation == today:
+            print(f"  [VB] 오늘({today}) 이미 회전 완료 — 건너뜀", flush=True)
+            return
+        self.state["vb_last_rotation_date"] = today
+        save_state(self.state)
+
         now_str = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
 
         # 1. 기존 VB 포지션 전량 청산
@@ -829,11 +853,51 @@ class RealtimeMonitor:
         """성공 시 연속 오류 카운트 초기화."""
         self.consecutive_errors = 0
 
+    def _get_consec_loss(self) -> int:
+        """현재 전략 시작일 이후 거래에서 연속 손실 횟수를 반환한다."""
+        closed = self.state.get("closed_trades", [])
+        strategy_start = self.state.get("strategy_start", "2026-03-29")
+        current_trades = [t for t in closed if t.get("exit_date", "") >= strategy_start]
+        consec = 0
+        for t in reversed(current_trades):
+            if t["return_pct"] <= 0:
+                consec += 1
+            else:
+                break
+        return consec
+
+    def _is_loss_cooldown(self) -> bool:
+        """연패 쿨다운 중이면 True 반환."""
+        cooldown_until = self.state.get("cooldown_until")
+        if not cooldown_until:
+            return False
+        now_ts = datetime.now(tz=timezone.utc).timestamp()
+        if now_ts < cooldown_until:
+            remaining_h = (cooldown_until - now_ts) / 3600
+            print(f"  [쿨다운] 연패 쿨다운 중 — {remaining_h:.1f}h 남음 (매수 스킵)", flush=True)
+            return True
+        # 쿨다운 만료 — 상태에서 제거
+        self.state.pop("cooldown_until", None)
+        save_state(self.state)
+        return False
+
     async def _execute_buy(self, symbol: str, price: float, level: dict):
         positions = self.state.get("positions", {})
         if symbol in positions:
             return
         if self._is_in_cooldown(symbol):
+            return
+
+        # 연패 쿨다운 확인 (3연패 시 3일 매수 중단)
+        if self._is_loss_cooldown():
+            return
+
+        # v2 필터: F&G 게이트 (F&G < 20이면 진입 차단)
+        if self._fg_value is not None and self._fg_value < 20:
+            return
+
+        # v2 필터: BTC SMA(20) 필터 (BTC < SMA20이면 알트 진입 차단)
+        if not self._btc_above_sma and symbol != "BTC/KRW":
             return
 
         today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
@@ -955,6 +1019,27 @@ class RealtimeMonitor:
 
         append_log({"action": "SELL", "symbol": symbol, "price": exec_price,
                      "return_pct": ret_pct, "trigger": "realtime"})
+
+        # ── 매도 체결 직후 연패 즉시 체크 (교훈 #3: 주기 체크 아닌 즉시 체크) ──
+        consec_loss = self._get_consec_loss()
+        if consec_loss >= 3 and not self.state.get("cooldown_until"):
+            cooldown_until = (
+                datetime.now(tz=timezone.utc).timestamp() + 3 * 24 * 3600
+            )
+            self.state["cooldown_until"] = cooldown_until
+            save_state(self.state)
+            cooldown_dt = datetime.fromtimestamp(cooldown_until, tz=timezone.utc)
+            cooldown_str = cooldown_dt.strftime("%Y-%m-%d %H:%M UTC")
+            print(
+                f"  [쿨다운] 3연패 감지 — {cooldown_str}까지 신규 매수 중단",
+                flush=True,
+            )
+            await send(
+                f"⏸ *3연패 쿨다운 시작*\n"
+                f"연속 {consec_loss}건 손실 → 3일간 신규 매수 중단\n"
+                f"재개 예정: {cooldown_str}\n"
+                f"기존 보유 종목은 트레일링스탑으로 정상 청산"
+            )
 
         if NOTIFY_ON_SELL:
             emoji = "🟢" if ret_pct > 0 else "🔴"

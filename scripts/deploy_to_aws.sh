@@ -11,7 +11,7 @@ set -e
 # ── 설정 ──────────────────────────────────────────────
 AWS_HOST="13.124.82.122"
 AWS_USER="ubuntu"
-PEM_KEY="$HOME/upbit-trading-key-seoul.pem"  # PEM 파일 경로 수정 필요
+PEM_KEY="$HOME/Downloads/upbit-trading-key-seoul.pem"  # PEM 파일 경로
 PROJECT_DIR="/home/ubuntu/BitCoin_Trade"
 LOCAL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 

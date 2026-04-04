@@ -32,7 +32,7 @@
   - 추세추종 전환 → **DC(50)+ATR(14)x3.0** OOS Sharpe 1.123, MDD -18.7% (엄격 기준 통과)
   - 보조: RSI(10)>50<45+EMA(150) OOS Sharpe 1.040, MDD -14.9%
 - [ ] Phase 3: 페이퍼 트레이딩 진행 중
-  - 메인: DC(20)+ATR(14)x3.0 — `services/paper_trading/` (DC50→20 공격적 전환, [경위](docs/decisions/20260329_daytrading_stop_composite_switch.md))
+  - 메인: DC(20)+ATR(14)x3.0 — `services/paper_trading/` (DC50→20 공격적 전환, [경위](docs/decisions/20260329_daytrading_postmortem_and_switch.md))
   - 보조: RSI(10)>50/<45+EMA(150) — 관찰용
   - 일일 체크: `python scripts/daily_check.py` (09:05 KST 실행 권장)
   - 텔레그램 알림: `services/.env.example` 참고하여 `.env` 설정 필요
@@ -104,3 +104,5 @@
 | 3 | 안전장치(연패 중단)는 주기 체크가 아닌 체결 즉시 체크 | [lessons/20260329_3](docs/lessons/20260329_3_auto_stop_delay.md) |
 | 4 | CLAUDE.md ↔ config.py ↔ 서버 전략 파라미터 동기화 필수 | [lessons/20260331_1](docs/lessons/20260331_1_dc_strategy_mismatch.md) |
 | 5 | t3.micro 스왑 필수, 서비스 추가 전 메모리 예산 확인 | [lessons/20260331_2](docs/lessons/20260331_2_server_memory_pressure.md) |
+| 6 | 전략 필터는 모든 매수 경로(scanner+realtime_monitor)에 적용 필수 | [lessons/20260404_1](docs/lessons/20260404_1_v2_filter_missing_path.md) |
+| 7 | 1일 1회 작업은 반드시 날짜 체크 + 상태 저장 (재시작 시 중복 방지) | [lessons/20260404_2](docs/lessons/20260404_2_vb_rotation_duplicate.md) |

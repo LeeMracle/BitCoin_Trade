@@ -160,6 +160,75 @@ def check_service_config() -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════
+# 검증 6: v2 필터가 모든 매수 경로에 적용되었는지
+# ref: docs/lessons/20260404_1_v2_filter_missing_path.md
+# ═══════════════════════════════════════════════════════════════════
+
+def check_v2_filter_paths() -> None:
+    """전략 필터(F&G, BTC SMA)가 모든 매수 경로에 적용되었는지 검증."""
+    monitor_file = PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py"
+    if not monitor_file.exists():
+        warnings.append("[v2필터] realtime_monitor.py 파일 없음")
+        return
+
+    content = monitor_file.read_text(encoding="utf-8")
+
+    # _execute_buy 함수 본문 추출
+    buy_match = re.search(
+        r"async def _execute_buy\(.*?\n(.*?)(?=\n    async def |\nclass |\Z)",
+        content,
+        re.DOTALL,
+    )
+    if not buy_match:
+        warnings.append("[v2필터] _execute_buy 함수를 찾을 수 없음")
+        return
+
+    buy_body = buy_match.group(1)
+
+    if "_fg_value" not in buy_body and "fg_value" not in buy_body:
+        errors.append(
+            "[v2필터] realtime_monitor._execute_buy에 F&G 게이트 미적용 — "
+            "scanner.py에만 있고 실제 매수 경로에 없음"
+        )
+
+    if "_btc_above_sma" not in buy_body and "btc_above_sma" not in buy_body:
+        errors.append(
+            "[v2필터] realtime_monitor._execute_buy에 BTC SMA 필터 미적용 — "
+            "scanner.py에만 있고 실제 매수 경로에 없음"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 검증 7: VB 일일 회전에 날짜 체크가 있는지
+# ref: docs/lessons/20260404_2_vb_rotation_duplicate.md
+# ═══════════════════════════════════════════════════════════════════
+
+def check_vb_rotation_guard() -> None:
+    """VB 일일 회전이 1일 1회만 실행되도록 날짜 체크가 있는지 검증."""
+    monitor_file = PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py"
+    if not monitor_file.exists():
+        return
+
+    content = monitor_file.read_text(encoding="utf-8")
+
+    # _vb_daily_rotation 함수 내에 날짜 체크 존재 여부
+    rotation_match = re.search(
+        r"def _vb_daily_rotation\(.*?\n(.*?)(?=\n    async def |\n    def |\nclass |\Z)",
+        content,
+        re.DOTALL,
+    )
+    if not rotation_match:
+        return  # 함수 자체가 없으면 VB 미사용
+
+    rotation_body = rotation_match.group(1)
+    if "vb_last_rotation_date" not in rotation_body:
+        errors.append(
+            "[VB회전] _vb_daily_rotation에 날짜 체크(vb_last_rotation_date) 미적용 — "
+            "서비스 재시작마다 중복 회전 발생 위험"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════
 # 메인
 # ═══════════════════════════════════════════════════════════════════
 
@@ -173,6 +242,8 @@ def main() -> None:
     check_env_keys()
     check_server_paths()
     check_service_config()
+    check_v2_filter_paths()
+    check_vb_rotation_guard()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")

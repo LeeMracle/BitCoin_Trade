@@ -16,6 +16,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import urllib.request
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -30,6 +32,40 @@ from services.execution.config import STRATEGY, STRATEGY_KWARGS, DONCHIAN_PERIOD
 from services.paper_trading.strategy import calc_atr, calc_donchian_upper
 MIN_LISTING_DAYS = DONCHIAN_PERIOD + 10  # 최소 상장일수
 EXCLUDE_SYMBOLS = {"USDT/KRW", "USDC/KRW", "DAI/KRW", "BUSD/KRW"}  # 스테이블코인
+
+# composite 전략 v2 필터를 위한 BTC SMA 워밍업 기간
+_BTC_SMA_PERIOD = 20
+
+
+def fetch_fg_value() -> "float | None":
+    """F&G 지수 현재값 조회. 실패 시 None 반환."""
+    try:
+        resp = urllib.request.urlopen(
+            "https://api.alternative.me/fng/?limit=1", timeout=5
+        ).read()
+        data = json.loads(resp)
+        return float(data["data"][0]["value"])
+    except Exception:
+        return None
+
+
+def fetch_btc_above_sma(sma_period: int = _BTC_SMA_PERIOD) -> bool:
+    """BTC/KRW 현재가가 SMA(sma_period) 위에 있으면 True, 아니면 False.
+
+    데이터 조회 실패 시 True를 반환하여 기존 동작을 유지한다 (보수적 폴백).
+    """
+    try:
+        exchange = ccxt.upbit({"enableRateLimit": True})
+        # sma_period + 여유분 만큼 일봉 조회
+        candles = exchange.fetch_ohlcv("BTC/KRW", "1d", limit=sma_period + 5)
+        if len(candles) < sma_period:
+            return True
+        closes = [c[4] for c in candles]
+        sma = sum(closes[-sma_period:]) / sma_period
+        current_close = closes[-1]
+        return current_close > sma
+    except Exception:
+        return True  # 조회 실패 → 기존 동작 유지
 
 
 def get_krw_market_coins() -> list[dict]:
@@ -63,6 +99,8 @@ async def scan_entry_signals(coins: list[dict]) -> list[dict]:
 
     각 코인의 OHLCV 에 strategy_fn 을 적용하여 마지막 signal 이 1 이면 BUY 로 분류.
     Donchian 상단까지 거리 계산 (NEAR 신호)은 정보 제공 목적으로 유지.
+
+    composite 전략인 경우 BTC SMA(20) 필터와 F&G 게이트를 자동 적용한다.
     """
     end = datetime.now(tz=timezone.utc)
     # 넉넉한 워밍업 기간 (EMA 200 등 고려)
@@ -74,8 +112,23 @@ async def scan_entry_signals(coins: list[dict]) -> list[dict]:
     # daytrading 전략은 4시간봉, 나머지는 일봉
     timeframe = "4h" if STRATEGY == "daytrading" else "1d"
 
+    # composite 전략 v2 필터 — 1회 조회 후 모든 코인에 공유
+    strategy_kwargs = dict(STRATEGY_KWARGS)
+    if STRATEGY == "composite":
+        fg_value = fetch_fg_value()          # None이면 폴백 (게이트 비활성)
+        btc_above = fetch_btc_above_sma()    # 실패 시 True (기존 동작 유지)
+        strategy_kwargs["fg_gate"] = fg_value
+        strategy_kwargs["btc_above_sma"] = btc_above
+        print(
+            f"  [composite v2] F&G={fg_value} | BTC>SMA20={btc_above}",
+            flush=True,
+        )
+    else:
+        fg_value = None
+        btc_above = True
+
     # 전략 함수 초기화 (한 번만 생성)
-    strategy_fn = get_strategy(STRATEGY, **STRATEGY_KWARGS)
+    strategy_fn = get_strategy(STRATEGY, **strategy_kwargs)
 
     signals = []
 
