@@ -1,0 +1,35 @@
+{
+  "BTC/KRW": {
+    "side": "sell",
+    "description": "BTC 수동매수분 3단계 분할매도 (2026-04-05 설정)",
+    "steps": [
+      {
+        "id": "sl",
+        "condition": "price < dc20_low",
+        "ratio": 1.0,
+        "priority": "stop_loss",
+        "note": "DC20 하단 이탈 시 전량 손절"
+      },
+      {
+        "id": "tp1",
+        "condition": "price > sma20",
+        "ratio": 0.3,
+        "note": "SMA20 회복 시 30% 익절"
+      },
+      {
+        "id": "tp2",
+        "condition": "price > dc20_high",
+        "ratio": 0.4,
+        "note": "DC20 상단 돌파 시 40% 익절"
+      },
+      {
+        "id": "tp3",
+        "condition": "fg > 50",
+        "ratio": 0.3,
+        "note": "F&G 중립 회복 시 잔량 전량 익절"
+      }
+    ],
+    "active": true,
+    "dry_run": false
+  }
+}

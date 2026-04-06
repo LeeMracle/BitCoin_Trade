@@ -28,11 +28,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from services.market_data.fetcher import fetch_ohlcv
 from services.strategies import get_strategy
-from services.execution.config import STRATEGY, STRATEGY_KWARGS, DONCHIAN_PERIOD, ATR_PERIOD, ATR_MULTIPLIER
+from services.execution.config import (
+    STRATEGY, STRATEGY_KWARGS, DONCHIAN_PERIOD, ATR_PERIOD, ATR_MULTIPLIER,
+    CIRCUIT_BREAKER_ENABLED, CIRCUIT_BREAKER_INITIAL_CAPITAL,
+)
 # Donchian 상단 거리 표시용 — 정보 제공 목적
 from services.paper_trading.strategy import calc_donchian_upper, calc_atr
 from services.execution.upbit_client import get_balance, buy_market, sell_market
 from services.alerting.notifier import send, notify_trade, notify_error
+from services.execution.circuit_breaker import check_and_trigger, is_triggered
 
 # 상태 파일
 STATE_FILE = Path(__file__).resolve().parents[2] / "workspace" / "live_trading_state.json"
@@ -141,6 +145,27 @@ async def run(dry_run: bool = False):
         # ── 진입 확인 ──
         # 이전 봉 signal=0 → 현재 봉 signal=1 : 신규 매수 신호 발생
         if prev_signal == 0 and latest_signal == 1:
+            # ── 계좌 레벨 서킷브레이커 ──
+            if CIRCUIT_BREAKER_ENABLED:
+                total_krw = balance.get("total_krw", 0)
+                newly_triggered = check_and_trigger(total_krw)
+                if newly_triggered:
+                    loss_pct = (total_krw - CIRCUIT_BREAKER_INITIAL_CAPITAL) / CIRCUIT_BREAKER_INITIAL_CAPITAL * 100
+                    msg = (
+                        f"서킷브레이커 발동!\n"
+                        f"계좌 평가금액: {total_krw:,.0f} KRW\n"
+                        f"초기자본 대비: {loss_pct:+.1f}%\n"
+                        f"모든 신규 매수 차단 (기존 포지션 유지)\n"
+                        f"해제: workspace/circuit_breaker_state.json 삭제 또는 triggered=false 설정"
+                    )
+                    print(f"  [서킷브레이커] {msg}")
+                    await send(f"🔴 *{msg}")
+                    return
+                if is_triggered():
+                    print("  [서킷브레이커] 발동 중 — 매수 차단")
+                    await send("🔴 *서킷브레이커 발동 중* — 매수 신호 발생했으나 차단됨")
+                    return
+
             available_krw = balance["krw"]
             if available_krw < MIN_ORDER_KRW:
                 print(f"  매수 신호 발생! 그러나 잔고 부족: {available_krw:,.0f} KRW")

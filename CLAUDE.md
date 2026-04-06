@@ -106,3 +106,4 @@
 | 5 | t3.micro 스왑 필수, 서비스 추가 전 메모리 예산 확인 | [lessons/20260331_2](docs/lessons/20260331_2_server_memory_pressure.md) |
 | 6 | 전략 필터는 모든 매수 경로(scanner+realtime_monitor)에 적용 필수 | [lessons/20260404_1](docs/lessons/20260404_1_v2_filter_missing_path.md) |
 | 7 | 1일 1회 작업은 반드시 날짜 체크 + 상태 저장 (재시작 시 중복 방지) | [lessons/20260404_2](docs/lessons/20260404_2_vb_rotation_duplicate.md) |
+| 8 | 모니터링 평가금액은 거래소 API 전체 자산 합산 필수 (BTC만 집계하면 알트 누락) | [lessons/20260405_1](docs/lessons/20260405_1_balance_missing_alts.md) |

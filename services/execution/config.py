@@ -74,10 +74,35 @@ VB_DRY_RUN = True              # True: 가상매매만 (3일 검증 후 /vb on)
 VB_K_BULL = 0.4                # 상승장 K (공격적)
 VB_K_NEUTRAL = 0.5             # 중립 K
 VB_K_BEAR = 0.7                # 하락장 K (보수적)
-VB_SL_PCT = 0.015              # -1.5% 손절
+VB_K_CRISIS = 0.85             # 극공포 K (F&G 20~30, 매우 보수적)
+VB_SL_PCT = 0.020              # -2.0% 손절 (극공포 변동성 대응, 기존 1.5%→2.0%)
 VB_SMA_PERIOD = 50             # 레짐 판별 SMA 기간
 VB_MAX_POSITIONS = 3           # VB 전용 최대 슬롯
 VB_POSITION_RATIO = 0.30       # VB에 할당할 자금 비율 (가용 현금의 30%)
+
+# ═══════════════════════════════════════════════════════
+# 레짐 필터 (v1.5 Sprint B — 200EMA)
+# ═══════════════════════════════════════════════════════
+# BTC/KRW 종가 < EMA(200)이면 전 종목 신규 매수 차단.
+# 기존 포지션 트레일링스탑은 영향받지 않는다.
+# False로 설정하면 EMA 필터 비활성 — 기존 SMA20 동작과 동일.
+REGIME_FILTER_ENABLED = True
+REGIME_FILTER_EMA_PERIOD = 200
+
+# ═══════════════════════════════════════════════════════
+# EMA Trend Follow 전략 (DRY-RUN)
+# ═══════════════════════════════════════════════════════
+# BTC/KRW 일봉 EMA(50) 상향 돌파 + EMA(200) 필터 추세추종
+# 매일 09:05 KST에 EMA 재계산, 실시간 체결가로 돌파 감지
+# DRY_RUN=True 시 실제 주문 없이 텔레그램 "DRY-RUN 신호" 알림만 발송
+
+EMA_TREND_ENABLED = True
+EMA_TREND_DRY_RUN = True          # True: 가상매매만 (로그+알림, 실주문 없음)
+EMA_TREND_EMA_PERIOD = 50         # 진입 EMA 기간 (돌파 감지용)
+EMA_TREND_FILTER_PERIOD = 200     # 필터 EMA 기간 (하락장 진입 차단용)
+EMA_TREND_TRAIL_PCT = 0.05        # 트레일링스탑 5% (고점 대비)
+EMA_TREND_MAX_POSITIONS = 1       # BTC 단일 종목
+EMA_TREND_POSITION_RATIO = 0.20   # 가용 현금의 20%
 
 # ═══════════════════════════════════════════════════════
 # 안전장치
@@ -85,6 +110,17 @@ VB_POSITION_RATIO = 0.30       # VB에 할당할 자금 비율 (가용 현금의
 MAX_CONSECUTIVE_ERRORS = 5    # 연속 오류 N회 시 봇 자동 중지
 ERROR_COOLDOWN_SEC = 60       # 오류 후 동일 종목 재시도 대기 (초)
 ALERT_COOLDOWN_SEC = 300      # 동일 오류 알림 간격 (초, 5분)
+
+# ═══════════════════════════════════════════════════════
+# 계좌 레벨 서킷브레이커
+# ═══════════════════════════════════════════════════════
+# 계좌 전체 평가금액이 초기자본 대비 THRESHOLD 이하로 떨어지면
+# 모든 전략(Composite + VB)의 신규 매수를 자동 중단.
+# 기존 포지션은 유지 (트레일링스탑은 계속 작동).
+# 해제: 수동만 가능 (circuit_breaker_state.json 삭제 또는 triggered=false 설정)
+CIRCUIT_BREAKER_ENABLED = True
+CIRCUIT_BREAKER_THRESHOLD = -0.20          # -20% 손실 시 발동
+CIRCUIT_BREAKER_INITIAL_CAPITAL = 300_000  # 초기 투자금 (KRW)
 
 # ═══════════════════════════════════════════════════════
 # 알림 설정

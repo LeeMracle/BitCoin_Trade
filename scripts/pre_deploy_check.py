@@ -191,9 +191,9 @@ def check_v2_filter_paths() -> None:
             "scanner.py에만 있고 실제 매수 경로에 없음"
         )
 
-    if "_btc_above_sma" not in buy_body and "btc_above_sma" not in buy_body:
+    if "_btc_above_ema" not in buy_body and "btc_above_ema" not in buy_body:
         errors.append(
-            "[v2필터] realtime_monitor._execute_buy에 BTC SMA 필터 미적용 — "
+            "[v2필터] realtime_monitor._execute_buy에 BTC EMA 필터 미적용 — "
             "scanner.py에만 있고 실제 매수 경로에 없음"
         )
 
@@ -229,6 +229,30 @@ def check_vb_rotation_guard() -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════
+# 검증 8: 잔고 조회가 전체 자산을 포함하는지
+# ref: docs/lessons/20260405_1_balance_missing_alts.md
+# ═══════════════════════════════════════════════════════════════════
+
+def check_balance_includes_alts() -> None:
+    """get_balance()가 알트코인 평가액을 포함하는지 검증."""
+    client_file = PROJECT_ROOT / "services" / "execution" / "upbit_client.py"
+    if not client_file.exists():
+        return
+
+    content = client_file.read_text(encoding="utf-8")
+
+    # fetch_balance 호출 후 전체 자산 합산 여부 확인
+    # total 또는 positions 기반으로 알트 평가액을 합산하는 로직이 있어야 함
+    if "total_krw" in content:
+        # total_krw 계산 로직에 알트코인이 포함되어야 함
+        if "positions" not in content and "total" not in content.split("total_krw")[0][-500:]:
+            warnings.append(
+                "[잔고] upbit_client.get_balance()에서 알트코인 평가액 합산이 "
+                "누락되었을 수 있음 — 모니터링 보고 평가금액 과소 표시 위험"
+            )
+
+
+# ═══════════════════════════════════════════════════════════════════
 # 메인
 # ═══════════════════════════════════════════════════════════════════
 
@@ -244,6 +268,7 @@ def main() -> None:
     check_service_config()
     check_v2_filter_paths()
     check_vb_rotation_guard()
+    check_balance_includes_alts()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")

@@ -32,9 +32,14 @@ from services.execution.config import (
     MAX_POSITIONS, POSITION_RATIO, MIN_VOLUME_KRW,
     MIN_ORDER_KRW, DRY_RUN, EXCLUDE_SYMBOLS, MIN_LISTING_DAYS,
     NOTIFY_ON_BUY, NOTIFY_ON_SELL, NOTIFY_DAILY_REPORT, NOTIFY_NEAR_SIGNAL,
-    VB_ENABLED, VB_DRY_RUN, VB_K_BULL, VB_K_NEUTRAL, VB_K_BEAR,
+    VB_ENABLED, VB_DRY_RUN, VB_K_BULL, VB_K_NEUTRAL, VB_K_BEAR, VB_K_CRISIS,
     VB_SL_PCT, VB_SMA_PERIOD, VB_MAX_POSITIONS, VB_POSITION_RATIO,
+    CIRCUIT_BREAKER_ENABLED, CIRCUIT_BREAKER_INITIAL_CAPITAL,
+    EMA_TREND_ENABLED, EMA_TREND_DRY_RUN,
+    EMA_TREND_EMA_PERIOD, EMA_TREND_FILTER_PERIOD,
+    EMA_TREND_TRAIL_PCT, EMA_TREND_MAX_POSITIONS, EMA_TREND_POSITION_RATIO,
 )
+from services.execution.circuit_breaker import check_and_trigger, is_triggered
 from services.execution.multi_trader import (
     load_state, save_state, append_log,
     buy_market_coin, sell_market_coin,
@@ -67,6 +72,7 @@ ALERT_COOLDOWN_SEC = 300       # 동일 오류 알림 간격 (5분)
 
 VR_STATE_FILE = Path(__file__).resolve().parents[2] / "workspace" / "vol_reversal_dryrun_state.json"
 VB_STATE_FILE = Path(__file__).resolve().parents[2] / "workspace" / "vb_state.json"
+EMA_TREND_STATE_FILE = Path(__file__).resolve().parents[2] / "workspace" / "ema_trend_state.json"
 VR_TP = 0.03     # vol_reversal 익절 +3%
 VR_TRAIL = 0.015  # vol_reversal 트레일링 1.5%
 VR_SL = 0.02      # vol_reversal 손절 -2%
@@ -82,11 +88,15 @@ class RealtimeMonitor:
         # VB(변동성 돌파) 상태
         self._vb_positions: dict[str, dict] = {}  # 메모리 캐시
         self._load_vb_state()
+        # EMA Trend Follow 상태
+        self._ema_trend_level: dict = {}   # {ema50, ema200, prev_close, close}
+        self._ema_trend_position: "dict | None" = None  # 보유 중이면 dict
+        self._load_ema_trend_state()
         # 안전장치
         self.consecutive_errors = 0
         # v2 필터 캐시 (레벨 갱신 시 1회 조회)
         self._fg_value: "float | None" = None
-        self._btc_above_sma: bool = True
+        self._btc_above_ema: bool = True
         self.error_cooldown: dict[str, float] = {}   # {symbol: timestamp}
         self.last_alert_time: dict[str, float] = {}   # {error_key: timestamp}
 
@@ -102,6 +112,9 @@ class RealtimeMonitor:
         if VB_ENABLED:
             mode = "DRY-RUN" if VB_DRY_RUN else "실전"
             print(f"  VB(변동성돌파): {mode}, K={VB_K_BULL}/{VB_K_BEAR}, 슬롯={VB_MAX_POSITIONS}", flush=True)
+        if EMA_TREND_ENABLED:
+            mode = "DRY-RUN" if EMA_TREND_DRY_RUN else "실전"
+            print(f"  EMA Trend: {mode}, EMA{EMA_TREND_EMA_PERIOD}/EMA{EMA_TREND_FILTER_PERIOD}, Trail{EMA_TREND_TRAIL_PCT*100:.0f}%", flush=True)
         print("=" * 60, flush=True)
 
         await self._refresh_levels()
@@ -124,16 +137,18 @@ class RealtimeMonitor:
         tf_label = _DT_TIMEFRAME
         print(f"\n[{now.strftime('%Y-%m-%d %H:%M')}] 레벨 갱신 ({tf_label}, DC{_DT_DC_PERIOD})...")
 
-        # v2 필터: F&G + BTC SMA(20) 조회 (레벨 갱신 시 1회)
+        # v2 필터: F&G + BTC EMA(200) 조회 (레벨 갱신 시 1회)
         if not IS_DAYTRADING:
             try:
-                from services.execution.scanner import fetch_fg_value, fetch_btc_above_sma
+                from services.execution.scanner import fetch_fg_value, fetch_btc_above_ema
+                from services.execution.config import REGIME_FILTER_ENABLED, REGIME_FILTER_EMA_PERIOD
                 self._fg_value = fetch_fg_value()
-                self._btc_above_sma = fetch_btc_above_sma()
+                self._btc_above_ema = fetch_btc_above_ema()
                 fg_disp = f"{self._fg_value:.0f}" if self._fg_value is not None else "N/A"
                 fg_blocked = self._fg_value is not None and self._fg_value < 20
+                ema_label = f"EMA{REGIME_FILTER_EMA_PERIOD}" if REGIME_FILTER_ENABLED else "EMA(비활성)"
                 print(f"  [v2] F&G={fg_disp} {'(진입차단)' if fg_blocked else '(허용)'}"
-                      f" | BTC>SMA20={self._btc_above_sma}", flush=True)
+                      f" | BTC>{ema_label}={self._btc_above_ema}", flush=True)
             except Exception as e:
                 print(f"  [v2] 필터 조회 실패: {e} — 기본값 유지", flush=True)
 
@@ -207,6 +222,10 @@ class RealtimeMonitor:
         # ── VB(변동성 돌파) 일일 회전 처리 ──
         if VB_ENABLED and not IS_DAYTRADING:
             await self._vb_daily_rotation()
+
+        # ── EMA Trend Follow 레벨 갱신 ──
+        if EMA_TREND_ENABLED and not IS_DAYTRADING:
+            await self._ema_trend_refresh_level()
 
         # 보유 종목 트레일링스탑 갱신 (전략 전환 시 기존 스탑 보존)
         positions = self.state.get("positions", {})
@@ -431,6 +450,10 @@ class RealtimeMonitor:
                         except Exception:
                             pass
 
+                        # EMA Trend Follow: BTC/KRW 반드시 구독 포함
+                        if EMA_TREND_ENABLED and "KRW-BTC" not in upbit_codes:
+                            upbit_codes.append("KRW-BTC")
+
                         subscribe = [
                             {"ticket": str(uuid.uuid4())[:8]},
                             {"type": "ticker", "codes": upbit_codes, "isOnlyRealtime": True},
@@ -524,7 +547,20 @@ class RealtimeMonitor:
                 await self._execute_sell(symbol, price)
             return
 
-        # ── 미보유 종목: 진입 확인 ──
+        # ── 보조 전략 감시 (levels 등록 여부와 무관하게 실행) ──
+
+        # vol_reversal DRY-RUN 보유종목: 실시간 청산 감시
+        await self._check_vr_exit(symbol, price)
+
+        # VB(변동성 돌파) 보유종목: 실시간 손절 감시
+        if VB_ENABLED:
+            await self._check_vb_exit(symbol, price)
+
+        # EMA Trend Follow: BTC/KRW 진입/청산 감시 (lessons #6: 모든 진입 경로에 필터 적용)
+        if EMA_TREND_ENABLED and symbol == "BTC/KRW":
+            await self._check_ema_trend(price)
+
+        # ── 메인 전략 미보유 종목: 진입 확인 ──
         if len(positions) >= MAX_POSITIONS:
             return
 
@@ -542,13 +578,6 @@ class RealtimeMonitor:
         else:
             if price > level["upper"]:
                 await self._execute_buy(symbol, price, level)
-
-        # ── vol_reversal DRY-RUN 보유종목: 실시간 청산 감시 ──
-        await self._check_vr_exit(symbol, price)
-
-        # ── VB(변동성 돌파) 보유종목: 실시간 손절 감시 ──
-        if VB_ENABLED:
-            await self._check_vb_exit(symbol, price)
 
     async def _check_vr_exit(self, symbol: str, price: float):
         """vol_reversal DRY-RUN 보유종목의 실시간 청산 확인."""
@@ -621,6 +650,220 @@ class RealtimeMonitor:
 
         except Exception:
             pass  # DRY-RUN 감시 오류는 무시 (메인 매매에 영향 없도록)
+
+    # ── EMA Trend Follow 메서드 ─────────────────────────
+
+    def _load_ema_trend_state(self):
+        """EMA Trend 상태 파일 로드."""
+        try:
+            if EMA_TREND_STATE_FILE.exists():
+                with open(EMA_TREND_STATE_FILE, "r", encoding="utf-8") as f:
+                    state = json.load(f)
+                self._ema_trend_position = state.get("position")  # None 또는 dict
+                self._ema_trend_level = state.get("level", {})
+            else:
+                self._ema_trend_position = None
+                self._ema_trend_level = {}
+        except Exception:
+            self._ema_trend_position = None
+            self._ema_trend_level = {}
+
+    def _save_ema_trend_state(self):
+        """EMA Trend 상태 파일 저장."""
+        try:
+            EMA_TREND_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            existing = {}
+            if EMA_TREND_STATE_FILE.exists():
+                with open(EMA_TREND_STATE_FILE, "r", encoding="utf-8") as f:
+                    existing = json.load(f)
+            existing["position"] = self._ema_trend_position
+            existing["level"] = self._ema_trend_level
+            if "history" not in existing:
+                existing["history"] = []
+            with open(EMA_TREND_STATE_FILE, "w", encoding="utf-8") as f:
+                json.dump(existing, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"  [EMA-TREND] 상태 저장 오류: {e}", flush=True)
+
+    async def _ema_trend_refresh_level(self):
+        """BTC/KRW 일봉 EMA(50), EMA(200) 재계산 (매일 09:05 KST = UTC 00:05)."""
+        try:
+            now = datetime.now(tz=timezone.utc)
+            start = now - timedelta(days=EMA_TREND_FILTER_PERIOD + 50)
+            start_str = start.strftime("%Y-%m-%dT00:00:00Z")
+            end_str = now.strftime("%Y-%m-%dT00:00:00Z")
+
+            raw = await fetch_ohlcv("BTC/KRW", "1d", start_str, end_str, use_cache=False)
+            df = pd.DataFrame(raw)
+            if len(df) < EMA_TREND_FILTER_PERIOD + 5:
+                print(f"  [EMA-TREND] 데이터 부족 ({len(df)}봉)", flush=True)
+                return
+
+            close_series = df["close"]
+            ema50 = float(
+                close_series.ewm(span=EMA_TREND_EMA_PERIOD, min_periods=EMA_TREND_EMA_PERIOD, adjust=False)
+                .mean().iloc[-1]
+            )
+            ema50_prev = float(
+                close_series.ewm(span=EMA_TREND_EMA_PERIOD, min_periods=EMA_TREND_EMA_PERIOD, adjust=False)
+                .mean().iloc[-2]
+            )
+            ema200 = float(
+                close_series.ewm(span=EMA_TREND_FILTER_PERIOD, min_periods=EMA_TREND_FILTER_PERIOD, adjust=False)
+                .mean().iloc[-1]
+            )
+            latest_close = float(close_series.iloc[-1])
+            prev_close = float(close_series.iloc[-2])
+
+            self._ema_trend_level = {
+                "ema50": ema50,
+                "ema50_prev": ema50_prev,
+                "ema200": ema200,
+                "close": latest_close,       # 어제 종가 (일봉 미마감)
+                "prev_close": prev_close,    # 그제 종가
+            }
+            self._save_ema_trend_state()
+
+            mode = "DRY-RUN" if EMA_TREND_DRY_RUN else "실전"
+            above_filter = latest_close > ema200
+            print(
+                f"  [EMA-TREND-{mode}] EMA{EMA_TREND_EMA_PERIOD}={ema50:,.0f} "
+                f"EMA{EMA_TREND_FILTER_PERIOD}={ema200:,.0f} "
+                f"close={latest_close:,.0f} "
+                f"EMA200_필터={'통과' if above_filter else '차단'}",
+                flush=True,
+            )
+        except Exception as e:
+            print(f"  [EMA-TREND] 레벨 갱신 오류: {e}", flush=True)
+
+    async def _check_ema_trend(self, price: float):
+        """BTC/KRW 실시간 체결가로 EMA Trend 진입/청산 조건 확인.
+
+        진입: 실시간가 > EMA50  AND  전일 close < EMA50_prev  AND  실시간가 > EMA200
+              (봉 마감 기반 돌파를 실시간 틱으로 근사 — lessons #1 주의)
+        청산: 실시간가 < trail_stop  OR  실시간가 < EMA50
+        """
+        if not self._ema_trend_level:
+            return  # 레벨 아직 미계산
+
+        level = self._ema_trend_level
+        ema50 = level.get("ema50")
+        ema50_prev = level.get("ema50_prev")
+        ema200 = level.get("ema200")
+        prev_close = level.get("prev_close")
+
+        if ema50 is None or ema200 is None or prev_close is None:
+            return
+
+        mode = "DRY" if EMA_TREND_DRY_RUN else "LIVE"
+
+        # ── 보유 중: 청산 확인 ──
+        if self._ema_trend_position is not None:
+            pos = self._ema_trend_position
+            entry_price = pos["entry_price"]
+
+            # 고점 갱신
+            if price > pos.get("highest", entry_price):
+                pos["highest"] = price
+                self._save_ema_trend_state()
+
+            highest = pos.get("highest", entry_price)
+            trail_stop = highest * (1.0 - EMA_TREND_TRAIL_PCT)
+            below_ema = price < ema50
+
+            reason = None
+            if price < trail_stop:
+                ret_pct = (price / entry_price - 1) * 100
+                reason = f"트레일링스탑 {ret_pct:+.1f}%"
+            elif below_ema:
+                ret_pct = (price / entry_price - 1) * 100
+                reason = f"EMA{EMA_TREND_EMA_PERIOD} 하향이탈 {ret_pct:+.1f}%"
+
+            if reason:
+                ret_pct_val = (price / entry_price - 1) * 100
+                emoji = "🟢" if ret_pct_val > 0 else "🔴"
+
+                # 히스토리 기록
+                try:
+                    existing = {}
+                    if EMA_TREND_STATE_FILE.exists():
+                        with open(EMA_TREND_STATE_FILE, "r", encoding="utf-8") as f:
+                            existing = json.load(f)
+                    existing.setdefault("history", []).append({
+                        "symbol": "BTC/KRW",
+                        "entry_date": pos["entry_date"],
+                        "entry_price": entry_price,
+                        "exit_date": datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M"),
+                        "exit_price": price,
+                        "return_pct": round(ret_pct_val, 2),
+                        "reason": reason,
+                    })
+                    existing["position"] = None
+                    existing["level"] = self._ema_trend_level
+                    EMA_TREND_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+                    with open(EMA_TREND_STATE_FILE, "w", encoding="utf-8") as f:
+                        json.dump(existing, f, ensure_ascii=False, indent=2)
+                except Exception:
+                    pass
+
+                self._ema_trend_position = None
+
+                print(
+                    f"  [EMA-TREND-{mode}] {emoji} BTC/KRW 청산 — {reason} @ {price:,.0f}",
+                    flush=True,
+                )
+                await send(
+                    f"[EMA-TREND {mode}] {emoji} *청산* BTC/KRW\n"
+                    f"사유: {reason}\n"
+                    f"가격: {price:,.0f} (진입 {entry_price:,.0f})\n"
+                    f"수익: {ret_pct_val:+.1f}%"
+                )
+            return
+
+        # ── 미보유: 진입 확인 ──
+        # lessons #1: 실시간 틱 돌파는 가짜 돌파 위험 — 봉 마감 기반 EMA와 비교
+        # 전일 close < EMA50_prev (전일 EMA) AND 현재가 > EMA50 (오늘 EMA) AND 현재가 > EMA200
+        crossed_above = (prev_close < ema50_prev) and (price > ema50)
+        above_filter = price > ema200
+
+        if crossed_above and above_filter:
+            now_str = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
+            self._ema_trend_position = {
+                "entry_date": now_str,
+                "entry_price": price,
+                "highest": price,
+            }
+            self._save_ema_trend_state()
+
+            print(
+                f"  [EMA-TREND-{mode}] 📈 BTC/KRW 진입 신호!"
+                f" 가격={price:,.0f} EMA50={ema50:,.0f} EMA200={ema200:,.0f}",
+                flush=True,
+            )
+            await send(
+                f"[EMA-TREND {mode}] 📈 *진입 신호* BTC/KRW\n"
+                f"가격: {price:,.0f}\n"
+                f"EMA{EMA_TREND_EMA_PERIOD}: {ema50:,.0f}\n"
+                f"EMA{EMA_TREND_FILTER_PERIOD}: {ema200:,.0f}\n"
+                f"트레일링스탑: {EMA_TREND_TRAIL_PCT*100:.0f}%\n"
+                f"{'[실제 매수 없음 — DRY-RUN]' if EMA_TREND_DRY_RUN else '[실전 매수]'}"
+            )
+
+            if not EMA_TREND_DRY_RUN:
+                # 실전 매수 (DRY_RUN=False 시에만)
+                try:
+                    balance = get_balance()
+                    avail = balance.get("krw", 0)
+                    order_amt = avail * EMA_TREND_POSITION_RATIO
+                    if order_amt >= MIN_ORDER_KRW:
+                        order = buy_market_coin("BTC/KRW", order_amt)
+                        exec_price = order.get("price") or price
+                        self._ema_trend_position["entry_price"] = exec_price
+                        self._ema_trend_position["highest"] = exec_price
+                        self._save_ema_trend_state()
+                        print(f"  [EMA-TREND-LIVE] 매수 체결: {exec_price:,.0f}", flush=True)
+                except Exception as e:
+                    print(f"  [EMA-TREND] 매수 실패: {e}", flush=True)
 
     # ── VB(변동성 돌파) 메서드 ──────────────────────────
 
@@ -707,13 +950,16 @@ class RealtimeMonitor:
             if prev_range <= 0:
                 continue
 
-            # 레짐별 K값
+            # 레짐별 K값 (F&G 극공포 오버라이드 포함)
             if np.isnan(sma50):
                 k = VB_K_NEUTRAL
             elif prev_close > sma50:
                 k = VB_K_BULL
             else:
                 k = VB_K_BEAR
+            # 극공포 구간(F&G 20~30): K를 CRISIS로 상향 (더 보수적)
+            if self._fg_value is not None and 20 <= self._fg_value < 30:
+                k = max(k, VB_K_CRISIS)
 
             threshold = today_open + prev_range * k
             if prev_close > threshold:
@@ -888,6 +1134,30 @@ class RealtimeMonitor:
         if self._is_in_cooldown(symbol):
             return
 
+        # ── 계좌 레벨 서킷브레이커 ─────────────────────────
+        if CIRCUIT_BREAKER_ENABLED:
+            try:
+                balance = get_balance()
+                total_krw = balance.get("total_krw", 0)
+                newly_triggered = check_and_trigger(total_krw)
+                if newly_triggered:
+                    loss_pct = (total_krw - CIRCUIT_BREAKER_INITIAL_CAPITAL) / CIRCUIT_BREAKER_INITIAL_CAPITAL * 100
+                    msg = (
+                        f"서킷브레이커 발동!\n"
+                        f"계좌 평가금액: {total_krw:,.0f} KRW\n"
+                        f"초기자본 대비: {loss_pct:+.1f}%\n"
+                        f"모든 신규 매수 차단 (기존 포지션 유지)\n"
+                        f"해제: workspace/circuit_breaker_state.json 삭제 또는 triggered=false 설정"
+                    )
+                    print(f"\n  [서킷브레이커] {msg}", flush=True)
+                    await send(f"🔴 *{msg}")
+                    return
+                if is_triggered():
+                    print(f"  [서킷브레이커] 발동 중 — {symbol} 매수 차단", flush=True)
+                    return
+            except Exception as e:
+                print(f"  [서킷브레이커] 잔고 조회 실패, 매수 진행: {e}", flush=True)
+
         # 연패 쿨다운 확인 (3연패 시 3일 매수 중단)
         if self._is_loss_cooldown():
             return
@@ -896,8 +1166,8 @@ class RealtimeMonitor:
         if self._fg_value is not None and self._fg_value < 20:
             return
 
-        # v2 필터: BTC SMA(20) 필터 (BTC < SMA20이면 알트 진입 차단)
-        if not self._btc_above_sma and symbol != "BTC/KRW":
+        # v2 필터: BTC EMA(200) 필터 (BTC < EMA200이면 전 종목 신규 매수 차단)
+        if not self._btc_above_ema:
             return
 
         today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M")

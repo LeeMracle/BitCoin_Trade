@@ -105,6 +105,35 @@ if log_path.exists():
             pass
 data["recent_log"] = recent
 
+# 전체 자산 평가 + 보유종목 현재가
+try:
+    import ccxt
+    exchange = ccxt.upbit({{
+        "apiKey": os.environ.get("UPBIT_ACCESS_KEY",""),
+        "secret": os.environ.get("UPBIT_SECRET_KEY",""),
+        "enableRateLimit": True,
+    }})
+    full_bal = exchange.fetch_balance()
+    total_eval = 0
+    holdings = {{}}
+    for cur, amt in full_bal["total"].items():
+        if not amt or amt <= 0:
+            continue
+        if cur == "KRW":
+            total_eval += amt
+            continue
+        try:
+            t = exchange.fetch_ticker(cur + "/KRW")
+            price = t["last"]
+            val = amt * price
+            total_eval += val
+            holdings[cur + "/KRW"] = {{"amount": amt, "current_price": price, "eval_krw": val}}
+        except:
+            pass
+    data["full_balance"] = {{"total_eval": total_eval, "holdings": holdings}}
+except Exception as e:
+    data["full_balance"] = {{"error": str(e)}}
+
 print(json.dumps(data, ensure_ascii=False))
 '"""
     raw = _ssh(script, timeout=20)
@@ -165,15 +194,23 @@ async def build_report() -> str:
     regime, fng_val = await _check_regime()
     lines.append(f"레짐: {regime} | composite | F&G {fng_val}%")
 
-    # 3. 잔고
-    bal = data.get("balance", {})
-    if "error" not in bal:
-        total = bal.get("total_krw", 0)
-        lines.append(f"평가금액: {total:,.0f}원")
+    # 3. 잔고 (전체 자산 합산)
+    full_bal = data.get("full_balance", {})
+    if "error" not in full_bal and full_bal.get("total_eval"):
+        total_eval = full_bal["total_eval"]
+        lines.append(f"평가금액: {total_eval:,.0f}원")
     else:
-        lines.append(f"평가금액: 조회 실패")
+        bal = data.get("balance", {})
+        total = bal.get("total_krw", 0) if "error" not in bal else 0
+        lines.append(f"평가금액: {total:,.0f}원 (BTC+KRW만)")
 
-    # 4. 스윙 포지션
+    # 현재가 매핑 (full_balance에서 가져옴)
+    current_prices = {}
+    if "holdings" in full_bal:
+        for sym, h in full_bal["holdings"].items():
+            current_prices[sym] = h.get("current_price", 0)
+
+    # 4. 스윙 포지션 (현재가 기준 수익률)
     swing = data.get("swing", {})
     positions = swing.get("positions", {})
     closed = swing.get("closed_trades", [])
@@ -182,13 +219,14 @@ async def build_report() -> str:
     if positions:
         for sym, pos in positions.items():
             entry = pos.get("entry_price", 0)
-            highest = pos.get("highest", 0)
-            stop = pos.get("trail_stop", 0)
-            if entry > 0 and highest > 0:
-                gain_pct = (highest / entry - 1) * 100
-                lines.append(f"  {sym} 진입:{entry:,.0f} 고점:{highest:,.0f} ({gain_pct:+.1f}%)")
-            else:
-                lines.append(f"  {sym} 진입:{entry:,.0f} 스탑:{stop:,.0f}")
+            cur_price = current_prices.get(sym, 0)
+            if entry > 0 and cur_price > 0:
+                pnl_pct = (cur_price / entry - 1) * 100
+                emoji = "🟢" if pnl_pct >= 0 else "🔴"
+                eval_krw = full_bal.get("holdings", {}).get(sym, {}).get("eval_krw", 0)
+                lines.append(f"  {emoji} {sym} 현재:{cur_price:,.0f} 진입:{entry:,.0f} ({pnl_pct:+.1f}%) {eval_krw:,.0f}원")
+            elif entry > 0:
+                lines.append(f"  {sym} 진입:{entry:,.0f} (현재가 조회 실패)")
 
     # 5. 최근 활동
     lines.append("")
@@ -261,7 +299,8 @@ async def build_report() -> str:
 async def main():
     now = datetime.now(tz=KST)
     hour = now.hour
-    if hour < 9 or hour >= 18:
+    force = "--force" in sys.argv
+    if not force and (hour < 9 or hour >= 18):
         print(f"[{now:%H:%M}] 모니터링 시간 외 (09:00~18:00) — 건너뜀")
         return
 
