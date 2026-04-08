@@ -237,7 +237,7 @@ async def build_report() -> str:
         for r in recent[-5:]:
             action = r.get("action", "?")
             symbol = r.get("symbol", "?")
-            price = r.get("price", 0)
+            price = r.get("price") or 0
             lines.append(f"  {action} {symbol} @ {price:,.0f}")
     else:
         lines.append(f"  {prev_time}~{time_str} — 변동 없음")

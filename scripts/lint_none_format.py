@@ -39,6 +39,9 @@ NUMERIC_TYPES = set("bcdeEfFgGnoxX%")
 # ccxt 주문 응답에서 None으로 오는 대표 위험 키
 CCXT_RISKY_KEYS = {"cost", "price", "average", "filled"}
 
+# R3 억제: 다음 함수의 인수로 전달되는 .get(...)은 안전(None-safe 래퍼)
+SAFE_WRAPPERS = {"_fmt_num", "fmt_num", "resolve_fill", "_resolve_fill"}
+
 
 class Finding:
     __slots__ = ("path", "line", "col", "rule", "severity", "msg")
@@ -136,6 +139,49 @@ def _iter_python_files() -> list[Path]:
     return files
 
 
+def _attach_parents(tree: ast.AST) -> None:
+    """각 노드에 parent 참조를 심는다 (R3 문맥 판단용)."""
+    for parent in ast.walk(tree):
+        for child in ast.iter_child_nodes(parent):
+            child.parent = parent  # type: ignore[attr-defined]
+
+
+def _inside_safe_wrapper(node: ast.AST) -> bool:
+    """노드가 SAFE_WRAPPERS 함수 호출의 인수인지."""
+    parent = getattr(node, "parent", None)
+    if not isinstance(parent, ast.Call):
+        return False
+    if node not in parent.args:
+        return False
+    func = parent.func
+    if isinstance(func, ast.Name) and func.id in SAFE_WRAPPERS:
+        return True
+    if isinstance(func, ast.Attribute) and func.attr in SAFE_WRAPPERS:
+        return True
+    return False
+
+
+def _inside_or_chain(node: ast.AST) -> bool:
+    """노드가 BoolOp(Or)의 피연산자 또는 그 하위에 있는지.
+
+    예: `order.get('price') or price`  →  True
+        `order.get('price') or order.get('average')`  →  True
+        `f"{x.get('price'):,.0f}"`  →  False
+    """
+    cur = getattr(node, "parent", None)
+    while cur is not None:
+        if isinstance(cur, ast.BoolOp) and isinstance(cur.op, ast.Or):
+            return True
+        # 포매팅/함수 호출 레벨을 넘어가면 중단
+        if isinstance(cur, (ast.FormattedValue, ast.Call, ast.Assign,
+                            ast.Return, ast.FunctionDef, ast.Module)):
+            # Call의 경우에도 그 Call이 BoolOp 안에 있을 수 있음 → 계속
+            if isinstance(cur, (ast.FunctionDef, ast.Module, ast.FormattedValue)):
+                return False
+        cur = getattr(cur, "parent", None)
+    return False
+
+
 def _check_file(path: Path, findings: list[Finding]) -> None:
     try:
         source = path.read_text(encoding="utf-8")
@@ -150,6 +196,8 @@ def _check_file(path: Path, findings: list[Finding]) -> None:
         findings.append(Finding(path, e.lineno or 0, e.offset or 0,
                                 "SYS", "WARN", f"구문 오류: {e.msg}"))
         return
+
+    _attach_parents(tree)
 
     for node in ast.walk(tree):
         # ─── R1: f-string 내부 .get() 직접 숫자 포매팅 ───
@@ -183,18 +231,28 @@ def _check_file(path: Path, findings: list[Finding]) -> None:
             ))
 
         # ─── R3: ccxt 주문 응답의 위험 키 .get() 접근 ───
-        # (파일 이름이 jarvis_executor.py 라도 _resolve_fill 안이면 OK —
-        #  여기서는 단순 WARN 으로 리포트만)
         if _is_get_call(node):
             key = _get_const_key(node)  # type: ignore[arg-type]
             if key in CCXT_RISKY_KEYS:
-                # _resolve_fill 내부이거나 파일명이 린터/헬퍼면 제외
-                if path.name == "lint_none_format.py":
+                # 제외 조건:
+                #   (1) 린터/공용 헬퍼 본체
+                #   (2) `or <fallback>` 체인 안 (이미 안전 패턴)
+                #   (3) None-safe 래퍼(_fmt_num 등)의 인수
+                #   (4) upbit_client._parse_order 의 의도된 파싱 레이어
+                if path.name in ("lint_none_format.py", "ccxt_utils.py"):
+                    continue
+                if _inside_or_chain(node):
+                    continue
+                if _inside_safe_wrapper(node):
+                    continue
+                if path.name == "upbit_client.py":
+                    # 파싱 책임 경계 — 호출자에서 resolve_fill 사용해야 함
+                    # (문서화된 예외, docs/lint_layer.md 참조)
                     continue
                 findings.append(Finding(
                     path, node.lineno, node.col_offset, "R3", "WARN",
                     f".get('{key}') — ccxt 시장가 주문 직후 None 가능. "
-                    f"_resolve_fill() 경유 또는 None 체크 확인"
+                    f"resolve_fill() 경유 또는 `or <fallback>` 패턴 필요"
                 ))
 
 

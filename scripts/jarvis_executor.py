@@ -36,60 +36,16 @@ load_dotenv(ROOT / "services" / ".env")
 import ccxt
 import numpy as np
 
+# 공용 None-safe 헬퍼 (docs/lint_layer.md 참조)
+from services.common.ccxt_utils import fmt_num as _fmt_num
+from services.common.ccxt_utils import resolve_fill as _resolve_fill
+
 KST = timezone(timedelta(hours=9))
 STRATEGIES_FILE = ROOT / "workspace" / "jarvis_strategies.json"
 STATE_FILE = ROOT / "workspace" / "jarvis_state.json"
 LOG_FILE = ROOT / "workspace" / "jarvis_log.jsonl"
 MIN_ORDER_KRW = 5_000
 MAX_SYMBOLS = 5  # 동시 관리 종목 상한
-
-
-def _fmt_num(v, spec: str = ",.0f", fallback: str = "N/A") -> str:
-    """None-safe 숫자 포매터. 업비트 시장가 응답 직후 None 필드 방어."""
-    if v is None:
-        return fallback
-    try:
-        return format(v, spec)
-    except (TypeError, ValueError):
-        return fallback
-
-
-def _resolve_fill(exchange, order: dict, symbol: str,
-                  amount_hint: float | None = None) -> tuple[float | None, float | None]:
-    """시장가 주문 체결정보(cost, price) 해석.
-
-    업비트는 create_market_*_order 접수 응답에 cost/price/average가 모두
-    None으로 오는 케이스가 있다. 순서:
-      1) order dict에서 average → price → last 시도
-      2) 여전히 None이면 fetch_order(id)로 재조회
-      3) 그래도 None이면 ticker(last) × amount_hint로 추정
-    """
-    price = order.get("average") or order.get("price")
-    cost = order.get("cost")
-
-    if price is None or cost is None:
-        try:
-            oid = order.get("id")
-            if oid:
-                time.sleep(0.4)  # 체결 반영 대기
-                fetched = exchange.fetch_order(oid, symbol)
-                price = price or fetched.get("average") or fetched.get("price")
-                cost = cost or fetched.get("cost")
-                if amount_hint is None:
-                    amount_hint = fetched.get("filled") or fetched.get("amount")
-        except Exception:
-            pass
-
-    if price is None:
-        try:
-            price = exchange.fetch_ticker(symbol)["last"]
-        except Exception:
-            price = None
-
-    if cost is None and price is not None and amount_hint:
-        cost = price * amount_hint
-
-    return cost, price
 
 
 # ═══════════════════════════════════════════════════════════════

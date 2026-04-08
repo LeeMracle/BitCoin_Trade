@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# BATA pre-commit hook — NoneType 포매팅 린터 자동 실행
+# 활성화: git config core.hooksPath .githooks
+#
+# 실패 시 commit 이 중단된다. 회피하려면 (권장하지 않음):
+#   git commit --no-verify
+#
+# 참조: docs/lint_layer.md
+
+set -e
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+# Python 실행기 결정 (venv 우선)
+if [ -x ".venv/Scripts/python.exe" ]; then
+    PYTHON=".venv/Scripts/python.exe"
+elif [ -x ".venv/bin/python" ]; then
+    PYTHON=".venv/bin/python"
+else
+    PYTHON="python"
+fi
+
+echo "[pre-commit] lint_none_format 실행 중..."
+PYTHONUTF8=1 "$PYTHON" scripts/lint_none_format.py --quiet
+rc=$?
+
+if [ $rc -ne 0 ]; then
+    echo ""
+    echo "[pre-commit] ❌ 린트 실패 — 위 ERROR 를 먼저 수정하세요."
+    echo "             우회: git commit --no-verify (권장 안 함)"
+    exit 1
+fi
+
+echo "[pre-commit] ✅ 린트 통과"
+exit 0

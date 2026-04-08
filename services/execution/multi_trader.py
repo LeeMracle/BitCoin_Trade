@@ -123,7 +123,7 @@ async def run(dry_run: bool = False):
                     continue
 
                 order = sell_market_coin(symbol, coin_amount)
-                exec_price = order.get("price", 0)
+                exec_price = order.get("price") or 0
                 print(f"  {symbol} 매도 체결: {exec_price:,.0f}")
             except Exception as e:
                 msg = f"{symbol} 매도 실패: {e}"
@@ -200,7 +200,7 @@ async def run(dry_run: bool = False):
                 else:
                     try:
                         order = buy_market_coin(symbol, order_amount)
-                        exec_price = order.get("price", sig["price"])
+                        exec_price = order.get("price") or sig["price"]
                         print(f"  매수 체결: {exec_price:,.0f}")
                     except Exception as e:
                         msg = f"{symbol} 매수 실패: {e}"
