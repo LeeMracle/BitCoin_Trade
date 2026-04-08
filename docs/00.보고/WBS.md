@@ -12,8 +12,8 @@
 | Phase 3 페이퍼트레이딩  | 0    | 0    | 3    | 3    |
 | Phase 4 실전거래        | 1    | 1    | 14   | 16   |
 | Phase 5 전략고도화      | 3    | 0    | 23   | 26   |
-| **Phase 6 코드품질/린트**| **8**| **0**| **4**| **12**|
-| **합계**                | **12**| **1**| **53**| **66**|
+| **Phase 6 코드품질/린트**| **6**| **0**| **6**| **12**|
+| **합계**                | **10**| **1**| **55**| **66**|
 
 ## 주간 마일스톤
 
@@ -30,12 +30,17 @@
 | 린트 층 Phase 2 공용 헬퍼 | P6-02 | **완료** | 04-08 services/common/ccxt_utils.py, WARN 28→1 |
 | 린트 층 Phase 3 pre-commit hook | P6-04 | **완료** | 04-08 .githooks/pre-commit |
 | 린트 층 문서화 | P6-03 | **완료** | 04-08 docs/lint_layer.md |
-| lessons L9~L12 추가 | - | **완료** | 04-08 jarvis cron, state 불일치, CB 정책, 린트 |
-| VB DRY-RUN 검증 마감 | P4-05 | 이월 | 린트 층 작업 우선 처리, 04-09~ 재개 |
+| **ONG -29% 원인 분석 + 하드 캡** | P4-16 | **완료** | 04-08 `HARD_STOP_LOSS_PCT=10%`, `MAX_ATR_PCT=8%` |
+| **하락장 레짐 3중 방어** | P5-27 | **완료** | 04-08 BTC EMA200 + ATR% + 하드 캡 |
+| **CB 기존 포지션 정책 ADR** | P4-17 | **완료** | 04-08 Option A 유지 + L2(-25%) 2차 안전장치 |
+| **공용 헬퍼 단위 테스트** | P6-06 | **완료** | 04-08 16/16 PASS |
+| **GitHub Actions CI** | P6-05 | **완료** | 04-08 lint/test/pre-deploy 3 job |
+| **AWS 배포 + 서버 검증** | P4-20 | **완료** | 04-08 08:10 UTC 재시작, 3중 방어 작동 확인 |
+| **GitHub origin master push** | - | **완료** | 04-08 c032a3c..59bde68 |
+| lessons L9~L13 추가 | - | **완료** | 04-08 cron, state, CB, 린트, ATR 고변동 |
+| VB DRY-RUN 검증 마감 | P4-05 | 이월 | 긴급 리스크 대응+린트 우선, 04-09 재개 |
 | VB 실전 전환 판단 | P4-06 | 이월 | P4-05 이월로 연쇄 |
-| ONG -29% trail_stop 원인 분석 | P4-16 | 대기 | 리스크 대응 P0 |
-| 하락장 레짐 필터 (EMA200 데드크로스) | P5-27 | 대기 | Composite 하락장 보호 |
-| CB 기존 포지션 처리 정책 ADR | P4-17 | 대기 | lessons L11 연계 |
+| CB L2 구현 (ADR 후속) | P4-18 | 대기 | 04-09 신규 |
 
 ### 다음 주 (04-14 ~ 04-20)
 
@@ -184,14 +189,14 @@
 | ----- | ---------------------------------------- | ------ | ----- | -------- | ------ | -------------------------------------------- |
 | P6-02 | services/common/ccxt_utils.py (fmt_num, resolve_fill) + jarvis_executor 리팩토링 + R3 지능화 + 실거래 3건 버그 수정 | Claude | P6-01 | **완료** | 04-08  | WARN 28→1, BoolOp(Or)/SAFE_WRAPPERS 억제    |
 | P6-03 | docs/lint_layer.md 설계 문서 작성        | Claude | P6-02 | **완료** | 04-08  | 제목/무엇/동작/기대효과/로드맵 포함 단독 문서 |
-| P6-06 | tests/common/test_ccxt_utils.py 단위 테스트 | Claude | P6-02 | 대기     | 04-10  | fmt_num None 케이스, resolve_fill 3단계      |
+| P6-06 | tests/common/test_ccxt_utils.py 단위 테스트 | Claude | P6-02 | **완료** | 04-08  | 16건 전부 PASS (fmt_num 9, resolve_fill 7)   |
 
 ### 6-3. Phase 3 — 자동화 강화
 
 | ID    | 태스크                                   | 담당   | 선행  | 상태     | 목표일 | 비고                                         |
 | ----- | ---------------------------------------- | ------ | ----- | -------- | ------ | -------------------------------------------- |
 | P6-04 | git pre-commit hook (.githooks/pre-commit) | Claude | P6-01 | **완료** | 04-08  | README 포함, 수동 활성화 방식                 |
-| P6-05 | GitHub Actions / CI 통합                 | Claude | P6-04 | 대기     | 04-14  | PR 시 자동 린트, 실패 시 머지 차단            |
+| P6-05 | GitHub Actions / CI 통합                 | Claude | P6-04 | **완료** | 04-08  | .github/workflows/lint.yml (3 job)            |
 
 ### 6-4. Phase 4 — 규칙 확장 (경험 기반 점증)
 
@@ -223,10 +228,11 @@
 | ----- | --------------------------------- | --------------------------------- |
 | P4-05 | VB DRY-RUN 검증 재개              | 04-08 이월 — 04-09 재개 예정      |
 | P4-06 | VB 실전 전환 판단                 | P4-05 완료 후 착수                |
-| P4-16 | ONG -29% trail_stop 원인 분석     | 리스크 대응 P0                    |
-| P4-17 | CB 기존 포지션 처리 정책 ADR      | lessons L11 연계                  |
-| P5-27 | 하락장 레짐 필터 구현             | EMA50<EMA200 시 Composite OFF    |
-| P6-06 | 공용 헬퍼 단위 테스트              | Phase 6 직후 가장 싼 작업         |
-| P6-05 | GitHub Actions CI 통합            | 로컬 hook 보완용                  |
-| P6-07 | R4 subscript 린트 규칙            | 기존 패턴 재사용 가능              |
+| **P4-18** | **CB L2 구현**                    | ADR 20260408_1 후속, -25% 전량 청산 |
+| **P4-19** | **CB L2 배포 검증**               | P4-18 후속, 단위테스트+배포        |
+| -     | BCH 수동 청산 경위 조사           | 리스크 R5, 자동 손절 누락 의심     |
+| -     | L8 upbit_client 알트 합산 재점검  | pre_deploy_check 경고 잔존         |
+| P6-07 | R4: subscript 린트 규칙           | lessons 경험 기반                  |
+| P6-08 | R5: datetime.strptime None 체크   |                                   |
+| P6-12 | 메타 린트 (lessons ↔ 규칙 매핑)   | 완결성                             |
 
