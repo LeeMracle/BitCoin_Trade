@@ -252,7 +252,7 @@ async def build_report() -> str:
     lines.append(f"  보유: {len(vb_pos)} 종목")
     if vb_pos:
         for sym, pos in vb_pos.items():
-            lines.append(f"  {sym} @ {pos.get('entry_price',0):,.0f}")
+            lines.append(f"  {sym} @ {(pos.get('entry_price') or 0):,.0f}")
 
     if vb_hist:
         wins = sum(1 for h in vb_hist if h.get("return_pct", 0) > 0)
@@ -263,7 +263,7 @@ async def build_report() -> str:
         # 최근 3건
         for h in vb_hist[-3:]:
             e = "+" if h.get("return_pct", 0) >= 0 else ""
-            lines.append(f"    {h.get('symbol','')} {e}{h.get('return_pct',0):.1f}% ({h.get('reason','')})")
+            lines.append(f"    {h.get('symbol','')} {e}{(h.get('return_pct') or 0):.1f}% ({h.get('reason','')})")
     else:
         lines.append(f"  거래: 0건")
 

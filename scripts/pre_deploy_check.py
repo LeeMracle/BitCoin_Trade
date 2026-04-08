@@ -253,6 +253,140 @@ def check_balance_includes_alts() -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════
+# 검증 9: jarvis_executor 자동화 등록 여부
+# ref: docs/lessons/20260408_1_jarvis_cron_missing.md
+# ═══════════════════════════════════════════════════════════════════
+
+def check_jarvis_automation() -> None:
+    """jarvis_executor가 cron 또는 systemd timer에 등록되었는지 검증.
+
+    로컬에서는 서버의 crontab을 직접 볼 수 없으므로, 최소한
+    (1) scripts/jarvis_executor.py 존재 여부,
+    (2) 활성 전략이 있는 경우 deploy_to_aws.sh가 cron 등록을 언급하는지
+    를 확인한다.
+    """
+    exec_file = PROJECT_ROOT / "scripts" / "jarvis_executor.py"
+    strat_file = PROJECT_ROOT / "workspace" / "jarvis_strategies.json"
+    if not exec_file.exists():
+        return
+
+    # 활성 전략이 없으면 통과
+    active = False
+    if strat_file.exists():
+        try:
+            import json
+            data = json.loads(strat_file.read_text(encoding="utf-8"))
+            active = any(
+                isinstance(v, dict) and v.get("active") for v in data.values()
+            )
+        except Exception:
+            pass
+
+    if not active:
+        return
+
+    deploy = PROJECT_ROOT / "scripts" / "deploy_to_aws.sh"
+    if deploy.exists():
+        text = deploy.read_text(encoding="utf-8")
+        if "jarvis_executor" not in text:
+            warnings.append(
+                "[자비스] 활성 분할매매 전략이 있으나 deploy_to_aws.sh에 "
+                "jarvis_executor cron 등록 로직이 없음 — 서버 재배포 시 "
+                "자동화가 누락될 위험"
+            )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 검증 10: vb_state.json ↔ 거래소 잔고 정합성 (선택적)
+# ref: docs/lessons/20260408_2_state_balance_mismatch.md
+# ═══════════════════════════════════════════════════════════════════
+
+def check_state_balance_consistency() -> None:
+    """로컬에서 실행 시 UPBIT 키가 있으면 vb_state ↔ balance 교차 검증."""
+    import os
+    state_file = PROJECT_ROOT / "workspace" / "vb_state.json"
+    if not state_file.exists():
+        return
+    try:
+        import json
+        state = json.loads(state_file.read_text(encoding="utf-8"))
+        positions = state.get("positions", {}) or {}
+    except Exception:
+        return
+
+    if not positions:
+        return  # 포지션 없음 → 검증 생략
+
+    access = os.environ.get("UPBIT_ACCESS_KEY")
+    secret = os.environ.get("UPBIT_SECRET_KEY")
+    if not access or not secret:
+        warnings.append(
+            f"[상태] vb_state.json에 {len(positions)}개 포지션 기록됨 — "
+            "UPBIT_ACCESS_KEY 미설정으로 거래소 잔고 교차 검증 생략"
+        )
+        return
+
+    try:
+        import ccxt  # type: ignore
+        ex = ccxt.upbit({"apiKey": access, "secret": secret})
+        bal = ex.fetch_balance()
+        held = {c for c, v in bal["total"].items() if v and v > 0}
+    except Exception as e:
+        warnings.append(f"[상태] 거래소 잔고 조회 실패: {e}")
+        return
+
+    missing = []
+    for sym in positions.keys():
+        base = sym.split("/")[0]
+        if base not in held:
+            missing.append(sym)
+    if missing:
+        errors.append(
+            f"[상태] vb_state.json 포지션이 거래소에 없음: {', '.join(missing)} — "
+            "state ↔ balance 불일치 (lessons/20260408_2 참조)"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 검증 11: NoneType 포매팅 린트 (lint_none_format 위임)
+# ref: docs/lessons/20260408_4_nonetype_format_lint.md
+# ═══════════════════════════════════════════════════════════════════
+
+def check_none_format_lint() -> None:
+    """scripts/lint_none_format.py 를 호출하여 숫자 포매팅 안전성 검증."""
+    import subprocess
+    lint_script = PROJECT_ROOT / "scripts" / "lint_none_format.py"
+    if not lint_script.exists():
+        warnings.append("[린트] lint_none_format.py 스크립트 없음")
+        return
+
+    try:
+        result = subprocess.run(
+            [sys.executable, str(lint_script), "--quiet"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            cwd=str(PROJECT_ROOT),
+            timeout=60,
+        )
+    except Exception as e:
+        warnings.append(f"[린트] lint_none_format 실행 실패: {e}")
+        return
+
+    if result.returncode != 0:
+        # ERROR 라인만 요약해서 포함
+        err_lines = [
+            line for line in result.stdout.splitlines()
+            if "[ERROR]" in line
+        ]
+        summary = "\n".join(err_lines[:5]) or result.stdout[-400:]
+        errors.append(
+            "[린트] NoneType 포매팅 위반 탐지 — 재발방지 규칙 위반:\n"
+            + summary
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════
 # 메인
 # ═══════════════════════════════════════════════════════════════════
 
@@ -269,6 +403,9 @@ def main() -> None:
     check_v2_filter_paths()
     check_vb_rotation_guard()
     check_balance_includes_alts()
+    check_jarvis_automation()
+    check_state_balance_consistency()
+    check_none_format_lint()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")

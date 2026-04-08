@@ -336,10 +336,10 @@ def build_report(
     lines.append(f"- 전체 거래수: {trade_summary.get('total', 0)}건")
     lines.append(f"- IS 거래수: {trade_summary.get('is_count', 0)}건")
     lines.append(f"- OOS 거래수: {trade_summary.get('oos_count', 0)}건")
-    lines.append(f"- 전체 승률: {trade_summary.get('win_rate', 0):.1f}%")
-    lines.append(f"- 최대 단일 이익: {trade_summary.get('max_win', 0):.2f}%")
-    lines.append(f"- 최대 단일 손실: {trade_summary.get('max_loss', 0):.2f}%")
-    lines.append(f"- 평균 보유 기간: {trade_summary.get('avg_hold_days', 0):.1f}일")
+    lines.append(f"- 전체 승률: {(trade_summary.get('win_rate') or 0):.1f}%")
+    lines.append(f"- 최대 단일 이익: {(trade_summary.get('max_win') or 0):.2f}%")
+    lines.append(f"- 최대 단일 손실: {(trade_summary.get('max_loss') or 0):.2f}%")
+    lines.append(f"- 평균 보유 기간: {(trade_summary.get('avg_hold_days') or 0):.1f}일")
     lines.append("")
 
     # 전략 파라미터

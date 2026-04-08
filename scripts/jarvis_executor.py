@@ -44,6 +44,54 @@ MIN_ORDER_KRW = 5_000
 MAX_SYMBOLS = 5  # 동시 관리 종목 상한
 
 
+def _fmt_num(v, spec: str = ",.0f", fallback: str = "N/A") -> str:
+    """None-safe 숫자 포매터. 업비트 시장가 응답 직후 None 필드 방어."""
+    if v is None:
+        return fallback
+    try:
+        return format(v, spec)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _resolve_fill(exchange, order: dict, symbol: str,
+                  amount_hint: float | None = None) -> tuple[float | None, float | None]:
+    """시장가 주문 체결정보(cost, price) 해석.
+
+    업비트는 create_market_*_order 접수 응답에 cost/price/average가 모두
+    None으로 오는 케이스가 있다. 순서:
+      1) order dict에서 average → price → last 시도
+      2) 여전히 None이면 fetch_order(id)로 재조회
+      3) 그래도 None이면 ticker(last) × amount_hint로 추정
+    """
+    price = order.get("average") or order.get("price")
+    cost = order.get("cost")
+
+    if price is None or cost is None:
+        try:
+            oid = order.get("id")
+            if oid:
+                time.sleep(0.4)  # 체결 반영 대기
+                fetched = exchange.fetch_order(oid, symbol)
+                price = price or fetched.get("average") or fetched.get("price")
+                cost = cost or fetched.get("cost")
+                if amount_hint is None:
+                    amount_hint = fetched.get("filled") or fetched.get("amount")
+        except Exception:
+            pass
+
+    if price is None:
+        try:
+            price = exchange.fetch_ticker(symbol)["last"]
+        except Exception:
+            price = None
+
+    if cost is None and price is not None and amount_hint:
+        cost = price * amount_hint
+
+    return cost, price
+
+
 # ═══════════════════════════════════════════════════════════════
 # 유틸리티
 # ═══════════════════════════════════════════════════════════════
@@ -247,12 +295,14 @@ def execute_sell(exchange: ccxt.upbit, symbol: str,
 
     # 실제 매도
     order = exchange.create_market_sell_order(symbol, sell_amount)
+    filled_amount = order.get("amount") or order.get("filled") or sell_amount
+    cost, price = _resolve_fill(exchange, order, symbol, amount_hint=filled_amount)
     return {
         "status": "executed",
         "order_id": order.get("id"),
-        "amount": order.get("amount"),
-        "cost": order.get("cost"),
-        "price": order.get("average") or order.get("price"),
+        "amount": filled_amount,
+        "cost": cost,
+        "price": price,
     }
 
 
@@ -273,12 +323,16 @@ def execute_buy(exchange: ccxt.upbit, symbol: str,
         }
 
     order = exchange.create_market_buy_order(symbol, None, params={"cost": amount_krw})
+    cost, price = _resolve_fill(exchange, order, symbol)
+    filled_amount = order.get("amount") or order.get("filled")
+    if filled_amount is None and price:
+        filled_amount = amount_krw / price
     return {
         "status": "executed",
         "order_id": order.get("id"),
-        "amount": order.get("amount"),
-        "cost": order.get("cost"),
-        "price": order.get("average") or order.get("price"),
+        "amount": filled_amount,
+        "cost": cost if cost is not None else amount_krw,
+        "price": price,
     }
 
 
@@ -372,12 +426,13 @@ def process_strategy(symbol: str, strategy: dict,
         if result["status"] == "dry_run":
             msg = (f"[자비스-{mode}] {symbol} {side.upper()} 조건 충족\n"
                    f"  단계: {step_id} | 조건: {condition}\n"
-                   f"  예상: {result.get('est_value', result.get('amount', 0)):,.0f}원 "
-                   f"@ {result.get('price', 0):,.0f}")
+                   f"  예상: {_fmt_num(result.get('est_value') or result.get('amount'))}원 "
+                   f"@ {_fmt_num(result.get('price'))}")
         elif result["status"] == "executed":
             msg = (f"[자비스-LIVE] {symbol} {side.upper()} 실행!\n"
                    f"  단계: {step_id} | 조건: {condition}\n"
-                   f"  체결: {result.get('cost', 0):,.0f}원 @ {result.get('price', 0):,.0f}")
+                   f"  체결: {_fmt_num(result.get('cost'))}원 @ {_fmt_num(result.get('price'))}"
+                   f" (수량 {_fmt_num(result.get('amount'), ',.8f')})")
         else:
             msg = f"[자비스] {symbol} {step_id}: {result.get('reason', 'skip')}"
 
@@ -464,7 +519,7 @@ def show_status():
             step_id = step["id"]
             done = sym_state.get(step_id, {}).get("done", False)
             status = "완료" if done else "대기"
-            print(f"  [{status}] {step_id}: {step['condition']} (비중: {step.get('ratio', 1.0):.0%})")
+            print(f"  [{status}] {step_id}: {step['condition']} (비중: {(step.get('ratio') or 1.0):.0%})")
             if done:
                 result = sym_state[step_id].get("result", {})
                 print(f"         실행: {result.get('status')} @ {sym_state[step_id].get('executed_at', '')}")

@@ -107,3 +107,6 @@
 | 6 | 전략 필터는 모든 매수 경로(scanner+realtime_monitor)에 적용 필수 | [lessons/20260404_1](docs/lessons/20260404_1_v2_filter_missing_path.md) |
 | 7 | 1일 1회 작업은 반드시 날짜 체크 + 상태 저장 (재시작 시 중복 방지) | [lessons/20260404_2](docs/lessons/20260404_2_vb_rotation_duplicate.md) |
 | 8 | 모니터링 평가금액은 거래소 API 전체 자산 합산 필수 (BTC만 집계하면 알트 누락) | [lessons/20260405_1](docs/lessons/20260405_1_balance_missing_alts.md) |
+| 9 | 자동화 전제 스크립트는 cron/systemd 등록 + pre_deploy_check로 검증 필수 | [lessons/20260408_1](docs/lessons/20260408_1_jarvis_cron_missing.md) |
+| 10 | 상태 파일은 "거래소 미러"여야 함 — state ↔ balance 불일치 즉시 경보 | [lessons/20260408_2](docs/lessons/20260408_2_state_balance_mismatch.md) |
+| 11 | 서킷브레이커는 신규 차단뿐 아니라 기존 포지션 처리 정책도 명시 필요 | [lessons/20260408_3](docs/lessons/20260408_3_cb_existing_positions_policy.md) |

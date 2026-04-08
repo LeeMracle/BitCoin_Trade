@@ -194,7 +194,7 @@ class TelegramCommandHandler:
             for sym, pos in positions.items():
                 msg += f"  {sym}\n"
                 msg += f"    진입: {pos['entry_price']:,.0f}\n"
-                msg += f"    스탑: {pos.get('trail_stop', 0):,.0f}\n"
+                msg += f"    스탑: {(pos.get('trail_stop') or 0):,.0f}\n"
 
         wins = [t for t in closed if t["return_pct"] > 0]
         msg += f"\n거래: {len(closed)}회"

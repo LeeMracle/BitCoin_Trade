@@ -1194,7 +1194,7 @@ class RealtimeMonitor:
         if IS_DAYTRADING:
             print(f"\n  *** {symbol} 돌파! 가격: {price:,.0f}  상단: {level['upper']:,.0f} "
                   f"추세:{level.get('trend_ok','?')} 거래량:{level.get('vol_ok','?')} "
-                  f"(vol:{level.get('latest_vol',0):.0f} / sma:{level.get('vol_sma',0):.0f} x{_DT_VOL_THRESHOLD}) ***")
+                  f"(vol:{(level.get('latest_vol') or 0):.0f} / sma:{(level.get('vol_sma') or 0):.0f} x{_DT_VOL_THRESHOLD}) ***")
         else:
             print(f"\n  *** {symbol} 돌파! 가격: {price:,.0f}  상단: {level['upper']:,.0f} ***")
 
