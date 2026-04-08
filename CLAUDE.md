@@ -110,3 +110,5 @@
 | 9 | 자동화 전제 스크립트는 cron/systemd 등록 + pre_deploy_check로 검증 필수 | [lessons/20260408_1](docs/lessons/20260408_1_jarvis_cron_missing.md) |
 | 10 | 상태 파일은 "거래소 미러"여야 함 — state ↔ balance 불일치 즉시 경보 | [lessons/20260408_2](docs/lessons/20260408_2_state_balance_mismatch.md) |
 | 11 | 서킷브레이커는 신규 차단뿐 아니라 기존 포지션 처리 정책도 명시 필요 | [lessons/20260408_3](docs/lessons/20260408_3_cb_existing_positions_policy.md) |
+| 12 | dict.get(key, default)는 값이 None이면 default가 무시됨 — 린트 집행 | [lessons/20260408_4](docs/lessons/20260408_4_nonetype_format_lint.md) |
+| 13 | ATR*N 스탑은 고변동 종목에서 제어 불능 — 하드 손절 캡 필수 | [lessons/20260408_5](docs/lessons/20260408_5_ong_wide_stop.md) |

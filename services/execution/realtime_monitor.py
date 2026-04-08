@@ -29,6 +29,7 @@ import pandas as pd
 from services.execution.config import (
     STRATEGY, STRATEGY_KWARGS,
     DONCHIAN_PERIOD, ATR_PERIOD, ATR_MULTIPLIER,
+    HARD_STOP_LOSS_PCT, MAX_ATR_PCT,
     MAX_POSITIONS, POSITION_RATIO, MIN_VOLUME_KRW,
     MIN_ORDER_KRW, DRY_RUN, EXCLUDE_SYMBOLS, MIN_LISTING_DAYS,
     NOTIFY_ON_BUY, NOTIFY_ON_SELL, NOTIFY_DAILY_REPORT, NOTIFY_NEAR_SIGNAL,
@@ -228,17 +229,22 @@ class RealtimeMonitor:
             await self._ema_trend_refresh_level()
 
         # 보유 종목 트레일링스탑 갱신 (전략 전환 시 기존 스탑 보존)
+        # 하드 손절 캡(HARD_STOP_LOSS_PCT)으로 entry*(1-cap) 이하 금지 —
+        # ONG 사건(lessons/20260408_5) 재발 방지.
         positions = self.state.get("positions", {})
         for symbol, pos in positions.items():
             old_stop = pos.get("trail_stop", 0)
+            hard_floor = pos["entry_price"] * (1 - HARD_STOP_LOSS_PCT)
             if IS_DAYTRADING:
                 new_stop = pos["highest"] * (1 - _DT_TRAIL_PCT)
                 # 기존 스탑이 더 넓으면(낮으면) 보존 — 전략 전환 보호
-                pos["trail_stop"] = min(old_stop, new_stop) if old_stop > 0 else new_stop
+                merged = min(old_stop, new_stop) if old_stop > 0 else new_stop
+                pos["trail_stop"] = max(merged, hard_floor)
             elif symbol in self.levels:
                 atr_val = self.levels[symbol]["atr"]
                 new_stop = pos["highest"] - atr_val * ATR_MULTIPLIER
-                pos["trail_stop"] = min(old_stop, new_stop) if old_stop > 0 else new_stop
+                merged = min(old_stop, new_stop) if old_stop > 0 else new_stop
+                pos["trail_stop"] = max(merged, hard_floor)
 
         # daytrading: 시간 초과 포지션 청산 체크
         if IS_DAYTRADING:
@@ -514,14 +520,18 @@ class RealtimeMonitor:
         if symbol in positions:
             pos = positions[symbol]
 
-            # 고점 갱신
+            # 고점 갱신 (하드 손절 캡 적용 — lessons/20260408_5)
             if price > pos["highest"]:
                 pos["highest"] = price
+                hard_floor = pos["entry_price"] * (1 - HARD_STOP_LOSS_PCT)
                 if IS_DAYTRADING:
-                    pos["trail_stop"] = price * (1 - _DT_TRAIL_PCT)
+                    new_stop = price * (1 - _DT_TRAIL_PCT)
                 elif symbol in self.levels:
                     atr_val = self.levels[symbol]["atr"]
-                    pos["trail_stop"] = price - atr_val * ATR_MULTIPLIER
+                    new_stop = price - atr_val * ATR_MULTIPLIER
+                else:
+                    new_stop = pos.get("trail_stop", hard_floor)
+                pos["trail_stop"] = max(new_stop, hard_floor)
 
             # daytrading: 고정 손절 + 시간 제한 확인
             if IS_DAYTRADING:
@@ -1171,10 +1181,20 @@ class RealtimeMonitor:
             return
 
         today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
+        # 변동성 필터 — ATR이 가격의 MAX_ATR_PCT 이상이면 진입 차단
+        # (lessons/20260408_5 — ONG 같은 고변동 알트 방어)
+        if not IS_DAYTRADING and level.get("atr"):
+            atr_pct = level["atr"] / price
+            if atr_pct > MAX_ATR_PCT:
+                print(f"  [{symbol}] ATR 필터 — ATR/price={atr_pct:.1%} > {MAX_ATR_PCT:.0%} 차단", flush=True)
+                return
         if IS_DAYTRADING:
             trail_stop = price * (1 - _DT_TRAIL_PCT)
         else:
-            trail_stop = price - level["atr"] * ATR_MULTIPLIER
+            # 하드 손절 캡 적용 — entry * (1 - HARD_STOP_LOSS_PCT) 아래 금지
+            atr_stop = price - level["atr"] * ATR_MULTIPLIER
+            hard_floor = price * (1 - HARD_STOP_LOSS_PCT)
+            trail_stop = max(atr_stop, hard_floor)
 
         try:
             balance = get_balance()
