@@ -35,10 +35,21 @@ from services.execution.config import (
     NOTIFY_ON_BUY, NOTIFY_ON_SELL, NOTIFY_DAILY_REPORT, NOTIFY_NEAR_SIGNAL,
     VB_ENABLED, VB_DRY_RUN, VB_K_BULL, VB_K_NEUTRAL, VB_K_BEAR, VB_K_CRISIS,
     VB_SL_PCT, VB_SMA_PERIOD, VB_MAX_POSITIONS, VB_POSITION_RATIO,
+    VB_BEAR_MARKET_FILTER, VB_DEAD_SYMBOL_THRESHOLD, VB_MAX_WEEKLY_PER_SYMBOL,
+    VB_LOSS_COOLDOWN_N, VB_LOSS_COOLDOWN_HOURS,
     CIRCUIT_BREAKER_ENABLED, CIRCUIT_BREAKER_INITIAL_CAPITAL,
     EMA_TREND_ENABLED, EMA_TREND_DRY_RUN,
     EMA_TREND_EMA_PERIOD, EMA_TREND_FILTER_PERIOD,
     EMA_TREND_TRAIL_PCT, EMA_TREND_MAX_POSITIONS, EMA_TREND_POSITION_RATIO,
+)
+from services.execution.vb_filters import (
+    compute_dead_symbols,
+    iso_week,
+    weekly_count_exceeded,
+    bump_weekly_count,
+    recent_consecutive_losses,
+    is_in_loss_cooldown,
+    set_loss_cooldown,
 )
 from services.execution.circuit_breaker import (
     check_and_trigger,
@@ -977,8 +988,34 @@ class RealtimeMonitor:
         except Exception as e:
             print(f"  [VB] 상태 저장 오류: {e}", flush=True)
 
+    def _load_vb_full_state(self) -> dict:
+        """P5-28 필터를 위해 vb_state 전체 로드 (positions + history + 필터 필드)."""
+        if VB_STATE_FILE.exists():
+            try:
+                with open(VB_STATE_FILE, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                return {}
+        return {}
+
+    def _save_vb_full_state(self, state: dict) -> None:
+        """vb_state 전체 저장 (필터 필드 포함)."""
+        try:
+            VB_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(VB_STATE_FILE, "w", encoding="utf-8") as f:
+                json.dump(state, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"  [VB] 전체 상태 저장 오류: {e}", flush=True)
+
     async def _vb_daily_rotation(self):
-        """VB 일일 회전: 기존 포지션 청산 → 새 신호 매수. 1일 1회만 실행."""
+        """VB 일일 회전: 기존 포지션 청산 → 새 신호 매수. 1일 1회만 실행.
+
+        P5-28 필터 적용:
+          A. 하락장 필터 (BTC<EMA200)     — 신규 매수 차단
+          B. 데드 종목 블랙리스트          — 연속 0% 종목 제외
+          C. 종목 집중도 캡 (주 3회)       — 과편중 방지
+          D. 연패 쿨다운 (3연손 24h)       — 악화 추세 차단
+        """
         today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
         last_rotation = self.state.get("vb_last_rotation_date", "")
         if last_rotation == today:
@@ -1019,6 +1056,34 @@ class RealtimeMonitor:
 
         self._vb_positions.clear()
 
+        # ── P5-28 진입 게이트 ──────────────────────────────
+        vb_full = self._load_vb_full_state()
+        dead_symbols = set(compute_dead_symbols(
+            vb_full.get("history", []), VB_DEAD_SYMBOL_THRESHOLD))
+        # 기존 dead_symbols + 새로 계산된 목록 병합 (한 번 들어가면 영구)
+        prev_dead = set(vb_full.get("dead_symbols", []))
+        dead_symbols |= prev_dead
+        vb_full["dead_symbols"] = sorted(dead_symbols)
+        weekly_count = vb_full.setdefault("weekly_count", {})
+        cooldown_until = vb_full.get("loss_cooldown_until")
+
+        gate_skip_reason = None
+        # A. 하락장 필터
+        if VB_BEAR_MARKET_FILTER and not self._btc_above_ema:
+            gate_skip_reason = "A: 하락장(BTC<EMA200)"
+        # D. 연패 쿨다운
+        elif is_in_loss_cooldown(cooldown_until):
+            gate_skip_reason = f"D: 연패 쿨다운 중 (until {cooldown_until})"
+
+        if gate_skip_reason:
+            print(f"  [VB] 신규 진입 차단 — {gate_skip_reason}", flush=True)
+            self._save_vb_full_state(vb_full)
+            await send(
+                f"🚫 *VB 회전 스킵*\n사유: {gate_skip_reason}\n"
+                f"청산 {closed}건, 매수 0건"
+            )
+            return
+
         # 2. 새 VB 신호 스캔
         signals = []
         for sym, level in self.levels.items():
@@ -1048,17 +1113,35 @@ class RealtimeMonitor:
                 score = (prev_close - threshold) / prev_range  # 돌파 강도
                 signals.append((sym, level, score, k))
 
-        # 돌파 강도 순 정렬, 최대 슬롯만큼 매수
+        # 돌파 강도 순 정렬
         signals.sort(key=lambda x: x[2], reverse=True)
-        bought = 0
 
-        for sym, level, score, k in signals[:VB_MAX_POSITIONS]:
+        # P5-28 B/C 필터: 데드 종목 + 주간 집중도 캡
+        filtered_signals = []
+        skipped_dead = 0
+        skipped_weekly = 0
+        for sig in signals:
+            sym = sig[0]
+            if sym in dead_symbols:
+                skipped_dead += 1
+                continue
+            if weekly_count_exceeded(weekly_count, sym, VB_MAX_WEEKLY_PER_SYMBOL):
+                skipped_weekly += 1
+                continue
+            filtered_signals.append(sig)
+
+        if skipped_dead or skipped_weekly:
+            print(f"  [VB] 필터 스킵 — 데드 {skipped_dead}, 주간캡 {skipped_weekly}", flush=True)
+
+        bought = 0
+        for sym, level, score, k in filtered_signals[:VB_MAX_POSITIONS]:
             entry_price = level["close"]
             self._vb_positions[sym] = {
                 "entry_price": entry_price,
                 "entry_date": now_str,
                 "k_value": k,
             }
+            bump_weekly_count(weekly_count, sym)
 
             if not VB_DRY_RUN:
                 try:
@@ -1083,13 +1166,21 @@ class RealtimeMonitor:
 
         self._save_vb_state()
 
+        # P5-28 필터 필드 persistent 저장
+        vb_full = self._load_vb_full_state()
+        vb_full["dead_symbols"] = sorted(dead_symbols)
+        vb_full["weekly_count"] = weekly_count
+        self._save_vb_full_state(vb_full)
+
         mode = "DRY-RUN" if VB_DRY_RUN else "실전"
         await send(
             f"📊 *VB 일일 회전* ({mode})\n"
             f"청산: {closed}건 / 매수: {bought}건\n"
-            f"감시: {len(self._vb_positions)}종목"
+            f"감시: {len(self._vb_positions)}종목\n"
+            f"데드: {len(dead_symbols)}개 / 주간스킵: {skipped_weekly}"
         )
-        print(f"  [VB] 일일 회전 완료: 청산 {closed}건, 매수 {bought}건", flush=True)
+        print(f"  [VB] 일일 회전 완료: 청산 {closed}건, 매수 {bought}건, "
+              f"데드 {len(dead_symbols)}, 주간스킵 {skipped_weekly}", flush=True)
 
     def _append_vb_history(self, symbol, pos, exit_price, reason):
         """VB 거래 히스토리에 추가."""
@@ -1134,6 +1225,20 @@ class RealtimeMonitor:
 
             del self._vb_positions[symbol]
             self._save_vb_state()
+
+            # P5-28 D. 연패 쿨다운 체크 & 발동
+            vb_full = self._load_vb_full_state()
+            consec = recent_consecutive_losses(vb_full.get("history", []))
+            if consec >= VB_LOSS_COOLDOWN_N:
+                until_iso = set_loss_cooldown(VB_LOSS_COOLDOWN_HOURS)
+                vb_full["loss_cooldown_until"] = until_iso
+                self._save_vb_full_state(vb_full)
+                print(f"  [VB] 🧊 연패 쿨다운 발동 {consec}연손 → {VB_LOSS_COOLDOWN_HOURS}h OFF (until {until_iso})", flush=True)
+                await send(
+                    f"🧊 *VB 연패 쿨다운 발동*\n"
+                    f"{consec}연속 손절 → {VB_LOSS_COOLDOWN_HOURS}h 신규 진입 중단\n"
+                    f"해제: {until_iso}"
+                )
 
             mode = "DRY" if VB_DRY_RUN else "LIVE"
             print(f"  [VB-{mode}] 🛑 {symbol} 손절 {ret_pct:+.1f}% @ {price:,.0f}", flush=True)

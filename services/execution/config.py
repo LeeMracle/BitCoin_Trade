@@ -90,6 +90,15 @@ VB_SMA_PERIOD = 50             # 레짐 판별 SMA 기간
 VB_MAX_POSITIONS = 3           # VB 전용 최대 슬롯
 VB_POSITION_RATIO = 0.30       # VB에 할당할 자금 비율 (가용 현금의 30%)
 
+# ─── VB 개선 (P5-28, docs/00.보고/20260409_일일작업.md) ───
+# P4-06 NO-GO 판단(승률 36.8%, 하락장 악화 추세) 후속 — 04-15 재검증 목표
+VB_BEAR_MARKET_FILTER = True       # A. BTC < EMA200 시 VB 진입 차단
+VB_DEAD_SYMBOL_THRESHOLD = 3       # B. N회 연속 0%/수수료손실 시 종목 영구 제외
+VB_MAX_WEEKLY_PER_SYMBOL = 3       # C. 종목별 주간(ISO week) 최대 진입 횟수
+VB_LOSS_COOLDOWN_N = 3             # D. N연속 손절 시 쿨다운 발동
+VB_LOSS_COOLDOWN_HOURS = 24        # D. 쿨다운 기간 (시간)
+VB_MIN_WINRATE = 0.35              # E. 재검증 시 최소 승률 기준 (기존 0.40 → 0.35)
+
 # ═══════════════════════════════════════════════════════
 # 레짐 필터 (v1.5 Sprint B — 200EMA)
 # ═══════════════════════════════════════════════════════
