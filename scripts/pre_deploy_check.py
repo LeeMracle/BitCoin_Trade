@@ -386,6 +386,64 @@ def check_none_format_lint() -> None:
         )
 
 
+def check_cb_l2_config() -> None:
+    """CB L2 (ADR 20260408_1) 설정 검증.
+
+    - config.py에 L2/L1 자동해제 상수가 존재하고 음수/비율 범위가 정상인가
+    - circuit_breaker.py에 L2 관련 핵심 심볼이 노출되어 있는가
+    - realtime_monitor.py가 L2 훅을 실제 호출하는가
+    """
+    import re
+    cfg_path = PROJECT_ROOT / "services" / "execution" / "config.py"
+    cb_path = PROJECT_ROOT / "services" / "execution" / "circuit_breaker.py"
+    if not cfg_path.exists():
+        errors.append("[CB-L2] config.py 파일 없음")
+        return
+    if not cb_path.exists():
+        errors.append("[CB-L2] circuit_breaker.py 파일 없음")
+        return
+
+    cfg_txt = cfg_path.read_text(encoding="utf-8")
+
+    def _num(pattern: str):
+        m = re.search(pattern, cfg_txt)
+        if not m:
+            return None
+        try:
+            return float(m.group(1))
+        except ValueError:
+            return None
+
+    l1 = _num(r"CIRCUIT_BREAKER_THRESHOLD\s*=\s*(-?[\d.]+)")
+    l2 = _num(r"CIRCUIT_BREAKER_L2_THRESHOLD\s*=\s*(-?[\d.]+)")
+    resume = _num(r"CIRCUIT_BREAKER_L1_AUTO_RESUME_PCT\s*=\s*([\d.]+)")
+
+    if l2 is None:
+        errors.append("[CB-L2] config.CIRCUIT_BREAKER_L2_THRESHOLD 미정의")
+    elif not (-1 < l2 < 0):
+        errors.append(f"[CB-L2] L2 임계값 비정상: {l2} (기대: -1 < x < 0)")
+    elif l1 is not None and l2 >= l1:
+        errors.append(f"[CB-L2] L2({l2}) >= L1({l1}) — L2는 L1보다 더 엄격해야 함")
+
+    if resume is None:
+        errors.append("[CB-L2] config.CIRCUIT_BREAKER_L1_AUTO_RESUME_PCT 미정의")
+    elif not (0 < resume <= 1):
+        errors.append(f"[CB-L2] L1 auto-resume 비율 비정상: {resume}")
+
+    cb_txt = cb_path.read_text(encoding="utf-8")
+    for sym in ("check_and_trigger_l2", "is_l2_triggered", "check_l1_auto_resume"):
+        if f"def {sym}" not in cb_txt:
+            errors.append(f"[CB-L2] circuit_breaker.{sym} 미정의")
+
+    rt_path = PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py"
+    if rt_path.exists():
+        txt = rt_path.read_text(encoding="utf-8")
+        if "check_and_trigger_l2" not in txt:
+            errors.append("[CB-L2] realtime_monitor가 check_and_trigger_l2를 호출하지 않음")
+        if "_liquidate_all_positions" not in txt:
+            errors.append("[CB-L2] realtime_monitor에 _liquidate_all_positions 훅 누락")
+
+
 # ═══════════════════════════════════════════════════════════════════
 # 메인
 # ═══════════════════════════════════════════════════════════════════
@@ -406,6 +464,7 @@ def main() -> None:
     check_jarvis_automation()
     check_state_balance_consistency()
     check_none_format_lint()
+    check_cb_l2_config()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")

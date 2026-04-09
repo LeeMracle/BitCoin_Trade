@@ -129,8 +129,16 @@ ALERT_COOLDOWN_SEC = 300      # 동일 오류 알림 간격 (초, 5분)
 # 기존 포지션은 유지 (트레일링스탑은 계속 작동).
 # 해제: 수동만 가능 (circuit_breaker_state.json 삭제 또는 triggered=false 설정)
 CIRCUIT_BREAKER_ENABLED = True
-CIRCUIT_BREAKER_THRESHOLD = -0.20          # -20% 손실 시 발동
+CIRCUIT_BREAKER_THRESHOLD = -0.20          # L1: -20% 손실 시 발동 (신규 매수 차단)
 CIRCUIT_BREAKER_INITIAL_CAPITAL = 300_000  # 초기 투자금 (KRW)
+
+# L2 (2차 안전장치) — ADR 20260408_1
+# L1 이후 추가 하락 시 기존 포지션까지 시장가 전량 청산.
+# 해제: 수동만 가능 (catastrophic 시그널 → 사용자 원인 확인 필수).
+CIRCUIT_BREAKER_L2_THRESHOLD = -0.25       # L2: -25% 손실 시 전량 청산
+# L1 자동 해제: 총자산이 초기자본의 N% 이상 회복되면 L1 자동 해제.
+# (L2는 자동 해제 없음)
+CIRCUIT_BREAKER_L1_AUTO_RESUME_PCT = 0.95  # 95% 회복 시 L1 자동 해제
 
 # ═══════════════════════════════════════════════════════
 # 알림 설정

@@ -40,7 +40,13 @@ from services.execution.config import (
     EMA_TREND_EMA_PERIOD, EMA_TREND_FILTER_PERIOD,
     EMA_TREND_TRAIL_PCT, EMA_TREND_MAX_POSITIONS, EMA_TREND_POSITION_RATIO,
 )
-from services.execution.circuit_breaker import check_and_trigger, is_triggered
+from services.execution.circuit_breaker import (
+    check_and_trigger,
+    check_and_trigger_l2,
+    check_l1_auto_resume,
+    is_triggered,
+    is_l2_triggered,
+)
 from services.execution.multi_trader import (
     load_state, save_state, append_log,
     buy_market_coin, sell_market_coin,
@@ -121,8 +127,74 @@ class RealtimeMonitor:
         await self._refresh_levels()
         await self._run_websocket()
 
+    async def _check_circuit_breaker_periodic(self):
+        """레벨 갱신 주기마다 CB L2 발동/L1 자동해제 체크 (ADR 20260408_1).
+
+        L2: 총자산 -25% 이하 → 전량 시장가 청산 + 경보
+        L1 auto-resume: 총자산 95% 이상 회복 → L1 자동 해제 + 경보
+        """
+        if not CIRCUIT_BREAKER_ENABLED:
+            return
+        try:
+            balance = get_balance()
+            total_krw = balance.get("total_krw", 0)
+        except Exception as e:
+            print(f"  [CB-주기체크] 잔고 조회 실패: {e}", flush=True)
+            return
+
+        # L2: -25% 이하 → 전량 청산
+        if check_and_trigger_l2(total_krw):
+            loss_pct = (total_krw - CIRCUIT_BREAKER_INITIAL_CAPITAL) / CIRCUIT_BREAKER_INITIAL_CAPITAL * 100
+            msg = (
+                f"🚨 *CB L2 발동 — 전량 청산*\n"
+                f"총자산: {total_krw:,.0f} KRW ({loss_pct:+.1f}%)\n"
+                f"임계: -25% (ADR 20260408_1)\n"
+                f"해제: 수동만 (workspace/circuit_breaker_state.json l2_triggered=false)"
+            )
+            print(f"\n  [CB-L2] {msg}", flush=True)
+            try:
+                await send(msg)
+            except Exception:
+                pass
+            await self._liquidate_all_positions(reason="cb_l2")
+            return
+
+        # L1 자동 해제: 95% 회복
+        if check_l1_auto_resume(total_krw):
+            resume_pct = total_krw / CIRCUIT_BREAKER_INITIAL_CAPITAL * 100
+            msg = (
+                f"🟢 *CB L1 자동 해제*\n"
+                f"총자산: {total_krw:,.0f} KRW ({resume_pct:.1f}%)\n"
+                f"95% 회복 → 신규 매수 재개"
+            )
+            print(f"\n  [CB-L1-resume] {msg}", flush=True)
+            try:
+                await send(msg)
+            except Exception:
+                pass
+
+    async def _liquidate_all_positions(self, reason: str = "cb_l2"):
+        """보유 중인 전 포지션을 시장가로 즉시 청산.
+
+        L2 발동 시 호출. _execute_sell을 재사용하여 기록/쿨다운/알림 일관성 유지.
+        """
+        positions = dict(self.state.get("positions", {}))
+        if not positions:
+            print(f"  [청산] 보유 포지션 없음 (reason={reason})", flush=True)
+            return
+        print(f"  [청산] {len(positions)}개 포지션 전량 청산 시작 (reason={reason})", flush=True)
+        for symbol, pos in positions.items():
+            price = self.levels.get(symbol, {}).get("close", pos.get("entry_price", 0))
+            try:
+                await self._execute_sell(symbol, price)
+            except Exception as e:
+                print(f"  [청산] {symbol} 실패: {e}", flush=True)
+
     async def _refresh_levels(self):
         """전체 종목 레벨 갱신 (전략에 따라 일봉 또는 4시간봉)."""
+        # ── CB 주기 체크 (L2 발동 / L1 자동 해제) ──
+        await self._check_circuit_breaker_periodic()
+
         now = datetime.now(tz=timezone.utc)
         refresh_key = now.strftime("%Y-%m-%d") if not IS_DAYTRADING else now.strftime("%Y-%m-%d-%H")
 
@@ -1161,6 +1233,9 @@ class RealtimeMonitor:
                     )
                     print(f"\n  [서킷브레이커] {msg}", flush=True)
                     await send(f"🔴 *{msg}")
+                    return
+                if is_l2_triggered():
+                    print(f"  [서킷브레이커-L2] 발동 중 — {symbol} 매수 차단", flush=True)
                     return
                 if is_triggered():
                     print(f"  [서킷브레이커] 발동 중 — {symbol} 매수 차단", flush=True)
