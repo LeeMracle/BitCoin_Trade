@@ -241,15 +241,12 @@ def check_balance_includes_alts() -> None:
 
     content = client_file.read_text(encoding="utf-8")
 
-    # fetch_balance 호출 후 전체 자산 합산 여부 확인
-    # total 또는 positions 기반으로 알트 평가액을 합산하는 로직이 있어야 함
-    if "total_krw" in content:
-        # total_krw 계산 로직에 알트코인이 포함되어야 함
-        if "positions" not in content and "total" not in content.split("total_krw")[0][-500:]:
-            warnings.append(
-                "[잔고] upbit_client.get_balance()에서 알트코인 평가액 합산이 "
-                "누락되었을 수 있음 — 모니터링 보고 평가금액 과소 표시 위험"
-            )
+    # alts_krw_value 합산 로직이 존재해야 함 (lessons/20260405_1)
+    if "alts_krw_value" not in content:
+        warnings.append(
+            "[잔고] upbit_client.get_balance()에서 알트코인 평가액 합산이 "
+            "누락되었을 수 있음 — 모니터링 보고 평가금액 과소 표시 위험"
+        )
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -444,6 +441,21 @@ def check_cb_l2_config() -> None:
             errors.append("[CB-L2] realtime_monitor에 _liquidate_all_positions 훅 누락")
 
 
+def check_cb_log_throttle() -> None:
+    """CB 로그 스팸 방지 throttle 존재 검증 (lessons/20260410_1).
+
+    realtime_monitor.py에서 서킷브레이커 "발동 중" 로그가
+    throttle 없이 매 이벤트마다 출력되면 일 수천 건 스팸 발생.
+    _cb_log_ts 필드와 throttle 로직이 존재하는지 확인한다.
+    """
+    rt_path = PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py"
+    if not rt_path.exists():
+        return
+    txt = rt_path.read_text(encoding="utf-8")
+    if "_cb_log_ts" not in txt:
+        errors.append("[CB-LOG] realtime_monitor에 _cb_log_ts (CB 로그 throttle) 누락 — lessons/20260410_1")
+
+
 # ═══════════════════════════════════════════════════════════════════
 # 메인
 # ═══════════════════════════════════════════════════════════════════
@@ -465,6 +477,7 @@ def main() -> None:
     check_state_balance_consistency()
     check_none_format_lint()
     check_cb_l2_config()
+    check_cb_log_throttle()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")

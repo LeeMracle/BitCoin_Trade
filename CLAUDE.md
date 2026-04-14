@@ -87,6 +87,8 @@
 - 라이브 거래는 Execution Risk Guard 승인 + PM Orchestrator 최종 확인 필요
 - 인샘플 성과만으로 프로덕션 이동 금지
 - 각 단계는 검토 가능한 아티팩트 필수 (보고서, 로그, 메트릭)
+- **Execution Plan 강제**: 비자명 작업(30분↑ / 코드·외부시스템·전략·CLAUDE.md 변경 중 1개↑)은 착수 전 `workspace/plans/YYYYMMDD_작업명.md`를 `workspace/plans/_TEMPLATE.md` 기반으로 생성한다. 목표·성공기준이 빈칸인 상태로 착수 금지. 상세 규칙은 [workspace/plans/README.md](workspace/plans/README.md)
+- **자기평가 금지 / 교차검증 필수**: 구현을 수행한 동일 세션은 자기 산출물을 PASS 판정하지 않는다. 대상 작업(코드·운영·전략·CLAUDE.md 변경)은 별도 세션 / 서브에이전트(`cto` review) / 자동 검증 스크립트(`pre_deploy_check.py` 등) 중 최소 1개로 검토하고, 결과는 "확인 항목 N개 / 발견 이슈 M개" 형식으로 기록한다. 상세: [docs/cross_review_policy.md](docs/cross_review_policy.md)
 
 ## 시행착오 관리
 
@@ -112,3 +114,5 @@
 | 11 | 서킷브레이커는 신규 차단뿐 아니라 기존 포지션 처리 정책도 명시 필요 | [lessons/20260408_3](docs/lessons/20260408_3_cb_existing_positions_policy.md) |
 | 12 | dict.get(key, default)는 값이 None이면 default가 무시됨 — 린트 집행 | [lessons/20260408_4](docs/lessons/20260408_4_nonetype_format_lint.md) |
 | 13 | ATR*N 스탑은 고변동 종목에서 제어 불능 — 하드 손절 캡 필수 | [lessons/20260408_5](docs/lessons/20260408_5_ong_wide_stop.md) |
+| 14 | 이벤트 루프 내 로그는 throttle 필수 — 종목수×빈도 곱 폭발 | [lessons/20260410_1](docs/lessons/20260410_1_cb_log_spam.md) |
+| 15 | 외부 API 의존 초기화는 재시도+백오프 필수 — systemd 재시작은 대체 불가 | [lessons/20260413_1](docs/lessons/20260413_1_startup_refresh_crash.md) |

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""NoneType.__format__ 재발 방지 린터.
+"""NoneType.__format__ / KeyError 재발 방지 린터.
 
 탐지 규칙:
   R1 (ERROR) f-string 숫자 포매팅에 `<obj>.get(...)` 직접 사용 금지
@@ -11,6 +11,14 @@
 
   R3 (WARN) ccxt 주문 응답 위험 키 직접 접근 (cost/price/average/filled)
      → _resolve_fill(...) 경유 권장
+
+  R4 (WARN) f-string 숫자 포매팅에 dict[key] subscript 직접 사용
+     f"{d['x']:,.0f}"  ← 키 부재 시 KeyError 런타임 크래시
+     → d.get('x', 0) 또는 사전 존재 확인 필요
+
+  R5 (WARN) datetime.strptime()에 dict subscript / .get() 직접 전달
+     datetime.strptime(d['date'], fmt)  ← 값이 None/빈문자열이면 ValueError
+     → 사전 None/빈문자열 체크 필요 (업비트 API 빈 필드 방어)
 
 검출 범위: scripts/, services/
 제외:     venv, __pycache__, lint_none_format.py 자기 자신
@@ -230,6 +238,27 @@ def _check_file(path: Path, findings: list[Finding]) -> None:
                 f"_fmt_num() 사용 권장"
             ))
 
+        # ─── R4: f-string 숫자 포매팅에 dict[key] subscript 직접 사용 ───
+        if isinstance(node, ast.FormattedValue):
+            spec = _unparse_spec(node.format_spec)
+            val = node.value
+            # BoolOp(Or) 내부(예: `d['x'] or 0`)는 안전 → 제외
+            if (
+                _is_numeric_format_spec(spec)
+                and isinstance(val, ast.Subscript)
+                and isinstance(val.slice, ast.Constant)
+                and isinstance(val.slice.value, str)
+                and not _inside_or_chain(val)
+                and not _inside_safe_wrapper(val)
+            ):
+                key = val.slice.value
+                findings.append(Finding(
+                    path, node.lineno, node.col_offset, "R4", "WARN",
+                    f"f-string 숫자 포매팅(':{spec}')에 dict['{key}'] "
+                    f"subscript 직접 사용 — 키 부재 시 KeyError. "
+                    f".get('{key}', 0) 또는 사전 존재 확인 필요"
+                ))
+
         # ─── R3: ccxt 주문 응답의 위험 키 .get() 접근 ───
         if _is_get_call(node):
             key = _get_const_key(node)  # type: ignore[arg-type]
@@ -254,6 +283,40 @@ def _check_file(path: Path, findings: list[Finding]) -> None:
                     f".get('{key}') — ccxt 시장가 주문 직후 None 가능. "
                     f"resolve_fill() 경유 또는 `or <fallback>` 패턴 필요"
                 ))
+
+        # ─── R5: datetime.strptime()에 dict subscript / .get() 직접 전달 ───
+        if (
+            isinstance(node, ast.Call)
+            and _is_strptime_call(node)
+            and node.args
+        ):
+            first_arg = node.args[0]
+            unsafe = False
+            desc = ""
+            if isinstance(first_arg, ast.Subscript) and isinstance(
+                getattr(first_arg, "slice", None), ast.Constant
+            ):
+                key = first_arg.slice.value
+                desc = f"dict['{key}']"
+                unsafe = True
+            elif _is_get_call(first_arg):
+                key = _get_const_key(first_arg)
+                desc = f".get('{key}')" if key else ".get(동적 키)"
+                unsafe = True
+            if unsafe and not _inside_or_chain(first_arg):
+                findings.append(Finding(
+                    path, node.lineno, node.col_offset, "R5", "WARN",
+                    f"datetime.strptime({desc}, ...) — 값이 None/빈문자열이면 "
+                    f"ValueError. 사전 None/빈문자열 체크 필요"
+                ))
+
+
+def _is_strptime_call(node: ast.Call) -> bool:
+    """datetime.strptime 또는 datetime.datetime.strptime 호출 여부."""
+    func = node.func
+    if isinstance(func, ast.Attribute) and func.attr == "strptime":
+        return True
+    return False
 
 
 def main() -> int:

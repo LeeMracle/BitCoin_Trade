@@ -211,8 +211,8 @@ def _resolve_fill(exchange, order: dict, symbol: str,
 
 교훈이 쌓이는 대로 규칙 추가. 현재 후보:
 
-- [ ] **R4** — `dict[key]` subscript 숫자 포매팅 시 KeyError 방어 확인
-- [ ] **R5** — `datetime.strptime()` 결과를 None-check 없이 format 금지
+- [x] **R4** — `dict[key]` subscript 숫자 포매팅 시 KeyError 방어 확인 (WARN, 04-10 구현)
+- [x] **R5** — `datetime.strptime()` 인자에 dict subscript/.get() 직접 전달 시 WARN (04-10 구현)
       (업비트 API의 일부 필드가 빈 문자열로 오는 케이스 방어)
 - [ ] **R6** — ccxt `fetch_*` 결과를 await 없이 바로 사용하는 실수 탐지 (async 경로)
 - [ ] **R7** — 상태 파일(`*_state.json`) 진입 경로에서 `fetch_balance()`

@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+import time as _time
 import uuid
 from datetime import datetime, timedelta, timezone, time as dtime
 from pathlib import Path
@@ -86,6 +87,8 @@ _DT_TREND_PERIOD = STRATEGY_KWARGS.get("trend_period", 50)
 MAX_CONSECUTIVE_ERRORS = 5     # 연속 오류 N회 시 봇 중지
 ERROR_COOLDOWN_SEC = 60        # 오류 발생 후 동일 종목 재시도 대기 (초)
 ALERT_COOLDOWN_SEC = 300       # 동일 오류 알림 간격 (5분)
+WS_RECONNECT_BASE = 5          # 웹소켓 재연결 초기 대기 (초)
+WS_RECONNECT_MAX = 60          # 웹소켓 재연결 최대 대기 (초)
 
 
 VR_STATE_FILE = Path(__file__).resolve().parents[2] / "workspace" / "vol_reversal_dryrun_state.json"
@@ -117,6 +120,9 @@ class RealtimeMonitor:
         self._btc_above_ema: bool = True
         self.error_cooldown: dict[str, float] = {}   # {symbol: timestamp}
         self.last_alert_time: dict[str, float] = {}   # {error_key: timestamp}
+        self._cb_log_ts: float = 0.0  # 서킷브레이커 로그 throttle (초)
+        self._last_heartbeat: float = 0.0  # heartbeat touch 마지막 시각 (monotonic)
+        self._last_msg_ts: float = 0.0    # 웹소켓 마지막 메시지 수신 시각 (monotonic, P7-07)
 
     async def start(self):
         print("=" * 60, flush=True)
@@ -135,8 +141,86 @@ class RealtimeMonitor:
             print(f"  EMA Trend: {mode}, EMA{EMA_TREND_EMA_PERIOD}/EMA{EMA_TREND_FILTER_PERIOD}, Trail{EMA_TREND_TRAIL_PCT*100:.0f}%", flush=True)
         print("=" * 60, flush=True)
 
-        await self._refresh_levels()
-        await self._run_websocket()
+        # 시작 시 레벨 갱신 — API 장애(점검 등) 대비 재시도
+        for _attempt in range(1, 100):
+            try:
+                await self._refresh_levels()
+                break
+            except Exception as e:
+                delay = min(WS_RECONNECT_BASE * (2 ** (_attempt - 1)), WS_RECONNECT_MAX)
+                print(f"  레벨 갱신 실패 (시도 {_attempt}): {e}", flush=True)
+                print(f"  {delay}초 후 재시도...", flush=True)
+                if _attempt == 1:
+                    await notify_error(f"시작 시 레벨 갱신 실패: {e}\n재시도 대기 중...")
+                await asyncio.sleep(delay)
+
+        await asyncio.gather(
+            self._run_websocket(),
+            self._hourly_sync(),
+        )
+
+    async def _hourly_sync(self):
+        """P7-06: 매 1시간 state ↔ exchange 포지션 교차검증."""
+        _SKIP = {"KRW", "BTC", "info", "free", "used", "total",
+                 "timestamp", "datetime"}
+        while self.running:
+            await asyncio.sleep(3600)
+            if not self.running:
+                break
+            try:
+                from services.execution.upbit_client import _create_exchange
+                exchange = _create_exchange()
+                raw_balance = exchange.fetch_balance()
+
+                # 거래소 보유 코인 (KRW·BTC·메타키·먼지 제외)
+                # 먼지 판별: 유효 마켓이 있고 평가액 > 5000원
+                exchange_coins = set()
+                alt_coins = {}
+                for coin, amounts in raw_balance.items():
+                    if coin in _SKIP or not isinstance(amounts, dict):
+                        continue
+                    total_amt = float(amounts.get("total", 0) or 0)
+                    if total_amt > 0:
+                        alt_coins[coin] = total_amt
+
+                if alt_coins:
+                    try:
+                        markets = exchange.load_markets()
+                    except Exception:
+                        markets = {}
+                    valid = [c for c in alt_coins if f"{c}/KRW" in markets]
+                    if valid:
+                        try:
+                            tickers = exchange.fetch_tickers([f"{c}/KRW" for c in valid])
+                            for c in valid:
+                                sym = f"{c}/KRW"
+                                price = float(tickers.get(sym, {}).get("last", 0) or 0)
+                                if alt_coins[c] * price > 5000:
+                                    exchange_coins.add(sym)
+                        except Exception:
+                            # 시세 조회 실패 시 보유량만으로 판단
+                            for c in valid:
+                                exchange_coins.add(f"{c}/KRW")
+
+                # state 보유 코인
+                state_coins = set(self.state.get("positions", {}).keys())
+
+                only_exchange = exchange_coins - state_coins
+                only_state = state_coins - exchange_coins
+
+                if only_exchange or only_state:
+                    msg = "⚠️ *State ↔ Exchange 불일치 감지*\n"
+                    if only_exchange:
+                        msg += f"거래소에만 존재: {', '.join(only_exchange)}\n"
+                    if only_state:
+                        msg += f"State에만 존재: {', '.join(only_state)}\n"
+                    msg += "자동 보정 없음 — 수동 확인 필요"
+                    await notify_error(msg)
+                    print(f"  [교차검증] 불일치: exchange_only={only_exchange}, state_only={only_state}", flush=True)
+                else:
+                    print(f"  [교차검증] 일치 OK — {len(exchange_coins)}종목", flush=True)
+            except Exception as e:
+                print(f"  [교차검증] 오류: {e}", flush=True)
 
     async def _check_circuit_breaker_periodic(self):
         """레벨 갱신 주기마다 CB L2 발동/L1 자동해제 체크 (ADR 20260408_1).
@@ -511,11 +595,15 @@ class RealtimeMonitor:
 
     async def _run_websocket(self):
         """웹소켓 연결 및 실시간 체결가 수신."""
+        reconnect_delay = WS_RECONNECT_BASE
         while self.running:
             try:
                 print("\n웹소켓 연결 중...", flush=True)
                 async with aiohttp.ClientSession() as session:
                     async with session.ws_connect(UPBIT_WS_URL, heartbeat=30, timeout=30) as ws:
+                        # 연결 성공 → 백오프 리셋
+                        reconnect_delay = WS_RECONNECT_BASE
+
                         # 구독 요청
                         market_codes = [
                             sym.replace("/", "-").replace("KRW-", "KRW-")
@@ -550,14 +638,29 @@ class RealtimeMonitor:
                         await ws.send_json(subscribe)
                         print(f"  구독 완료: {len(upbit_codes)}개 종목", flush=True)
 
-                        async for msg in ws:
+                        # P7-07: async for 대신 wait_for(timeout=300)으로 stale 감지
+                        while True:
+                            try:
+                                msg = await asyncio.wait_for(ws.receive(), timeout=300)
+                            except asyncio.TimeoutError:
+                                print("  [WS-STALE] 5분간 메시지 없음 — 강제 재연결", flush=True)
+                                await notify_error("웹소켓 5분간 메시지 미수신 — 강제 재연결")
+                                break
+
                             if not self.running:
                                 print("봇 중지 요청 — 웹소켓 종료")
                                 return
 
                             if msg.type == aiohttp.WSMsgType.BINARY:
                                 data = json.loads(msg.data.decode("utf-8"))
+                                self._last_msg_ts = _time.monotonic()  # P7-07
                                 await self._handle_tick(data)
+
+                                # heartbeat: 5분마다 /tmp/bata_heartbeat touch
+                                _now_mono = _time.monotonic()
+                                if _now_mono - self._last_heartbeat >= 300:
+                                    self._last_heartbeat = _now_mono
+                                    Path("/tmp/bata_heartbeat").touch()
 
                             elif msg.type in (aiohttp.WSMsgType.ERROR, aiohttp.WSMsgType.CLOSED):
                                 print("웹소켓 연결 종료")
@@ -579,11 +682,12 @@ class RealtimeMonitor:
 
             except Exception as e:
                 print(f"웹소켓 오류: {e}")
-                await notify_error(f"웹소켓 오류: {e}")
+                await self._handle_error("ws_connect", f"웹소켓 오류: {e}\n{UPBIT_WS_URL}")
 
             if self.running:
-                print("5초 후 재연결...")
-                await asyncio.sleep(5)
+                print(f"{reconnect_delay}초 후 재연결...")
+                await asyncio.sleep(reconnect_delay)
+                reconnect_delay = min(reconnect_delay * 2, WS_RECONNECT_MAX)
 
     async def _handle_tick(self, data: dict):
         """실시간 체결 처리."""
@@ -1339,11 +1443,16 @@ class RealtimeMonitor:
                     print(f"\n  [서킷브레이커] {msg}", flush=True)
                     await send(f"🔴 *{msg}")
                     return
+                _now = _time.monotonic()
                 if is_l2_triggered():
-                    print(f"  [서킷브레이커-L2] 발동 중 — {symbol} 매수 차단", flush=True)
+                    if _now - self._cb_log_ts > 60:
+                        print(f"  [서킷브레이커-L2] 발동 중 — {symbol} 매수 차단", flush=True)
+                        self._cb_log_ts = _now
                     return
                 if is_triggered():
-                    print(f"  [서킷브레이커] 발동 중 — {symbol} 매수 차단", flush=True)
+                    if _now - self._cb_log_ts > 60:
+                        print(f"  [서킷브레이커] 발동 중 — {symbol} 매수 차단", flush=True)
+                        self._cb_log_ts = _now
                     return
             except Exception as e:
                 print(f"  [서킷브레이커] 잔고 조회 실패, 매수 진행: {e}", flush=True)

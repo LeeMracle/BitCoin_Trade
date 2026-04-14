@@ -33,10 +33,11 @@ def _create_exchange() -> ccxt.upbit:
 
 
 def get_balance() -> dict:
-    """KRW 및 BTC 잔고 조회.
+    """전체 자산 잔고 조회 (KRW + BTC + 알트코인).
 
     Returns:
-        {"krw": float, "btc": float, "btc_krw_value": float, "total_krw": float}
+        {"krw": float, "btc": float, "btc_krw_value": float,
+         "alts_krw_value": float, "total_krw": float}
     """
     exchange = _create_exchange()
     balance = exchange.fetch_balance()
@@ -48,12 +49,49 @@ def get_balance() -> dict:
     btc_price = float(ticker["last"])
     btc_krw_value = btc * btc_price
 
+    # 알트코인 평가액 합산 (lessons/20260405_1)
+    # CTO WARN-1: 종목별 fetch_ticker → fetch_tickers 일괄 조회로 교체
+    # CTO WARN-5: except pass → 로깅 추가
+    alts_krw_value = 0.0
+    _SKIP = {"KRW", "BTC", "info", "free", "used", "total",
+             "timestamp", "datetime"}
+    alt_coins: dict[str, float] = {}
+    for coin, amounts in balance.items():
+        if coin in _SKIP or not isinstance(amounts, dict):
+            continue
+        total_amt = float(amounts.get("total", 0) or 0)
+        if total_amt > 0:
+            alt_coins[coin] = total_amt
+
+    if alt_coins:
+        # 유효 마켓만 필터링 후 일괄 조회
+        try:
+            markets = exchange.load_markets()
+        except Exception:
+            markets = {}
+        valid_symbols = [f"{c}/KRW" for c in alt_coins if f"{c}/KRW" in markets]
+        skipped = [c for c in alt_coins if f"{c}/KRW" not in markets]
+        for c in skipped:
+            print(f"  [잔고] {c}/KRW 마켓 없음 — 평가액 제외", flush=True)
+
+        if valid_symbols:
+            try:
+                tickers = exchange.fetch_tickers(valid_symbols)
+                for coin, amt in alt_coins.items():
+                    sym = f"{coin}/KRW"
+                    if sym in tickers and tickers[sym].get("last"):
+                        alts_krw_value += amt * float(tickers[sym]["last"])
+            except Exception as e:
+                print(f"  [잔고] 알트 시세 일괄조회 실패: {e} — KRW+BTC만으로 산출",
+                      flush=True)
+
     return {
         "krw": krw,
         "btc": btc,
         "btc_price": btc_price,
         "btc_krw_value": round(btc_krw_value, 0),
-        "total_krw": round(krw + btc_krw_value, 0),
+        "alts_krw_value": round(alts_krw_value, 0),
+        "total_krw": round(krw + btc_krw_value + alts_krw_value, 0),
     }
 
 
