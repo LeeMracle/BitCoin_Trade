@@ -964,19 +964,23 @@ def check_startup_retry_backoff() -> None:
 # ═══════════════════════════════════════════════════════════════════
 
 def check_regime_switcher_integration() -> None:
-    """regime_switcher 모듈 + config 상수 + regime_check 스크립트 존재 검증."""
+    """regime_switcher 모듈 + config 상수 + regime_check 스크립트 존재 검증.
+
+    lessons/20260408_1 (사일런트 cron 실패) 정책에 맞춰 ERROR로 승격.
+    모듈·cron 스크립트가 누락된 채 배포되면 import 실패 / cron 사일런트 실패 유발.
+    """
     rs_path = PROJECT_ROOT / "services" / "execution" / "regime_switcher.py"
     rc_path = PROJECT_ROOT / "scripts" / "regime_check.py"
     cfg_path = PROJECT_ROOT / "services" / "execution" / "config.py"
 
     if not rs_path.exists():
-        warnings.append("[P5-04] services/execution/regime_switcher.py 없음")
+        errors.append("[P5-04] services/execution/regime_switcher.py 없음 — regime_switch import 실패")
     if not rc_path.exists():
-        warnings.append("[P5-04] scripts/regime_check.py 없음 — 레짐 cron 미가동")
+        errors.append("[P5-04] scripts/regime_check.py 없음 — 레짐 cron 사일런트 실패")
     if cfg_path.exists():
         cfg = cfg_path.read_text(encoding="utf-8")
         if "REGIME_SWITCH_ENABLED" not in cfg:
-            warnings.append("[P5-04] config.py에 REGIME_SWITCH_ENABLED 상수 없음")
+            errors.append("[P5-04] config.py에 REGIME_SWITCH_ENABLED 상수 없음")
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -994,14 +998,18 @@ def check_lint_history_script() -> None:
 # ═══════════════════════════════════════════════════════════════════
 
 def check_vb_recheck_trigger() -> None:
+    """VB 재집계 cron 스크립트 + deploy 등록 검증.
+
+    lessons/20260408_1 (사일런트 cron 실패) 정책에 따라 ERROR로 승격.
+    """
     vb_path = PROJECT_ROOT / "scripts" / "vb_recheck_trigger.py"
     if not vb_path.exists():
-        warnings.append("[VB-재집계] scripts/vb_recheck_trigger.py 없음")
+        errors.append("[VB-재집계] scripts/vb_recheck_trigger.py 없음 — cron 사일런트 실패")
     d_path = PROJECT_ROOT / "scripts" / "deploy_to_aws.sh"
     if d_path.exists():
         dtxt = d_path.read_text(encoding="utf-8")
         if "vb_recheck_trigger.py" not in dtxt:
-            warnings.append("[VB-재집계] deploy_to_aws.sh에 vb_recheck_trigger cron 등록 없음")
+            errors.append("[VB-재집계] deploy_to_aws.sh에 vb_recheck_trigger cron 등록 없음")
 
 
 # ═══════════════════════════════════════════════════════════════════

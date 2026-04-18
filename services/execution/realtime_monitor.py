@@ -1494,6 +1494,7 @@ class RealtimeMonitor:
 
         # v2 필터: F&G 게이트 (F&G < 20이면 진입 차단)
         if self._fg_value is not None and self._fg_value < 20:
+            record_block("fg_gate", symbol)
             return
 
         # v2 필터: BTC EMA(200) 필터 (BTC < EMA200이면 전 종목 신규 매수 차단)
