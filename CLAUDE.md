@@ -116,3 +116,4 @@
 | 13 | ATR*N 스탑은 고변동 종목에서 제어 불능 — 하드 손절 캡 필수 | [lessons/20260408_5](docs/lessons/20260408_5_ong_wide_stop.md) |
 | 14 | 이벤트 루프 내 로그는 throttle 필수 — 종목수×빈도 곱 폭발 | [lessons/20260410_1](docs/lessons/20260410_1_cb_log_spam.md) |
 | 15 | 외부 API 의존 초기화는 재시도+백오프 필수 — systemd 재시작은 대체 불가 | [lessons/20260413_1](docs/lessons/20260413_1_startup_refresh_crash.md) |
+| 16 | 배포 스크립트가 전제하는 로컬 CLI(rsync 등)도 pre_deploy_check로 검증 + 폴백 분기 필수 | [lessons/20260419_1](docs/lessons/20260419_1_rsync_missing_deploy_stall.md) |

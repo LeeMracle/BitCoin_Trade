@@ -45,18 +45,31 @@ echo "[1/5] 원격 디렉토리 생성..."
 $SSH_CMD "mkdir -p $PROJECT_DIR"
 
 # 2. 필요한 파일 동기화 (node_modules, .venv, .git 제외)
-echo "[2/5] 파일 동기화..."
-rsync -avz --progress \
-    -e "ssh -i $PEM_KEY -o StrictHostKeyChecking=no" \
-    --exclude='.git' \
-    --exclude='node_modules' \
-    --exclude='.venv' \
-    --exclude='dist' \
-    --exclude='__pycache__' \
-    --exclude='*.egg-info' \
-    --exclude='data/cache.duckdb' \
-    --exclude='workspace/runs/20*' \
-    "$LOCAL_DIR/" "$AWS_USER@$AWS_HOST:$PROJECT_DIR/"
+# lessons/20260419_1 — 로컬에 rsync 미설치(Git Bash 기본환경) 시 배포 중단 방지를 위해
+# tar | ssh 폴백 경로 제공. 제외 규칙은 양쪽 공통.
+EXCLUDES=(
+    --exclude=.git
+    --exclude=node_modules
+    --exclude=.venv
+    --exclude=dist
+    --exclude=__pycache__
+    --exclude='*.egg-info'
+    --exclude=data/cache.duckdb
+    --exclude='workspace/runs/20*'
+)
+
+if command -v rsync >/dev/null 2>&1; then
+    echo "[2/5] 파일 동기화 (rsync)..."
+    rsync -avz --progress \
+        -e "ssh -i $PEM_KEY -o StrictHostKeyChecking=no" \
+        "${EXCLUDES[@]}" \
+        "$LOCAL_DIR/" "$AWS_USER@$AWS_HOST:$PROJECT_DIR/"
+else
+    echo "[2/5] 파일 동기화 (tar|ssh 폴백 — rsync 미설치)..."
+    # --exclude는 -C 앞에 둬서 GNU tar의 옵션 순서 규칙을 만족시킨다.
+    tar czf - "${EXCLUDES[@]}" -C "$LOCAL_DIR" . \
+        | $SSH_CMD "tar xzf - -C $PROJECT_DIR"
+fi
 
 # 3. Python 환경 설정
 echo "[3/5] Python 환경 설정..."

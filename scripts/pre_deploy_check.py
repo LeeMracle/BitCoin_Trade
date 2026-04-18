@@ -1013,6 +1013,36 @@ def check_vb_recheck_trigger() -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════
+# 검증 31: 배포 도구 가용성 (lessons/20260419_1)
+# ═══════════════════════════════════════════════════════════════════
+
+def check_deploy_tooling() -> None:
+    """로컬 환경에 배포에 필요한 CLI 도구가 있는지 + 폴백 분기 유지 여부.
+
+    ssh 는 필수. rsync 또는 tar 중 하나는 반드시 있어야 한다.
+    deploy_to_aws.sh 에 rsync→tar 폴백 분기가 보존되어 있는지 검사.
+    ref: lessons/20260419_1_rsync_missing_deploy_stall.md
+    """
+    import shutil
+
+    if shutil.which("ssh") is None:
+        errors.append("[배포툴] ssh 바이너리 없음 — 배포 불가")
+
+    has_rsync = shutil.which("rsync") is not None
+    has_tar = shutil.which("tar") is not None
+    if not has_rsync and not has_tar:
+        errors.append("[배포툴] rsync/tar 모두 없음 — 원격 전송 수단 부재")
+    elif not has_rsync and has_tar:
+        warnings.append("[배포툴] rsync 없음 — deploy_to_aws.sh 의 tar 폴백 경로로 동작")
+
+    d_path = PROJECT_ROOT / "scripts" / "deploy_to_aws.sh"
+    if d_path.exists():
+        dtxt = d_path.read_text(encoding="utf-8")
+        if "command -v rsync" not in dtxt or "tar czf" not in dtxt:
+            errors.append("[배포툴] deploy_to_aws.sh 에 rsync→tar 폴백 분기 누락 — lessons/20260419_1")
+
+
+# ═══════════════════════════════════════════════════════════════════
 # 메인
 # ═══════════════════════════════════════════════════════════════════
 
@@ -1051,6 +1081,7 @@ def main() -> None:
     check_regime_switcher_integration()
     check_lint_history_script()
     check_vb_recheck_trigger()
+    check_deploy_tooling()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")
