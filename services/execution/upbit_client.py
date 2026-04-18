@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 import ccxt
+from services.common.log_throttle import throttled_print
 
 _env_path = Path(__file__).resolve().parents[1] / ".env"
 load_dotenv(_env_path)
@@ -72,7 +73,11 @@ def get_balance() -> dict:
         valid_symbols = [f"{c}/KRW" for c in alt_coins if f"{c}/KRW" in markets]
         skipped = [c for c in alt_coins if f"{c}/KRW" not in markets]
         for c in skipped:
-            print(f"  [잔고] {c}/KRW 마켓 없음 — 평가액 제외", flush=True)
+            throttled_print(
+                f"balance_noMarket_{c}",
+                f"  [잔고] {c}/KRW 마켓 없음 — 평가액 제외",
+                interval_sec=60,
+            )
 
         if valid_symbols:
             try:
@@ -82,8 +87,11 @@ def get_balance() -> dict:
                     if sym in tickers and tickers[sym].get("last"):
                         alts_krw_value += amt * float(tickers[sym]["last"])
             except Exception as e:
-                print(f"  [잔고] 알트 시세 일괄조회 실패: {e} — KRW+BTC만으로 산출",
-                      flush=True)
+                throttled_print(
+                    "balance_ticker_fail",
+                    f"  [잔고] 알트 시세 일괄조회 실패: {e} — KRW+BTC만으로 산출",
+                    interval_sec=60,
+                )
 
     return {
         "krw": krw,

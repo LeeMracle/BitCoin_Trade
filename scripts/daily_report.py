@@ -26,6 +26,7 @@ from services.alerting.notifier import send
 # 상태 파일 경로
 MULTI_STATE = ROOT / "workspace" / "multi_trading_state.json"
 VB_STATE = ROOT / "workspace" / "vb_state.json"
+FILTER_STATS = ROOT / "workspace" / "filter_stats.json"
 
 KST = timezone(timedelta(hours=9))
 
@@ -108,6 +109,29 @@ def _build_report() -> str:
             lines.append(f"    {e} {sym} {ret:+.1f}%")
     else:
         lines.append(f"  거래: 0건")
+
+    # ── 4. 필터 차단 통계 ──
+    try:
+        if FILTER_STATS.exists():
+            with open(FILTER_STATS, "r", encoding="utf-8") as f:
+                fs = json.load(f)
+            counters = fs.get("counters", {})
+            ema200_n = counters.get("ema200_filter", 0)
+            fg_n = counters.get("fg_gate", 0)
+            atr_n = counters.get("atr_filter", 0)
+            cb_l1_n = counters.get("cb_l1", 0)
+            cb_l2_n = counters.get("cb_l2", 0)
+            vb_a_n = counters.get("vb_gate_a_bearish", 0)
+            lines.append("")
+            lines.append("🛡 *필터 차단 통계 (지난 24h)*")
+            lines.append(f"  - 하락장(BTC<EMA200): {ema200_n}건")
+            lines.append(f"  - F&G 게이트: {fg_n}건")
+            lines.append(f"  - ATR 필터: {atr_n}건")
+            lines.append(f"  - CB-L1/L2: {cb_l1_n}/{cb_l2_n}건")
+            lines.append(f"  - VB 하락장(A): {vb_a_n}건")
+            lines.append(f"  (기록: workspace/filter_stats.json)")
+    except Exception:
+        pass  # 파일 없거나 읽기 실패 시 섹션 생략
 
     return "\n".join(lines)
 

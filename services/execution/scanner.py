@@ -74,9 +74,6 @@ def fetch_btc_above_ema() -> bool:
         return True  # 조회 실패 → 기존 동작 유지
 
 
-# 하위 호환 별칭 — 기존 코드가 fetch_btc_above_sma를 직접 import하는 경우 대비
-fetch_btc_above_sma = fetch_btc_above_ema
-
 
 def get_krw_market_coins() -> list[dict]:
     """업비트 KRW 마켓 전체 종목 + 24h 거래대금 조회."""

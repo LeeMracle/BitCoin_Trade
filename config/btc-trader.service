@@ -1,0 +1,22 @@
+[Unit]
+Description=BATA - BTC Auto Trader Realtime Monitor
+After=network.target
+
+[Service]
+Type=notify
+NotifyAccess=all
+User=ubuntu
+WorkingDirectory=/home/ubuntu/BitCoin_Trade
+ExecStart=/home/ubuntu/BitCoin_Trade/.venv/bin/python -u scripts/daily_live.py --realtime
+Restart=always
+RestartSec=10
+# 시작 타임아웃: 레벨 갱신(~200종목)이 최대 수분 소요되므로 10분으로 확장
+# 이 시간 내에 _sd_ready()가 READY=1을 보내지 못하면 systemd가 프로세스를 kill
+TimeoutStartSec=600
+# 5분 내에 sd_notify WATCHDOG=1이 오지 않으면 systemd가 프로세스를 재시작
+WatchdogSec=300
+Environment=PYTHONUTF8=1
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

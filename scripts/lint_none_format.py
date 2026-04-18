@@ -20,6 +20,24 @@
      datetime.strptime(d['date'], fmt)  ← 값이 None/빈문자열이면 ValueError
      → 사전 None/빈문자열 체크 필요 (업비트 API 빈 필드 방어)
 
+  R6 (WARN) async 함수 내부에서 ccxt fetch_* 호출에 `await` 누락
+     async def foo():
+         exchange.fetch_balance()  ← coroutine 반환/동기 경로 혼용 위험
+     → 동기 래퍼 사용 시에는 asyncio.to_thread() 또는 명시적 래퍼 사용 필요
+     탐지 범위: async def 내부에서 `*.fetch_balance|fetch_ticker|fetch_tickers|fetch_ohlcv|fetch_order` 를
+               expression statement(결과 미사용) 또는 동기 할당으로 사용한 경우.
+
+  R7 (WARN) 상태 로드 직후 거래소 잔고 교차검증 누락
+     load_state() / state["positions"] 참조가 있는 함수 내에서
+     fetch_balance 호출이 전혀 없으면 경고.
+     → lessons/20260408_2 (state ↔ balance mismatch) 방지
+     탐지 범위: services/execution/*.py 한정
+
+  R8 (WARN) 시장가 주문 직후 sleep 없는 fetch_order
+     create_market_buy_order(...) 다음 2문장 이내에 sleep 없이 fetch_order 가 호출되면
+     업비트 체결 반영 지연으로 None 필드 수령 위험.
+     → asyncio.sleep(0.3) 또는 time.sleep(0.3) 삽입 필요
+
 검출 범위: scripts/, services/
 제외:     venv, __pycache__, lint_none_format.py 자기 자신
 
@@ -49,6 +67,27 @@ CCXT_RISKY_KEYS = {"cost", "price", "average", "filled"}
 
 # R3 억제: 다음 함수의 인수로 전달되는 .get(...)은 안전(None-safe 래퍼)
 SAFE_WRAPPERS = {"_fmt_num", "fmt_num", "resolve_fill", "_resolve_fill"}
+
+# R6: async 컨텍스트에서 await 누락을 탐지할 ccxt 비동기 엔드포인트 후보
+CCXT_ASYNC_METHODS = {
+    "fetch_balance",
+    "fetch_ticker",
+    "fetch_tickers",
+    "fetch_ohlcv",
+    "fetch_order",
+    "fetch_orders",
+    "fetch_open_orders",
+    "create_order",
+    "create_market_buy_order",
+    "create_market_sell_order",
+}
+
+# R7: services/execution 한정 — 상태 로드 식별자 및 거래소 조회 식별자
+STATE_LOAD_NAMES = {"load_state", "_load_state"}
+BALANCE_CHECK_NAMES = {"fetch_balance", "get_balance"}
+
+# R8: 시장가 주문 이름
+MARKET_ORDER_METHODS = {"create_market_buy_order", "create_market_sell_order"}
 
 
 class Finding:
@@ -310,6 +349,9 @@ def _check_file(path: Path, findings: list[Finding]) -> None:
                     f"ValueError. 사전 None/빈문자열 체크 필요"
                 ))
 
+    # R6 / R7 / R8 — 함수 단위 또는 문장-블록 단위 체크
+    _check_r6_r7_r8(path, tree, findings)
+
 
 def _is_strptime_call(node: ast.Call) -> bool:
     """datetime.strptime 또는 datetime.datetime.strptime 호출 여부."""
@@ -317,6 +359,194 @@ def _is_strptime_call(node: ast.Call) -> bool:
     if isinstance(func, ast.Attribute) and func.attr == "strptime":
         return True
     return False
+
+
+def _enclosing_func(node: ast.AST) -> ast.AST | None:
+    """노드를 감싸는 가장 가까운 FunctionDef/AsyncFunctionDef 반환."""
+    cur = getattr(node, "parent", None)
+    while cur is not None:
+        if isinstance(cur, (ast.AsyncFunctionDef, ast.FunctionDef)):
+            return cur
+        cur = getattr(cur, "parent", None)
+    return None
+
+
+def _is_inside_await(node: ast.AST) -> bool:
+    """노드가 Await 또는 Await 식의 하위에 있는지."""
+    cur = getattr(node, "parent", None)
+    while cur is not None:
+        if isinstance(cur, ast.Await):
+            return True
+        # 함수 정의 경계를 넘으면 중단
+        if isinstance(cur, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Module)):
+            return False
+        cur = getattr(cur, "parent", None)
+    return False
+
+
+def _check_r6_r7_r8(path: Path, tree: ast.AST, findings: list[Finding]) -> None:
+    """R6/R7/R8 규칙 통합 체크.
+
+    R6: AsyncFunctionDef 내부에서 CCXT_ASYNC_METHODS 호출이 await 없이 쓰이면 경고.
+        다만, asyncio.to_thread / asyncio.get_event_loop().run_in_executor / loop.run_in_executor
+        의 positional 인수로 전달된 경우는 OK.
+
+    R7: services/execution/*.py 의 함수 내에서
+         STATE_LOAD_NAMES 호출 또는 state["positions"] 접근이 있으면서
+         BALANCE_CHECK_NAMES 호출이 전혀 없으면 경고.
+         (해당 함수 + 호출하는 다른 함수의 본문은 정적으로 판단 어려우므로 함수 경계 기준)
+
+    R8: 함수 본문에서 MARKET_ORDER_METHODS 호출 직후 같은 함수 내 다음 2 문장 안에
+         sleep(*)/asyncio.sleep(*) 없이 fetch_order가 있으면 경고.
+    """
+    # R6
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
+            continue
+        attr = node.func.attr
+        if attr not in CCXT_ASYNC_METHODS:
+            continue
+        fn = _enclosing_func(node)
+        if not isinstance(fn, ast.AsyncFunctionDef):
+            continue  # 동기 함수에서는 R6 대상 아님 (R6는 async 전용)
+        if _is_inside_await(node):
+            continue
+        # 안전 패턴: asyncio.to_thread(...) 또는 run_in_executor(...) 의 인수로 전달
+        parent = getattr(node, "parent", None)
+        safe = False
+        if isinstance(parent, ast.Call):
+            pfn = parent.func
+            if isinstance(pfn, ast.Attribute) and pfn.attr in {"to_thread", "run_in_executor"}:
+                safe = True
+            elif isinstance(pfn, ast.Name) and pfn.id in {"to_thread"}:
+                safe = True
+        if safe:
+            continue
+        # 결과 할당이 coroutine 자체를 받는 경우도 위험이지만 기본적으로 경고 대상
+        findings.append(Finding(
+            path, node.lineno, node.col_offset, "R6", "WARN",
+            f"async def 내부에서 .{attr}(...) 를 await 없이 호출 — "
+            f"ccxt 비동기 또는 동기 래퍼 혼용 위험. await 또는 asyncio.to_thread() 사용"
+        ))
+
+    # R7 — services/execution 한정
+    try:
+        rel = path.relative_to(PROJECT_ROOT)
+    except ValueError:
+        rel = path
+    in_execution = False
+    try:
+        parts = rel.parts
+        in_execution = len(parts) >= 2 and parts[0] == "services" and parts[1] == "execution"
+    except Exception:
+        pass
+
+    # R7 스코프 제한:
+    #  - circuit_breaker.py / telegram_bot.py 등 CB/UI 파일은 자체 state(triggered 플래그)이므로 제외.
+    #  - 대상 파일: realtime_monitor / multi_trader / trader / scanner 등 "거래 집행 경로"
+    R7_FILES = {"realtime_monitor.py", "multi_trader.py", "trader.py", "scanner.py"}
+    if in_execution and path.name in R7_FILES:
+        for fn in ast.walk(tree):
+            if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            body_walk = list(ast.walk(fn))
+            uses_positions_subscript = False
+            uses_balance = False
+            state_node: ast.AST | None = None
+            has_buy_or_sell = False
+            for n in body_walk:
+                # 반드시 `["positions"]` subscript 가 **실제로** 등장해야 함 — 단순 load_state 호출만으로는 탐지 X
+                if (
+                    isinstance(n, ast.Subscript)
+                    and isinstance(n.slice, ast.Constant)
+                    and n.slice.value == "positions"
+                ):
+                    uses_positions_subscript = True
+                    state_node = state_node or n
+                if isinstance(n, ast.Call):
+                    f = n.func
+                    name = None
+                    if isinstance(f, ast.Attribute):
+                        name = f.attr
+                    elif isinstance(f, ast.Name):
+                        name = f.id
+                    if name in BALANCE_CHECK_NAMES:
+                        uses_balance = True
+                    # 매수/매도 경로 지표 — buy_market_coin / sell_market_coin / _execute_buy / _execute_sell
+                    if name in {"buy_market_coin", "sell_market_coin",
+                                "_execute_buy", "_execute_sell",
+                                "create_market_buy_order", "create_market_sell_order"}:
+                        has_buy_or_sell = True
+
+            # 매수/매도 경로에서만 + positions subscript 실사용 + balance 교차검증 미호출
+            if uses_positions_subscript and has_buy_or_sell and not uses_balance and state_node is not None:
+                # 순수 state 저장/표시 함수 제외
+                if fn.name in {"save_state", "_save_state", "load_state", "_load_state",
+                                "close_position", "open_position", "__init__",
+                                "_load_vb_state", "_load_ema_trend_state",
+                                "_save_vb_state", "_save_ema_trend_state",
+                                "show_status", "_cmd_reset", "_cmd_status"}:
+                    continue
+                findings.append(Finding(
+                    path, state_node.lineno, state_node.col_offset, "R7", "WARN",
+                    f"함수 '{fn.name}' 가 state['positions'] 를 참조하고 매수/매도 경로를 가짐에도 "
+                    f"fetch_balance/get_balance 교차검증이 없음 — lessons/20260408_2 (state ↔ balance mismatch) 위험"
+                ))
+
+    # R8
+    for fn in ast.walk(tree):
+        if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        stmts = fn.body
+        for idx, stmt in enumerate(stmts):
+            # market order 호출을 직접 포함하는 statement 찾기
+            has_market = False
+            market_attr: str | None = None
+            market_ln = stmt.lineno
+            market_col = stmt.col_offset
+            for n in ast.walk(stmt):
+                if (
+                    isinstance(n, ast.Call)
+                    and isinstance(n.func, ast.Attribute)
+                    and n.func.attr in MARKET_ORDER_METHODS
+                ):
+                    has_market = True
+                    market_attr = n.func.attr
+                    market_ln = n.lineno
+                    market_col = n.col_offset
+                    break
+            if not has_market:
+                continue
+
+            # 다음 최대 2문장 안에 sleep/asyncio.sleep 없는 fetch_order 탐지
+            followup = stmts[idx + 1: idx + 3]
+            has_sleep = False
+            has_fetch_order = False
+            fetch_node_ln = 0
+            fetch_node_col = 0
+            for fstmt in followup:
+                for n in ast.walk(fstmt):
+                    if isinstance(n, ast.Call):
+                        f = n.func
+                        name = None
+                        if isinstance(f, ast.Attribute):
+                            name = f.attr
+                        elif isinstance(f, ast.Name):
+                            name = f.id
+                        if name == "sleep":
+                            has_sleep = True
+                        if name == "fetch_order":
+                            has_fetch_order = True
+                            fetch_node_ln = n.lineno
+                            fetch_node_col = n.col_offset
+            if has_fetch_order and not has_sleep:
+                findings.append(Finding(
+                    path, fetch_node_ln or market_ln, fetch_node_col or market_col,
+                    "R8", "WARN",
+                    f".{market_attr}(...) 직후 sleep 없이 fetch_order 호출 — "
+                    f"업비트 체결 반영 지연으로 None 필드 수령 위험. "
+                    f"asyncio.sleep(0.3~1.0) 또는 time.sleep(0.3) 삽입 권장"
+                ))
 
 
 def main() -> int:

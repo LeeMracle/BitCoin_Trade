@@ -214,11 +214,15 @@ def _resolve_fill(exchange, order: dict, symbol: str,
 - [x] **R4** — `dict[key]` subscript 숫자 포매팅 시 KeyError 방어 확인 (WARN, 04-10 구현)
 - [x] **R5** — `datetime.strptime()` 인자에 dict subscript/.get() 직접 전달 시 WARN (04-10 구현)
       (업비트 API의 일부 필드가 빈 문자열로 오는 케이스 방어)
-- [ ] **R6** — ccxt `fetch_*` 결과를 await 없이 바로 사용하는 실수 탐지 (async 경로)
-- [ ] **R7** — 상태 파일(`*_state.json`) 진입 경로에서 `fetch_balance()`
-      교차검증 누락 탐지 (lessons/20260408_2 연계)
-- [ ] **R8** — 시장가 주문 직후 `sleep` 없이 `fetch_order` 호출 방지
-      (업비트는 반영 지연이 있음)
+- [x] **R6** — async def 내부에서 ccxt `fetch_*` / `create_*_order` 를 await 없이 호출 탐지 (04-17 구현)
+      asyncio.to_thread / run_in_executor 인수로 전달된 경우는 안전 패턴으로 제외.
+      도입 시 5건 탐지 → [lessons/20260417_1](lessons/20260417_1_sync_ccxt_in_async_loop.md)
+- [x] **R7** — services/execution 내 `realtime_monitor/multi_trader/trader/scanner`에서
+      `state["positions"]` subscript + 매수/매도 호출 경로가 있는 함수에 `fetch_balance`/`get_balance`
+      교차검증이 없으면 WARN (04-17 구현, lessons/20260408_2 연계)
+- [x] **R8** — 시장가 주문(`create_market_buy_order` / `create_market_sell_order`) 직후
+      다음 2문 이내에 `sleep`/`asyncio.sleep` 없이 `fetch_order` 호출 시 WARN (04-17 구현,
+      현재 코드베이스에서 0건 — 미래 회귀 방지용)
 
 ### Phase 5 — 메타 린트 ("린트의 린트")
 
@@ -226,6 +230,100 @@ def _resolve_fill(exchange, order: dict, symbol: str,
 - [ ] **검증 규칙이 있는데 린터/pre_deploy_check에 대응 코드가 없는** lesson 탐지
 - [ ] "lessons ↔ 린트 규칙" 매핑 표를 `docs/lint_layer.md` 에 자동 생성
 - [ ] 빠진 lesson은 경고로 표시 → **"교훈이 코드로 집행되지 않은 잔여 위험"** 가시화
+
+---
+
+## Phase 5 — 메타 린트 ("린트의 린트")
+
+> **도입일**: 2026-04-18  
+> **WBS**: P6-12 (lessons ↔ 린트 규칙 매핑 자동 생성 + 미연결 경고)
+
+### 목적
+
+`docs/lessons/*.md` 에 기록된 교훈이 실제로 **린터 규칙(R1~Rn) 또는 pre_deploy_check 함수**로 집행되고 있는지 자동으로 검증한다.
+
+교훈 문서가 늘어날수록 "기록은 했지만 코드로 집행되지 않는 잔여 위험"이 생길 수 있다. 메타 린트는 이를 가시화하여 교훈 → 코드 집행 루프를 닫는다.
+
+### 구조
+
+```
+docs/lessons/*.md
+  └─ "## 검증규칙" 섹션 (R1, check_xxx 참조)
+          ↓ 파싱
+scripts/lint_meta.py
+          ↓ 매핑 검증
+  ┌── scripts/lint_none_format.py  (R1~R8 규칙 집행)
+  └── scripts/pre_deploy_check.py  (check_* 함수 집행)
+```
+
+### 사용법
+
+```bash
+# 표준 리포트 출력 (exit 0: 정상/경고, exit 1: ERROR)
+PYTHONUTF8=1 python scripts/lint_meta.py
+
+# JSON 출력 (CI 파싱용)
+PYTHONUTF8=1 python scripts/lint_meta.py --json
+```
+
+### 출력 해석
+
+| 심볼 | 의미 |
+|:---:|---|
+| ✅ | lesson이 린터 규칙(Rn) 또는 check_* 함수로 집행됨 |
+| ⚠ (WARN) | 검증규칙 섹션 자체가 없는 lesson — 기록 누락 가능성 |
+| ❌ (ERROR) | 검증규칙 섹션에 명시된 규칙/함수가 코드에 없음 — **미집행** |
+
+**exit code 규칙**:
+- `0` — OK 또는 WARN만 있을 때 (미연결 lesson 경고, 배포 차단 안 함)
+- `1` — ERROR 발생 시 (검증규칙 섹션 있는데 코드 집행 없음)
+
+**요약 줄 예시**:
+
+```
+[메타린트] lessons=17 / 규칙 R1~R8=8 / pre_deploy_check 함수=16개
+[요약]
+  총 lessons          : 17
+  매핑됨 (OK)         : 14
+  경고 (섹션 없음 등) : 0
+  오류 (미집행 규칙)  : 3
+  존재하지 않는 규칙 참조: 1건 ['R9']
+```
+
+### 매핑 방식
+
+메타 린트는 **두 방향으로** 매핑을 시도한다:
+
+1. **순방향 (lesson → 규칙)**: lesson의 `## 검증규칙` 섹션에서 `R1`, `check_xxx` 등을 파싱하여 lint_none_format.py / pre_deploy_check.py에 실제 구현이 있는지 확인.
+2. **역방향 (코드 → lesson)**: pre_deploy_check.py의 check_* 함수 본문에 `lessons/YYYYMMDD_N` 형태 참조가 있으면 해당 lesson과 암묵적 연결로 인정 (implicit_checks).
+
+두 방향 모두 연결이 없는 lesson만 ERROR로 판정한다.
+
+### CI 통합 (향후 P6-13 연계)
+
+```yaml
+# .github/workflows/lint.yml (예시)
+- name: 메타 린트
+  run: PYTHONUTF8=1 python scripts/lint_meta.py --json > lint_meta_result.json
+  # exit 1 시 CI 실패 → ERROR lesson 해소 필요
+```
+
+pre_deploy_check.py 에서도 호출 예정:
+
+```python
+def check_meta_lint() -> None:
+    """lint_meta.py 를 호출하여 lessons ↔ 규칙 매핑 검증."""
+    import subprocess
+    result = subprocess.run(
+        [sys.executable, str(PROJECT_ROOT / "scripts" / "lint_meta.py")],
+        capture_output=True, text=True, encoding="utf-8", timeout=30,
+    )
+    if result.returncode != 0:
+        errors.append("[메타린트] lessons ↔ 규칙 미집행 항목 발견 — "
+                      "python scripts/lint_meta.py 로 상세 확인")
+```
+
+---
 
 ### Phase 6 (스트레치) — 패턴 데이터베이스
 

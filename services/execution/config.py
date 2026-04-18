@@ -156,3 +156,9 @@ NOTIFY_ON_BUY = True          # 매수 시 텔레그램 알림
 NOTIFY_ON_SELL = True         # 매도 시 텔레그램 알림
 NOTIFY_DAILY_REPORT = True    # 일일 리포트
 NOTIFY_NEAR_SIGNAL = True     # 근접 종목 (3% 이내) 알림
+
+# ─── 레짐 자동 전환 (P5-04) ───
+REGIME_SWITCH_ENABLED = False   # 초기 DRY-RUN: 판정 로직만 가동, 실거래 영향 없음
+REGIME_HYSTERESIS_COUNT = 3     # 연속 몇 회 같은 신호에서 전환할지
+REGIME_BULL_FG_MIN = 40
+REGIME_BEAR_FG_MAX = 20

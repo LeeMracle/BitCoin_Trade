@@ -19,12 +19,12 @@ MARKET_SPAM=$(journalctl -u "$SERVICE" --since "$YESTERDAY 00:00:00" --until "$Y
 # 기록
 echo "$YESTERDAY total=$TOTAL errors=$ERRORS spam=$MARKET_SPAM" >> "$LOG_DIR/log_volume.log"
 
-# 이상 판단
+# 이상 판단 (P7-08 기준: 0줄 또는 5000줄+ 경보)
 ALERT=""
 if [ "$TOTAL" -eq 0 ]; then
     ALERT="로그 0줄 — 봇 미작동 의심"
-elif [ "$TOTAL" -gt 50000 ]; then
-    ALERT="로그 ${TOTAL}줄 — 비정상 과다 (스팸 의심)"
+elif [ "$TOTAL" -gt 5000 ]; then
+    ALERT="로그 ${TOTAL}줄 — 비정상 과다 (스팸 의심, 임계=5000)"
 elif [ "$ERRORS" -gt 100 ]; then
     ALERT="오류 로그 ${ERRORS}줄 — 반복 오류 의심"
 fi

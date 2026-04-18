@@ -87,13 +87,48 @@ $SSH_CMD "cd $PROJECT_DIR && .venv/bin/python -m services.execution.trader --dry
 echo "[5/5] crontab 등록..."
 $SSH_CMD << 'CRON_SCRIPT'
 PROJECT_DIR="/home/ubuntu/BitCoin_Trade"
+
+# 로그 파일 초기화 (lessons/20260418_2 — cron은 /var/log/에 새 파일을 생성할 권한이 없어 redirect가 silent fail)
+# 배포 때마다 touch로 보장. 기존 파일이 있으면 내용 유지.
+LOG_FILES=(/var/log/btc_trader.log /var/log/btc_report.log /var/log/watchdog_check.log /var/log/log_volume.log /var/log/jarvis_executor.log /var/log/vb_recheck_trigger.log /var/log/regime_check.log)
+sudo touch "${LOG_FILES[@]}"
+sudo chown ubuntu:ubuntu "${LOG_FILES[@]}"
+
 CRON_LIVE="5 0 * * * cd $PROJECT_DIR && $PROJECT_DIR/.venv/bin/python scripts/daily_live.py >> /var/log/btc_trader.log 2>&1"
 CRON_REPORT="10 0 * * * cd $PROJECT_DIR && PYTHONUTF8=1 $PROJECT_DIR/.venv/bin/python scripts/daily_report.py >> /var/log/btc_report.log 2>&1"
+# P7-04: 매 1분 watchdog 체크 (heartbeat 10분 미갱신 시 경보 + systemctl restart)
+CRON_WATCHDOG="* * * * * /home/ubuntu/BitCoin_Trade/scripts/watchdog_check.sh"
+# P7-08: 매일 00:10 UTC (09:10 KST) 로그 볼륨 감시
+CRON_LOGVOL="10 0 * * * /home/ubuntu/BitCoin_Trade/scripts/log_volume_check.sh"
+# P4-14c: 매시 정각 jarvis_executor (BTC 3단계 분할매도 등 활성 전략 자동 실행). ref: lessons/20260408_1
+CRON_JARVIS="0 * * * * cd $PROJECT_DIR && PYTHONUTF8=1 $PROJECT_DIR/.venv/bin/python scripts/jarvis_executor.py >> /var/log/jarvis_executor.log 2>&1"
+# VB 재검증 트리거: 매일 09:15 KST (= UTC 00:15) — BTC EMA200 7일 연속 충족 시 재집계 보고서 생성
+CRON_VB_RECHECK="15 0 * * * cd $PROJECT_DIR && PYTHONUTF8=1 $PROJECT_DIR/.venv/bin/python scripts/vb_recheck_trigger.py --notify >> /var/log/vb_recheck_trigger.log 2>&1"
+# P5-04: 매시 25분 레짐 자동 판정 (BULL/BEAR/SIDEWAYS), 히스테리시스 3회 후 전환 시 텔레그램 알림
+CRON_REGIME="25 * * * * cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_DIR $PROJECT_DIR/.venv/bin/python scripts/regime_check.py --notify >> /var/log/regime_check.log 2>&1"
 
 # 기존 등록 제거 후 추가
-(crontab -l 2>/dev/null | grep -v "daily_live.py" | grep -v "daily_report.py"; echo "$CRON_LIVE"; echo "$CRON_REPORT") | crontab -
+(crontab -l 2>/dev/null \
+    | grep -v "daily_live.py" \
+    | grep -v "daily_report.py" \
+    | grep -v "watchdog_check.sh" \
+    | grep -v "log_volume_check.sh" \
+    | grep -v "jarvis_executor.py" \
+    | grep -v "vb_recheck_trigger.py" \
+    | grep -v "regime_check.py"; \
+    echo "$CRON_LIVE"; \
+    echo "$CRON_REPORT"; \
+    echo "$CRON_WATCHDOG"; \
+    echo "$CRON_LOGVOL"; \
+    echo "$CRON_JARVIS"; \
+    echo "$CRON_VB_RECHECK"; \
+    echo "$CRON_REGIME") | crontab -
+
+# watchdog/log_volume 스크립트 실행권한 부여
+chmod +x "$PROJECT_DIR/scripts/watchdog_check.sh" "$PROJECT_DIR/scripts/log_volume_check.sh" 2>/dev/null
+
 echo "crontab 등록 완료:"
-crontab -l | grep -E "btc_(trader|report)"
+crontab -l | grep -E "(btc_(trader|report)|watchdog_check|log_volume_check|jarvis_executor|vb_recheck_trigger|regime_check)"
 CRON_SCRIPT
 
 echo ""

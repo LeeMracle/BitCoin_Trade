@@ -136,12 +136,25 @@ except Exception as e:
 
 print(json.dumps(data, ensure_ascii=False))
 '"""
-    raw = _ssh(script, timeout=20)
+    raw = _ssh(script, timeout=30)
     if not raw or raw.startswith("[SSH"):
         return {"error": raw or "SSH 연결 실패"}
+    # 원격 실행 중 경고 메시지가 stdout 앞쪽에 섞일 수 있으므로
+    # 마지막에 등장하는 '{'로 시작하는 JSON 라인을 선택
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
+        json_line = None
+        for line in reversed(raw.splitlines()):
+            s = line.strip()
+            if s.startswith("{") and s.endswith("}"):
+                json_line = s
+                break
+        if json_line:
+            try:
+                return json.loads(json_line)
+            except json.JSONDecodeError:
+                pass
         return {"error": f"JSON 파싱 실패: {raw[:200]}"}
 
 

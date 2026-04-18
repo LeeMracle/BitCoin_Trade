@@ -59,6 +59,7 @@ from services.execution.circuit_breaker import (
     is_triggered,
     is_l2_triggered,
 )
+from services.execution.filter_stats import record_block
 from services.execution.multi_trader import (
     load_state, save_state, append_log,
     buy_market_coin, sell_market_coin,
@@ -68,6 +69,7 @@ from services.market_data.fetcher import fetch_ohlcv
 from services.paper_trading.strategy import calc_atr, calc_donchian_upper
 from services.execution.upbit_client import get_balance, _create_exchange
 from services.alerting.notifier import send, notify_error
+from services.common.sd_notify import ready as _sd_ready, watchdog_ping as _sd_watchdog
 
 UPBIT_WS_URL = "wss://api.upbit.com/websocket/v1"
 REFRESH_HOUR_UTC = 0  # UTC 00:00 = KST 09:00
@@ -153,6 +155,12 @@ class RealtimeMonitor:
                 if _attempt == 1:
                     await notify_error(f"시작 시 레벨 갱신 실패: {e}\n재시도 대기 중...")
                 await asyncio.sleep(delay)
+
+        # systemd Type=notify 환경에서 "READY=1" — 없으면 no-op
+        try:
+            _sd_ready()
+        except Exception:
+            pass
 
         await asyncio.gather(
             self._run_websocket(),
@@ -317,6 +325,8 @@ class RealtimeMonitor:
                 ema_label = f"EMA{REGIME_FILTER_EMA_PERIOD}" if REGIME_FILTER_ENABLED else "EMA(비활성)"
                 print(f"  [v2] F&G={fg_disp} {'(진입차단)' if fg_blocked else '(허용)'}"
                       f" | BTC>{ema_label}={self._btc_above_ema}", flush=True)
+                if fg_blocked:
+                    record_block("fg_gate_daily", None)
             except Exception as e:
                 print(f"  [v2] 필터 조회 실패: {e} — 기본값 유지", flush=True)
 
@@ -383,6 +393,13 @@ class RealtimeMonitor:
 
             if idx % 10 == 0 or idx == total:
                 print(f"  진행: {idx}/{total} ({len(new_levels)}개 등록)", flush=True)
+                # 레벨 갱신 중 systemd watchdog ping — 4분 블로킹 루프에서 timeout 방지
+                # ref: lessons/20260417_2 (refresh_levels 중 watchdog ping 누락 → SIGABRT)
+                try:
+                    _sd_watchdog()
+                    self._last_heartbeat = _time.monotonic()
+                except Exception:
+                    pass
 
         self.levels = new_levels
         print(f"  레벨 계산 완료: {len(self.levels)}개 종목", flush=True)
@@ -656,11 +673,22 @@ class RealtimeMonitor:
                                 self._last_msg_ts = _time.monotonic()  # P7-07
                                 await self._handle_tick(data)
 
-                                # heartbeat: 5분마다 /tmp/bata_heartbeat touch
+                                # heartbeat: 2분마다 /tmp/bata_heartbeat touch + systemd watchdog
+                                # WatchdogSec=300의 절반(150s 미만) 주기로 핑해야 경계조건 timeout 회피
+                                # ref: lessons/20260417_2 (systemd notify watchdog 규칙)
                                 _now_mono = _time.monotonic()
-                                if _now_mono - self._last_heartbeat >= 300:
+                                if _now_mono - self._last_heartbeat >= 120:
                                     self._last_heartbeat = _now_mono
-                                    Path("/tmp/bata_heartbeat").touch()
+                                    try:
+                                        Path("/tmp/bata_heartbeat").touch()
+                                    except Exception:
+                                        # 로컬(Windows) / 권한 문제 시 조용히 통과
+                                        pass
+                                    # systemd WatchdogSec=300 핑 (P7-05)
+                                    try:
+                                        _sd_watchdog()
+                                    except Exception:
+                                        pass
 
                             elif msg.type in (aiohttp.WSMsgType.ERROR, aiohttp.WSMsgType.CLOSED):
                                 print("웹소켓 연결 종료")
@@ -1175,6 +1203,7 @@ class RealtimeMonitor:
         # A. 하락장 필터
         if VB_BEAR_MARKET_FILTER and not self._btc_above_ema:
             gate_skip_reason = "A: 하락장(BTC<EMA200)"
+            record_block("vb_gate_a_bearish", None)
         # D. 연패 쿨다운
         elif is_in_loss_cooldown(cooldown_until):
             gate_skip_reason = f"D: 연패 쿨다운 중 (until {cooldown_until})"
@@ -1448,11 +1477,13 @@ class RealtimeMonitor:
                     if _now - self._cb_log_ts > 60:
                         print(f"  [서킷브레이커-L2] 발동 중 — {symbol} 매수 차단", flush=True)
                         self._cb_log_ts = _now
+                    record_block("cb_l2", symbol)
                     return
                 if is_triggered():
                     if _now - self._cb_log_ts > 60:
                         print(f"  [서킷브레이커] 발동 중 — {symbol} 매수 차단", flush=True)
                         self._cb_log_ts = _now
+                    record_block("cb_l1", symbol)
                     return
             except Exception as e:
                 print(f"  [서킷브레이커] 잔고 조회 실패, 매수 진행: {e}", flush=True)
@@ -1467,6 +1498,7 @@ class RealtimeMonitor:
 
         # v2 필터: BTC EMA(200) 필터 (BTC < EMA200이면 전 종목 신규 매수 차단)
         if not self._btc_above_ema:
+            record_block("ema200_filter", symbol)
             return
 
         today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
@@ -1476,6 +1508,7 @@ class RealtimeMonitor:
             atr_pct = level["atr"] / price
             if atr_pct > MAX_ATR_PCT:
                 print(f"  [{symbol}] ATR 필터 — ATR/price={atr_pct:.1%} > {MAX_ATR_PCT:.0%} 차단", flush=True)
+                record_block("atr_filter", symbol)
                 return
         if IS_DAYTRADING:
             trail_stop = price * (1 - _DT_TRAIL_PCT)

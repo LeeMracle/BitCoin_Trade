@@ -4,25 +4,16 @@
 set -e
 
 SERVICE_FILE="/etc/systemd/system/btc-trader.service"
+SOURCE_FILE="/home/ubuntu/BitCoin_Trade/config/btc-trader.service"
 
-sudo tee $SERVICE_FILE > /dev/null << 'EOF'
-[Unit]
-Description=BTC Auto Trader - Realtime Monitor
-After=network.target
-
-[Service]
-Type=simple
-User=ubuntu
-WorkingDirectory=/home/ubuntu/BitCoin_Trade
-ExecStart=/home/ubuntu/BitCoin_Trade/.venv/bin/python -u scripts/daily_live.py --realtime
-Restart=always
-RestartSec=10
-Environment=PYTHONUTF8=1
-Environment=PYTHONUNBUFFERED=1
-
-[Install]
-WantedBy=multi-user.target
-EOF
+# 단일 진실 원천: config/btc-trader.service (WatchdogSec=300, Type=notify 포함)
+if [ -f "$SOURCE_FILE" ]; then
+    sudo cp "$SOURCE_FILE" "$SERVICE_FILE"
+    echo "서비스 파일 복사: $SOURCE_FILE → $SERVICE_FILE"
+else
+    echo "ERROR: $SOURCE_FILE 없음. 저장소 최신화 후 재시도하세요." >&2
+    exit 1
+fi
 
 sudo systemctl daemon-reload
 sudo systemctl enable btc-trader
