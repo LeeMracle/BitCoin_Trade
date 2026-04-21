@@ -56,9 +56,10 @@ def get_balance() -> dict:
     alts_krw_value = 0.0
     _SKIP = {"KRW", "BTC", "info", "free", "used", "total",
              "timestamp", "datetime"}
+    _DEAD_MARKETS = {"SOLO", "XCORE"}
     alt_coins: dict[str, float] = {}
     for coin, amounts in balance.items():
-        if coin in _SKIP or not isinstance(amounts, dict):
+        if coin in _SKIP or coin in _DEAD_MARKETS or not isinstance(amounts, dict):
             continue
         total_amt = float(amounts.get("total", 0) or 0)
         if total_amt > 0:

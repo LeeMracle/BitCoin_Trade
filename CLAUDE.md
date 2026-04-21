@@ -117,3 +117,4 @@
 | 14 | 이벤트 루프 내 로그는 throttle 필수 — 종목수×빈도 곱 폭발 | [lessons/20260410_1](docs/lessons/20260410_1_cb_log_spam.md) |
 | 15 | 외부 API 의존 초기화는 재시도+백오프 필수 — systemd 재시작은 대체 불가 | [lessons/20260413_1](docs/lessons/20260413_1_startup_refresh_crash.md) |
 | 16 | 배포 스크립트가 전제하는 로컬 CLI(rsync 등)도 pre_deploy_check로 검증 + 폴백 분기 필수 | [lessons/20260419_1](docs/lessons/20260419_1_rsync_missing_deploy_stall.md) |
+| 17 | 다중 프로젝트 공존 서버에서 프로세스 판정 시 `/proc/<pid>/cwd` + 전체 systemd unit 역탐색 필수 — 좀비 오판 방지 | [lessons/20260421_1](docs/lessons/20260421_1_multi_project_process_misdiagnosis.md) |
