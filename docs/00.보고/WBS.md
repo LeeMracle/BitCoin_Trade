@@ -336,5 +336,5 @@
 | 운영 감시 | 필터 통계 일일 체크 (filter_stats)   | P7-09/10 실측 누적                               |
 | 스트레치 | lint_history --weekly 주간 점검      | P6-13 주간 집계 (일요일 실행)                    |
 | 스트레치 | P5-04 레짐 자동 전환 LIVE 승격 ADR   | 현재 DRY-RUN, enabled=false                       |
-| 후속     | cto health 스킬 개선 — systemd 전체 분류 | 교훈 #17 대응, 다른 프로젝트 서비스 가시성 확보 |
+| ~~후속~~ | ~~cto health 스킬 개선 — systemd 전체 분류~~ | **완료(04-22)** — `scripts/server_processes_audit.sh` 신규, SKILL.md 호출 추가 |
 
