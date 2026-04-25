@@ -118,3 +118,5 @@
 | 15 | 외부 API 의존 초기화는 재시도+백오프 필수 — systemd 재시작은 대체 불가 | [lessons/20260413_1](docs/lessons/20260413_1_startup_refresh_crash.md) |
 | 16 | 배포 스크립트가 전제하는 로컬 CLI(rsync 등)도 pre_deploy_check로 검증 + 폴백 분기 필수 | [lessons/20260419_1](docs/lessons/20260419_1_rsync_missing_deploy_stall.md) |
 | 17 | 다중 프로젝트 공존 서버에서 프로세스 판정 시 `/proc/<pid>/cwd` + 전체 systemd unit 역탐색 필수 — 좀비 오판 방지 | [lessons/20260421_1](docs/lessons/20260421_1_multi_project_process_misdiagnosis.md) |
+| 18 | venv 디렉터리 리네임 시 crontab/systemd unit의 인터프리터 경로 동시 갱신 필수 — stderr→로그파일 리디렉션은 silent fail 유발 | [lessons/20260425_1](docs/lessons/20260425_1_crontab_venv_path_drift.md) |
+| 19 | 모듈이 config 상수를 import하지 않고 자체 정의하면 동기화 누락 위험 — 운영 변경 권장 시 코드베이스 전체 grep 필수 + import 통일 | [lessons/20260425_2](docs/lessons/20260425_2_config_constant_self_definition.md) |
