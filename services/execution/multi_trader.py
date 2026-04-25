@@ -29,8 +29,9 @@ from services.execution.upbit_client import get_balance, buy_market, sell_market
 from services.execution.config import STRATEGY
 from services.alerting.notifier import send, notify_error
 
-# 설정
-MAX_POSITIONS = 5           # 최대 동시 보유 종목
+# 설정 — config.py:MAX_POSITIONS 와 동기화 필수 (lessons/20260425_2 참조)
+# TODO: config.py 직접 import 통일 권장 (자체 상수 패턴은 동기화 누락 위험)
+MAX_POSITIONS = 7           # 최대 동시 보유 종목 (04-25 5→7 확대, config.py와 동기화)
 MIN_ORDER_KRW = 5_000       # 업비트 최소 주문
 
 STATE_FILE = Path(__file__).resolve().parents[2] / "workspace" / "multi_trading_state.json"
