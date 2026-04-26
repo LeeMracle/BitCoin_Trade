@@ -33,10 +33,11 @@ STRATEGY = "composite"
 
 # 전략 파라미터 오버라이드 (get_strategy에 전달)
 # 기본값은 각 전략의 make_strategy_XXX 기본값 사용
-# 예: {"dc_period": 20} → composite 전략의 DC 기간을 20일로 축소 (공격적)
-STRATEGY_KWARGS = {"dc_period": 20}
+# 예: {"dc_period": 15} → composite 전략의 DC 기간을 15일로 축소 (더 공격적)
+# 04-26 ADR 20260426-1: 20→15 (멀티코인 OOS Sharpe 0.624→0.803 검증)
+STRATEGY_KWARGS = {"dc_period": 15}
 
-DONCHIAN_PERIOD = 20          # Donchian 채널 기간 (일) — 공격적: 50→20
+DONCHIAN_PERIOD = 15          # Donchian 채널 기간 (일) — 50→20→15 (04-26 추가 단축)
 ATR_PERIOD = 14               # ATR 기간 (일)
 ATR_MULTIPLIER = 3.0          # ATR 트레일링스탑 배수
 
