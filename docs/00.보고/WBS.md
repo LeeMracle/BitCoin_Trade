@@ -1,6 +1,6 @@
 # WBS — Bitcoin Auto-Trading
 
-> 갱신: 2026-04-10
+> 갱신: 2026-05-05 (W19, ML LIVE 가속 도입 P8-27 — threshold 0.45 보수 시작)
 
 ## 진행현황 요약
 
@@ -11,18 +11,49 @@
 | Phase 2 백테스트+전략   | 0    | 0    | 4    | 4    |
 | Phase 3 페이퍼트레이딩  | 0    | 0    | 3    | 3    |
 | Phase 4 실전거래        | 0    | 0    | 21   | 21   |
-| Phase 5 전략고도화      | 2    | 0    | 29   | 31   |
-| **Phase 6 코드품질/린트**| **0**| **0**| **12**| **12**|
-| **Phase 7 운영모니터링** | **0**| **0**| **11**| **11**|
-| **합계**                | **2**| **0**| **85**| **87**|
+| Phase 5 전략고도화      | 2    | 0    | 30   | 32   |
+| Phase 6 코드품질/린트   | 0    | 0    | 12   | 12   |
+| Phase 7 운영모니터링    | 0    | 0    | 11   | 11   |
+| **Phase 8 ML 신호 필터**| **3**| **0**| **25**| **28**|
+| **합계**                | **5**| **0**| **111**| **116**|
 
 > P5-28b는 "조건부 완료"(거래 0건 샘플 부족, 상승장 복귀 시 재집계). P5-02/P5-03은 "리서치 완료, 실행 대기"(BTC 상승장 복귀 + regime BULL 지속 시 착수). Phase 6 전체 완료.
+> Phase 8: 학습/추론/배포까지 완료 (Shadow Mode 활성), 4건 대기 = OHLCV 주입 / v3 모델 개선 / outcome idempotent fix / 3개월 누적 후 A/B 결정.
 
 ## 주간 마일스톤
 
-> 갱신: 2026-04-26 (W17 일요일)
+> 갱신: 2026-05-04 (W19 월요일)
 
-### 이번 주 (04-20 ~ 04-26, W17)
+### 이번 주 (05-04 ~ 05-10, W19)
+
+| 목표 | WBS ID | 상태 | 비고 |
+|------|--------|------|------|
+| **ML 신호 필터 시스템 신설 + Shadow Mode 활성** | **P8-01~22** | **완료** | 23 features, v2_real (CV mean AUC 0.553), AWS 배포, fail-open 정책, shadow JSONL 누적 시작 |
+| pdca-qa 교차검증 + lessons #26 신설 | P8-08, P8-09 | **완료** | realtime_monitor ML hook 누락 발견·수정, MAX_POSITIONS 자체정의 제거 |
+| outcome 매칭 cron 등록 (KST 03:00) | P8-21 | **완료** | shadow 의사결정의 24h 후 도달 여부 자동 기록 (3개월 평가 데이터 수집 시작) |
+| daily_report ML 섹션 + pre_deploy_check 메모리 룰 | P8-18, P8-19 | **완료** | t3.micro RAM 압박 (free 92MB) 모니터링 가시화 |
+| OHLCV 주입 + ML_SHADOW_MODE 가드 (P8-23) | P8-23 | **완료** | 05-05 inference.py에 ccxt 자동 fetch + 60s LRU 캐시. BTC 실 score 0.17 검증 |
+| **ML LIVE 가속 도입 (threshold 0.45)** | **P8-27** | **완료** | 05-05 ADR 20260505-2. OOS 89일 시뮬 PF 1.04 / 1.17 입증 → 0.45 보수 시작, 1주 후 0.50 강화 |
+| v3 모델 개선 (timeframe 정합/도미넌스/cap rank) | P8-24 | 대기 | 1개월+ 후 |
+| **DC15→12 + ATR 12→10% + VOL 1.2→1.0 동시 튜닝** | **P5-30** | **완료** | 05-05 ADR 20260505-1, 매매 0건 30h 후 적극화 + ATR 안전 복귀, 1주 후 평가 |
+| **ML LIVE 가속 도입 (threshold 0.45)** | **P8-27** | **완료** | 05-05 ADR 20260505-2. OOS 89일 시뮬 PF 1.04 (0.45) / 1.17 (0.55) 입증 → 0.45 보수 시작, ML_SHADOW_MODE=0 활성, 5-12 평가 |
+| **신호 발화 dedupe (봉 ID + 60s)** | C-FIX | **완료** | 05-05 lessons #1 부분 준수, ORDER/KRW 16,484회 폭주 차단 |
+| **시작 시 레벨 갱신 알림 정책 fix** | P-FIX2 | **완료** | 05-05 첫 1~2회 실패 알림 X (3회 시 알림), 메시지 truncate, 100회 시 critical |
+| **[쿨다운] 매수 스킵 throttle 60s** | P-FIX | **완료** | 05-05 lessons #14 정신, 봇 만성 재시작 완화 시도 (실효는 24h 후 검증) |
+| ticker `markets=` 배치 분할 (근본 fix) | P-FIX3 | 후속 | URL 너무 김 + 429 — 50개 × 4 batch 분할, 별도 PR로 분리 |
+
+### 지난 주 (04-27 ~ 05-03, W18)
+
+| 목표 | WBS ID | 상태 | 비고 |
+|------|--------|------|------|
+| 좀비 프로세스 + crontab 회귀 + .bak 디렉터리 격리 | (운영변경) | **완료** | lessons #24, daily_live.py --realtime systemd 단독 가동, /proc/<PID>/cwd 검증 |
+| Rate limit 백오프 + CB fallback + 헬스체크 루프 | (P3-운영) | **완료** | lessons #21, ccxt 싱글톤 + fail-closed |
+| Wrapper retry 일괄 적용 금지 + 알림 등급 + 함수 통합 | (P3-운영) | **완료** | lessons #22, 매수/매도 즉시 경로 제외 |
+| Cron heartbeat 짝 + retry 주문 적용 금지 + cron 등록 검증 | (P3-운영) | **완료** | lessons #23 |
+| 멀티 API 키↔환경 매핑 + 매시 critical 헬스체크 | (운영변경) | **완료** | lessons #20, plan 20260502 P0 |
+| 부분 익절/거래량 필터/일일 손실 한도 | (P3-전략) | **완료** | lessons #25 |
+
+### 04-20 ~ 04-26 (W17)
 
 | 목표 | WBS ID | 상태 | 비고 |
 |------|--------|------|------|
@@ -92,13 +123,15 @@
 | Heartbeat watchdog | P7-03~05 | 대기 | 04-11 목표 |
 | State-Exchange 교차검증 + 웹소켓 | P7-06~08 | 대기 | 04-12~13 목표 |
 
-### 다음 주 (04-27 ~ 05-03, W18)
+### 다음 주 (05-11 ~ 05-17, W20)
 
 | 목표 | WBS ID | 상태 | 조건/비고 |
 |------|--------|------|----------|
-| P6-13 주간 린트 추이 리뷰 | P6-13 후속 | 조건부 | 일요일(04-26) --weekly 결과 검토 |
+| **ML LIVE 1주 평가 (PF/승률/차단률)** | **P8-27 후속** | **필수** | 5-12 평가 — PF≥1.0 → 0.50 강화, PF<0.95 → 0.40 완화 또는 SHADOW 복귀 |
+| **P5-30 (DC12+ATR10%+VOL1.0) 평가** | P5-30 후속 | 필수 | 동일 5-12 평가 — 매매 빈도 + 손절 비율 |
+| ML threshold 강화 (0.45→0.50) 또는 롤백 | P8-27 | 조건부 | 5-12 평가 결과 따라 |
+| outcome JSONL idempotent fix | P8-25 | 대기 | 1주 운영 후 중복 라인 발생 패턴 확인 |
 | P5-04 LIVE 승격 ADR | P5-04 후속 | 스트레치 | DRY-RUN 로그 1주 이상 누적 후 결정 |
-| VB 재집계 자동 트리거 동작 확인 | P5-28b 후속 | 조건부 | BULL 감지 시 텔레그램/리포트 생성 검증 |
 | P5-02 VB 파라미터 최적화 착수 | P5-02 | 대기 | BULL 레짐 7일 유지 시 자동 착수 |
 | P5-03 알트 펌프 서핑 재검토 | P5-03 | 대기 | BULL 레짐 7일 유지 시 자동 착수 |
 | lint_meta 신규 lesson 즉시 매핑 운영 | - | 상시 | 신규 lesson 발생 시 즉시 규칙 매핑 |
@@ -245,6 +278,7 @@
 | ID     | 태스크                                | 담당   | 선행   | 상태     | 목표일 | 비고                                   |
 | ------ | ------------------------------------- | ------ | ------ | -------- | ------ | -------------------------------------- |
 | P5-29  | Composite DC(20)→DC(15) 단축 + 배포   | Claude | P5-26  | **완료** | 04-26  | 단일 BTC OOS Sharpe 1.140→1.375, 멀티 6코인 평균 0.624→0.803, 200EMA 유지, ADR 20260426-1, cto gate PASS, AWS 반영 |
+| P5-30  | DC15→DC12 + ATR 12→10% + VOL 1.2→1.0 동시 튜닝 | Claude | P5-29 | **완료** | 05-05 | ADR 20260505-1. 5-3~5-5 매매 0건 30h + ATR 차단 0건 실측 → ATR 안전 복귀(lessons #13) + DC/VOL 적극화. 1주 후 평가 |
 
 ## Phase 6: 코드 품질 / 린트 층 (Lint Layer)
 
@@ -334,16 +368,83 @@
 | P7-10 | 일일 보고에 필터 통계 포함                | Claude | P7-09 | **완료** | 04-18  | daily_report.py "필터 차단 통계" 섹션           |
 | P7-11 | CTO 재검증 (모니터링 전체)                | Claude | P7-10 | **완료** | 04-18  | gate PASS → deploy 성공, XRP 차단 실측 확인     |
 
-## 지금 할 수 있는 일 (2026-04-21 갱신, W17)
+## Phase 8: ML 신호 품질 필터 (Signal Quality Scoring)
+
+> 설계: [output/ml_signal_filter_architecture.html](../../output/ml_signal_filter_architecture.html)
+> Plan: [workspace/plans/20260504_3_ml_signal_filter.md](../../workspace/plans/20260504_3_ml_signal_filter.md)
+> ADR: [docs/decisions/20260504_2_ml_signal_filter.md](../decisions/20260504_2_ml_signal_filter.md)
+> 목표: DC15 매수 신호의 +5% 도달 확률을 XGBoost로 스코어링 → fail-open 게이트로 사용. 가격 예측 X, 신호 품질 스코어링.
+
+### 8-A. 학습 인프라 (S1~S4) ✅
+
+| ID    | 태스크                                       | 담당   | 선행  | 상태     | 목표일 | 비고                                                        |
+| ----- | -------------------------------------------- | ------ | ----- | -------- | ------ | ----------------------------------------------------------- |
+| P8-01 | Plan + 디렉터리/requirements 셋업            | Claude | -     | **완료** | 05-04  | services/ml/, requirements-ml.txt, config.py 단일 출처      |
+| P8-02 | features.py + feature_store.py (18 feature)  | Claude | P8-01 | **완료** | 05-04  | lookahead 차단(at_ts cutoff), Parquet IO, 일자별 dedup       |
+| P8-03 | labeler.py + dummy 데이터셋                  | Claude | P8-02 | **완료** | 05-04  | +5%/horizon/slippage 0.2%, make_dummy_dataset (CI용)         |
+| P8-04 | trainer.py + scripts/ml_train.py             | Claude | P8-03 | **완료** | 05-04  | XGBoost + walk-forward 6 folds, model registry, dry-run 통과 |
+
+### 8-B. 추론/통합 + QA (S5~S7) ✅
+
+| ID    | 태스크                                       | 담당   | 선행  | 상태     | 목표일 | 비고                                                        |
+| ----- | -------------------------------------------- | ------ | ----- | -------- | ------ | ----------------------------------------------------------- |
+| P8-05 | inference.py (MLFilter) + shadow.py          | Claude | P8-04 | **완료** | 05-04  | fail-open 정책, 싱글톤, JSONL 로거 (log_decision/log_outcome) |
+| P8-06 | multi_trader 매수 hook + deploy_model_to_aws.sh | Claude | P8-05 | **완료** | 05-04  | ML_FILTER_ENABLED=0 시 zero-cost, scp 폴백, 원자 심볼릭 전환  |
+| P8-07 | ADR + pre_deploy_check ML 검증룰 5개         | Claude | P8-06 | **완료** | 05-04  | meta 존재/threshold 범위/feature 카탈로그 일치/AUC sanity     |
+| P8-08 | [QA-FIX] realtime_monitor ML hook 누락 수정   | Claude | P8-07 | **완료** | 05-04  | pdca-qa MAJOR 발견 → 모든 매수 경로에 hook + lessons #26     |
+| P8-09 | [QA-FIX] MAX_POSITIONS 자체정의 제거         | Claude | P8-08 | **완료** | 05-04  | multi_trader → config.py import 통일 (lessons #19 해소)      |
+
+### 8-C. 모델 v2 (실데이터 학습 + 비교 실험) ✅
+
+| ID    | 태스크                                       | 담당   | 선행  | 상태     | 목표일 | 비고                                                        |
+| ----- | -------------------------------------------- | ------ | ----- | -------- | ------ | ----------------------------------------------------------- |
+| P8-10 | scripts/ml_build_dataset.py (실데이터)        | Claude | P8-04 | **완료** | 05-04  | DuckDB 4h × 11종 코인 × 3.8년 → DC15 돌파 3,430 샘플          |
+| P8-11 | v1_real 학습 (18 feature)                    | Claude | P8-10 | **완료** | 05-04  | walk-forward AUC 0.543 / Precision 0.518                    |
+| P8-12 | Feature 18→23 보강 (F&G/MACD/BB/Stoch/btc_corr) | Claude | P8-11 | **완료** | 05-04  | macro 테이블 F&G 실데이터 활용 (2018~2026, 2982일)            |
+| P8-13 | v2_real 학습 (23 feature)                    | Claude | P8-12 | **완료** | 05-04  | AUC 0.553 / Precision 0.530, F&G #2 importance               |
+| P8-14 | XGBoost vs LightGBM 비교                     | Claude | P8-13 | **완료** | 05-04  | LGB 0.5556 vs XGB 0.5532 동등, **XGBoost 유지** 결정          |
+| P8-15 | BTC 단독 vs 11종 통합 비교                   | Claude | P8-13 | **완료** | 05-04  | BTC 단독 0.477 (표본 320 부족), **통합 v2_real 채택**         |
+
+### 8-D. AWS 배포 + Shadow Mode 활성 ✅
+
+| ID    | 태스크                                       | 담당   | 선행  | 상태     | 목표일 | 비고                                                        |
+| ----- | -------------------------------------------- | ------ | ----- | -------- | ------ | ----------------------------------------------------------- |
+| P8-16 | AWS venv ML 패키지 설치 (xgb/sklearn/joblib/pyarrow) | Claude | -     | **완료** | 05-04  | services/pyproject.toml에 [ml] optional + 직접 설치, nvidia-nccl 제거 |
+| P8-17 | data/models/ + 모델 파일 배포                | Claude | P8-16 | **완료** | 05-04  | scp 폴백, current.pkl 심볼릭 → signal_filter_v2_real.pkl     |
+| P8-18 | systemd drop-in ML_FILTER_ENABLED=1 + restart | Claude | P8-17 | **완료** | 05-04  | btc-trader PID 144899 → 150922, 무중단 재시작 (TimeoutStartSec=600) |
+
+### 8-E. 모니터링 + Outcome 매칭 ✅
+
+| ID    | 태스크                                       | 담당   | 선행  | 상태     | 목표일 | 비고                                                        |
+| ----- | -------------------------------------------- | ------ | ----- | -------- | ------ | ----------------------------------------------------------- |
+| P8-19 | pre_deploy_check 메모리 임계 룰              | Claude | P8-18 | **완료** | 05-04  | free <100MB ERROR / <200MB WARN / swap >80% WARN (lessons #5) |
+| P8-20 | daily_report ML 섹션                         | Claude | P8-18 | **완료** | 05-04  | 활성 여부/모델/오늘 의사결정 통계 (buy/block, mean score)     |
+| P8-21 | outcome_matcher 모듈 + ml_outcome_match.py   | Claude | P8-18 | **완료** | 05-04  | ccxt 4h 6봉 high vs entry×1.052 → reached_target            |
+| P8-22 | outcome cron 등록 (KST 03:00) + ml_effect_analysis.py | Claude | P8-21 | **완료** | 05-04  | 매일 어제 결정의 24h 후 도달 자동 기록, confusion+가상 PnL 분석 |
+
+### 8-F. 후속 작업 (대기)
+
+| ID    | 태스크                                       | 담당   | 선행  | 상태 | 목표일 | 비고                                                        |
+| ----- | -------------------------------------------- | ------ | ----- | ---- | ------ | ----------------------------------------------------------- |
+| P8-23 | OHLCV 주입 (실 score 분포 만들기)            | Claude | P8-22 | **완료** | 05-05  | MLFilter.score() 내부 ccxt 자동 fetch + 60s LRU 캐시. ML_SHADOW_MODE=1 추가 (차단 없이 score 누적). BTC 실 score 0.17 검증 |
+| P8-24 | v3 모델 개선 (timeframe 정합/도미넌스/cap rank) | Claude | P8-23 | 대기 | W22+   | 4h vs 15m feature 가정 통일, BTC dominance CoinGecko, market_cap_rank Upbit 실측 |
+| P8-25 | outcome JSONL idempotent fix                  | Claude | P8-22 | 대기 | W20    | 현재 outcome이 signal_ts 날짜 파일에 저장 → 재실행 시 중복 가능 |
+| P8-26 | 3개월 누적 후 A/B 검증 + Live 승격 결정       | 사용자 | P8-23 | **건너뜀** | -      | OOS 백테스트로 압축 (P8-27) — 사용자 "최대 효과 신속히" 요구 |
+| P8-27 | **ML LIVE 가속 (threshold 0.45 보수 시작)**   | Claude | P8-23 | **완료** | 05-05  | OOS 89일 시뮬 PF 1.04 (0.45) / 1.17 (0.55) 입증, ADR 20260505-2, ML_SHADOW_MODE=0 활성, 1주 후 0.50 강화 또는 롤백 |
+| P8-28 | 1주 자동 평가 cron (5-12 KST 18:00)          | Claude | P8-27 | **완료** | 05-05  | scripts/ml_weekly_review.py + crontab `0 9 12 5 *` — closed_trades + shadow JSONL outcome 통합 → 텔레그램 자동 발송 |
+
+## 지금 할 수 있는 일 (2026-05-05 갱신, W19 — ML LIVE 활성)
 
 | ID       | 태스크                               | 비고                                             |
 | -------- | ------------------------------------ | ------------------------------------------------ |
-| P5-02    | VB 파라미터 최적화 (대기)            | BULL 레짐 7일 유지 시 자동 착수 — 현재 BEAR 3일차 |
+| 🔴 P8-27  | **ML LIVE 1주 모니터링 (5-12 평가)**   | threshold 0.45 활성, 차단/허용 outcome 추적 (매일 KST 03:00 cron) |
+| 🔴 P5-30  | **DC12 + ATR 10% + VOL 1.0 평가**     | 매매 빈도 / 손절률 / PF — 5-12 통합 평가         |
+| 🟡 운영 감시 | ML 차단 비율 (`record_block(ml_filter)`) | 30~50% 권장. 95%+ 또는 5%- 시 임계 재조정     |
+| 🟡 운영 감시 | t3.micro 메모리 (ML LIVE 후 RSS 209MB) | free 150MB, swap 약 65% — OOM 임박 감시         |
+| 🟡 운영 감시 | btc-trader 가동 안정성                 | PID 194328, watchdog/heartbeat 정상 여부        |
+| P8-25    | outcome JSONL idempotent fix          | 1주 운영 후 중복 라인 패턴 확인 시 진행          |
+| P5-02    | VB 파라미터 최적화 (대기)            | BULL 레짐 7일 유지 시 자동 착수 — 현재 BEAR 지속 |
 | P5-03    | 알트 펌프 서핑 재검토 (대기)         | BULL 레짐 7일 유지 시 자동 착수 — 동일 조건      |
-| 운영 감시 | VB 샘플 수집 모니터링                | `vb_recheck_trigger` cron 09:15 KST 자동         |
-| 운영 감시 | 레짐 복귀 감시 (regime_state.json)   | recent_signals BULL 전환 주시                    |
-| 운영 감시 | 필터 통계 일일 체크 (filter_stats)   | P7-09/10 실측 누적                               |
-| 스트레치 | lint_history --weekly 주간 점검      | P6-13 주간 집계 (일요일 실행)                    |
+| 스트레치 | 시드머니 증액 검토 (PF≥1.2 안정 시)   | 6월 이후, 강제 금지선: 누적 -10% 시 재검토       |
 | 스트레치 | P5-04 레짐 자동 전환 LIVE 승격 ADR   | 현재 DRY-RUN, enabled=false                       |
-| ~~후속~~ | ~~cto health 스킬 개선 — systemd 전체 분류~~ | **완료(04-22)** — `scripts/server_processes_audit.sh` 신규, SKILL.md 호출 추가 |
 

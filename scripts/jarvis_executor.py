@@ -444,13 +444,40 @@ def run(force_dry_run: bool = False):
     # 상태 저장
     _save_json(STATE_FILE, state)
 
-    # 텔레그램 보고 (변동 있을 때만)
-    if all_msgs:
-        report = f"[자비스 실행기] {_now_kst():%H:%M} KST\n\n" + "\n\n".join(all_msgs)
+    # ── P1 침묵 모드: 매매 메시지는 즉시, 오류 메시지는 1h 디바운스 ──
+    # plan: workspace/plans/20260502_reporting_system_overhaul.md
+    # 같은 오류가 매시 24회 텔레그램 폭주하는 사고(2026-05-01 23:00 인증실패) 재발 방지.
+    # critical_healthcheck.py가 매시 5분 별도로 critical 항목을 잡아주므로
+    # jarvis 자체 오류 알림은 디바운스해도 단절 위험 없음.
+    trade_msgs = [m for m in all_msgs if "처리 오류" not in m and "지표 조회 실패" not in m]
+    error_msgs = [m for m in all_msgs if "처리 오류" in m or "지표 조회 실패" in m]
+
+    filtered_errors = error_msgs
+    if error_msgs:
+        try:
+            from pathlib import Path as _Path
+            err_flag = _Path("/tmp/bata_jarvis_last_error.json")
+            signature = "|".join(sorted(set(error_msgs)))
+            debounce_sec = 3600
+            if err_flag.exists():
+                last = json.loads(err_flag.read_text(encoding="utf-8"))
+                age = time.time() - err_flag.stat().st_mtime
+                if last.get("signature") == signature and age < debounce_sec:
+                    _log(f"동일 오류 디바운스 ({int(age)}s < {debounce_sec}s) — 알림 스킵")
+                    filtered_errors = []
+            if filtered_errors:
+                err_flag.write_text(json.dumps({"signature": signature}),
+                                    encoding="utf-8")
+        except Exception as _e:
+            _log(f"오류 디바운스 처리 실패 (그대로 발송): {_e}")
+
+    final_msgs = trade_msgs + filtered_errors
+    if final_msgs:
+        report = f"[자비스 실행기] {_now_kst():%H:%M} KST\n\n" + "\n\n".join(final_msgs)
         _send_telegram(report)
         _log("텔레그램 보고 발송")
     else:
-        _log("변동 없음 — 보고 생략")
+        _log("변동 없음 또는 디바운스 — 보고 생략")
 
 
 def show_status():

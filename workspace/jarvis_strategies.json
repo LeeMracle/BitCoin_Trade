@@ -1,7 +1,7 @@
 {
   "BTC/KRW": {
     "side": "sell",
-    "description": "BTC 수동매수분 3단계 분할매도 (2026-04-05 설정)",
+    "description": "BTC 수동매수분 3단계 분할매도 (2026-04-05 설정, 2026-05-04 사용자 수동 매도 완료로 비활성화)",
     "steps": [
       {
         "id": "sl",
@@ -29,7 +29,9 @@
         "note": "F&G 중립 회복 시 잔량 전량 익절"
       }
     ],
-    "active": true,
-    "dry_run": false
+    "active": false,
+    "dry_run": false,
+    "deactivated_at": "2026-05-04",
+    "deactivated_reason": "사용자 BTC 수동 매도 완료, 자비스 분할매도 더 이상 불필요"
   }
 }

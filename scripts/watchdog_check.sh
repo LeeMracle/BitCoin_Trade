@@ -41,13 +41,13 @@ if [ "$AGE" -ge "$MAX_AGE_SEC" ]; then
         fi
     fi
 
-    # 텔레그램 경보
+    # 텔레그램 경보 (plan 20260503_4 P4-1: send_critical 등급 마이그레이션)
     cd /home/ubuntu/BitCoin_Trade
     source .venv/bin/activate
     PYTHONUTF8=1 python3 -c "
 import asyncio
-from services.alerting.notifier import send
-asyncio.run(send('🚨 *Heartbeat Watchdog 경보*\nBata 봇 heartbeat ${AGE}초 미갱신\n자동 재시작 시도...'))
+from services.alerting.notifier import send_critical
+asyncio.run(send_critical('Heartbeat Watchdog 경보\nBata 봇 heartbeat ${AGE}초 미갱신\n자동 재시작 시도...', parse_mode=None))
 "
 
     # 서비스 재시작

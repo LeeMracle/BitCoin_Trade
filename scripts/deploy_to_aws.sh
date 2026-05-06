@@ -55,7 +55,9 @@ EXCLUDES=(
     --exclude=__pycache__
     --exclude='*.egg-info'
     --exclude=data/cache.duckdb
+    --exclude=data/features
     --exclude='workspace/runs/20*'
+    --exclude='workspace/ml_shadow'
 )
 
 if command -v rsync >/dev/null 2>&1; then
@@ -103,22 +105,35 @@ PROJECT_DIR="/home/ubuntu/BitCoin_Trade"
 
 # 로그 파일 초기화 (lessons/20260418_2 — cron은 /var/log/에 새 파일을 생성할 권한이 없어 redirect가 silent fail)
 # 배포 때마다 touch로 보장. 기존 파일이 있으면 내용 유지.
-LOG_FILES=(/var/log/btc_trader.log /var/log/btc_report.log /var/log/watchdog_check.log /var/log/log_volume.log /var/log/jarvis_executor.log /var/log/vb_recheck_trigger.log /var/log/regime_check.log)
+LOG_FILES=(/var/log/btc_trader.log /var/log/btc_report.log /var/log/watchdog_check.log /var/log/log_volume.log /var/log/jarvis_executor.log /var/log/vb_recheck_trigger.log /var/log/regime_check.log /var/log/critical_healthcheck.log /var/log/hourly_digest.log /var/log/ml_outcome.log)
 sudo touch "${LOG_FILES[@]}"
 sudo chown ubuntu:ubuntu "${LOG_FILES[@]}"
 
 CRON_LIVE="5 0 * * * cd $PROJECT_DIR && $PROJECT_DIR/.venv/bin/python scripts/daily_live.py >> /var/log/btc_trader.log 2>&1"
-CRON_REPORT="10 0 * * * cd $PROJECT_DIR && PYTHONUTF8=1 $PROJECT_DIR/.venv/bin/python scripts/daily_report.py >> /var/log/btc_report.log 2>&1"
+# plan 20260502: 09:10 KST CRON_REPORT 제거 — 18:00 KST 마감 종합 단일화
+# 18:00 KST (= 09:00 UTC) 일일 마감 종합 보고 (헬스체크 9개 항목 포함)
+CRON_REPORT_18="0 9 * * * cd $PROJECT_DIR && PYTHONUTF8=1 $PROJECT_DIR/.venv/bin/python scripts/daily_report.py >> /var/log/btc_report.log 2>&1"
 # P7-04: 매 1분 watchdog 체크 (heartbeat 10분 미갱신 시 경보 + systemctl restart)
 CRON_WATCHDOG="* * * * * /home/ubuntu/BitCoin_Trade/scripts/watchdog_check.sh"
-# P7-08: 매일 00:10 UTC (09:10 KST) 로그 볼륨 감시
+# P7-08: 매일 00:10 UTC (09:10 KST) 로그 볼륨 감시 (정상 시 침묵, 이상 시만 즉시 발송 — plan 20260502)
 CRON_LOGVOL="10 0 * * * /home/ubuntu/BitCoin_Trade/scripts/log_volume_check.sh"
-# P4-14c: 매시 정각 jarvis_executor (BTC 3단계 분할매도 등 활성 전략 자동 실행). ref: lessons/20260408_1
-CRON_JARVIS="0 * * * * cd $PROJECT_DIR && PYTHONUTF8=1 $PROJECT_DIR/.venv/bin/python scripts/jarvis_executor.py >> /var/log/jarvis_executor.log 2>&1"
+# P4-14c: jarvis_executor — 2026-05-05 STOP (BTC 분할매도 전략 5-4 사용자 수동 매도 완료, 비활성)
+# 활성화 시 아래 라인의 # 제거 + echo 라인의 # 제거로 복귀 (jarvis_strategies.json 활성 전략 등록 후)
+# CRON_JARVIS="0 0 * * * cd $PROJECT_DIR && PYTHONUTF8=1 $PROJECT_DIR/.venv/bin/python scripts/jarvis_executor.py >> /var/log/jarvis_executor.log 2>&1"
 # VB 재검증 트리거: 매일 09:15 KST (= UTC 00:15) — BTC EMA200 7일 연속 충족 시 재집계 보고서 생성
 CRON_VB_RECHECK="15 0 * * * cd $PROJECT_DIR && PYTHONUTF8=1 $PROJECT_DIR/.venv/bin/python scripts/vb_recheck_trigger.py --notify >> /var/log/vb_recheck_trigger.log 2>&1"
-# P5-04: 매시 25분 레짐 자동 판정 (BULL/BEAR/SIDEWAYS), 히스테리시스 3회 후 전환 시 텔레그램 알림
-CRON_REGIME="25 * * * * cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_DIR $PROJECT_DIR/.venv/bin/python scripts/regime_check.py --notify >> /var/log/regime_check.log 2>&1"
+# P5-04: 일 1회 KST 09:30 레짐 자동 판정 (2026-05-05 매시→일1회 축소, 알림 제거)
+# 사유: BTC EMA200은 일봉 지표 — 시간단위 갱신 불필요. 자원 24배 절감.
+# regime_state.json은 healthcheck/hourly_digest에서 참조하므로 cron 자체는 유지.
+# healthcheck 임계도 2h → 26h 동시 조정 (services/healthcheck/runner.py)
+CRON_REGIME="30 0 * * * cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_DIR $PROJECT_DIR/.venv/bin/python scripts/regime_check.py >> /var/log/regime_check.log 2>&1"
+# plan 20260502 P0: 매시 5분 critical 헬스체크 (인증·jarvis cron) — FAIL 시만 즉시 알람, 30분 디바운스
+# 배경: 2026-05-01 23:00 KST 인증실패 8h 무감지 사고 재발 방지 (lessons #20)
+CRON_CRITICAL="5 * * * * cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_DIR $PROJECT_DIR/.venv/bin/python scripts/critical_healthcheck.py >> /var/log/critical_healthcheck.log 2>&1"
+# plan 20260503_4 P4-2: 매시 30분 hourly_digest — 2026-05-04 사용자 요청으로 비활성화 (cron 등록 안 함)
+# CRON_DIGEST="30 * * * * cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_DIR $PROJECT_DIR/.venv/bin/python scripts/hourly_digest.py >> /var/log/hourly_digest.log 2>&1"
+# plan 20260504_3 P1: ML outcome 매칭 — 매일 KST 03:00 (UTC 18:00) 어제 결정의 24h 도달 여부 기록
+CRON_ML_OUTCOME="0 18 * * * cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_DIR $PROJECT_DIR/.venv/bin/python scripts/ml_outcome_match.py --days 3 >> /var/log/ml_outcome.log 2>&1"
 
 # 기존 등록 제거 후 추가
 (crontab -l 2>/dev/null \
@@ -128,26 +143,33 @@ CRON_REGIME="25 * * * * cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_DIR 
     | grep -v "log_volume_check.sh" \
     | grep -v "jarvis_executor.py" \
     | grep -v "vb_recheck_trigger.py" \
-    | grep -v "regime_check.py"; \
+    | grep -v "regime_check.py" \
+    | grep -v "critical_healthcheck.py" \
+    | grep -v "hourly_digest.py" \
+    | grep -v "ml_outcome_match.py"; \
     echo "$CRON_LIVE"; \
-    echo "$CRON_REPORT"; \
+    echo "$CRON_REPORT_18"; \
     echo "$CRON_WATCHDOG"; \
     echo "$CRON_LOGVOL"; \
-    echo "$CRON_JARVIS"; \
+    : "echo $CRON_JARVIS (STOP — 2026-05-05, 활성화 시 :까지 제거)"; \
     echo "$CRON_VB_RECHECK"; \
-    echo "$CRON_REGIME") | crontab -
+    echo "$CRON_REGIME"; \
+    echo "$CRON_CRITICAL"; \
+    echo "$CRON_ML_OUTCOME") | crontab -
 
 # watchdog/log_volume 스크립트 실행권한 부여
 chmod +x "$PROJECT_DIR/scripts/watchdog_check.sh" "$PROJECT_DIR/scripts/log_volume_check.sh" 2>/dev/null
 
 echo "crontab 등록 완료:"
-crontab -l | grep -E "(btc_(trader|report)|watchdog_check|log_volume_check|jarvis_executor|vb_recheck_trigger|regime_check)"
+crontab -l | grep -E "(btc_(trader|report)|watchdog_check|log_volume_check|jarvis_executor|vb_recheck_trigger|regime_check|critical_healthcheck)"
 CRON_SCRIPT
 
 echo ""
 echo "=== 배포 완료! ==="
 echo "  매일 KST 09:05 자동매매 실행"
-echo "  매일 KST 09:10 일일 보고 발송"
+echo "  매일 KST 18:00 일일 마감 종합 보고 (헬스체크 9개 항목 포함)"
+echo "  매시 KST :05  critical 헬스체크 (인증·jarvis cron, 실패 시만 알람)"
 echo "  로그: ssh -i $PEM_KEY $AWS_USER@$AWS_HOST 'tail -f /var/log/btc_trader.log'"
 echo "  보고: ssh -i $PEM_KEY $AWS_USER@$AWS_HOST 'tail -f /var/log/btc_report.log'"
+echo "  critical: ssh -i $PEM_KEY $AWS_USER@$AWS_HOST 'tail -f /var/log/critical_healthcheck.log'"
 echo "  상태: ssh -i $PEM_KEY $AWS_USER@$AWS_HOST 'cd $PROJECT_DIR && .venv/bin/python -m services.execution.trader --status'"

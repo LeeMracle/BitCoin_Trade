@@ -31,6 +31,9 @@ from services.execution.config import (
     STRATEGY, STRATEGY_KWARGS,
     DONCHIAN_PERIOD, ATR_PERIOD, ATR_MULTIPLIER,
     HARD_STOP_LOSS_PCT, MAX_ATR_PCT,
+    TP_LEVELS, TP_ENABLED,
+    VOL_FILTER_ENABLED, VOL_FILTER_MULTIPLIER,
+    DAILY_LOSS_LIMIT_ENABLED, DAILY_LOSS_LIMIT_PCT, DAILY_LOSS_BASE_KRW,
     MAX_POSITIONS, POSITION_RATIO, MIN_VOLUME_KRW,
     MIN_ORDER_KRW, DRY_RUN, EXCLUDE_SYMBOLS, MIN_LISTING_DAYS,
     NOTIFY_ON_BUY, NOTIFY_ON_SELL, NOTIFY_DAILY_REPORT, NOTIFY_NEAR_SIGNAL,
@@ -67,8 +70,17 @@ from services.execution.multi_trader import (
 from services.execution.scanner import get_krw_market_coins
 from services.market_data.fetcher import fetch_ohlcv
 from services.paper_trading.strategy import calc_atr, calc_donchian_upper
-from services.execution.upbit_client import get_balance, _create_exchange
+from services.execution.upbit_client import (
+    get_balance, _create_exchange,
+    load_last_known_balance, RateLimitExhausted,
+)
 from services.alerting.notifier import send, notify_error
+
+# ── ML 신호 필터 (Phase 3 보강, fail-open) ──────────────────
+# multi_trader.py와 동일 정책. ML_FILTER_ENABLED=0(기본) 시 zero-cost.
+# 실시간 매수 경로에도 동일 게이트 적용 — lessons #6 (모든 매수 경로 필터)
+from services.ml.inference import get_filter as _get_ml_filter  # noqa: E402
+from services.ml import shadow as _ml_shadow  # noqa: E402
 from services.common.sd_notify import ready as _sd_ready, watchdog_ping as _sd_watchdog
 
 UPBIT_WS_URL = "wss://api.upbit.com/websocket/v1"
@@ -125,6 +137,11 @@ class RealtimeMonitor:
         self._cb_log_ts: float = 0.0  # 서킷브레이커 로그 throttle (초)
         self._last_heartbeat: float = 0.0  # heartbeat touch 마지막 시각 (monotonic)
         self._last_msg_ts: float = 0.0    # 웹소켓 마지막 메시지 수신 시각 (monotonic, P7-07)
+        # 신호 발화 dedupe (lessons #1) — {symbol: {"bar_id": int, "ts": float}}
+        # _execute_buy 진입 시 같은 15분봉 ID 또는 60s 내 재시도면 skip.
+        # 폭주 차단: ORDER/KRW 한 종목 30h에 16,484회 → 봉당 1회 + 60s = 30h/15m = 120회 내외.
+        self._signal_dedupe: dict[str, dict] = {}
+        self._dedupe_log_ts: float = 0.0  # 차단 로그 60s throttle
 
     async def start(self):
         print("=" * 60, flush=True)
@@ -143,18 +160,31 @@ class RealtimeMonitor:
             print(f"  EMA Trend: {mode}, EMA{EMA_TREND_EMA_PERIOD}/EMA{EMA_TREND_FILTER_PERIOD}, Trail{EMA_TREND_TRAIL_PCT*100:.0f}%", flush=True)
         print("=" * 60, flush=True)
 
-        # 시작 시 레벨 갱신 — API 장애(점검 등) 대비 재시도
+        # 시작 시 레벨 갱신 — API 장애(점검 등) 대비 재시도 (lessons #15)
+        # 알림 정책: 첫 1~2회 실패는 일시적 429 가능성 높아 알림 X.
+        # 3회 연속 실패 시 1회 알림 (메시지 truncate), 100회 모두 실패 시 critical.
+        _refresh_ok = False
         for _attempt in range(1, 100):
             try:
                 await self._refresh_levels()
+                _refresh_ok = True
                 break
             except Exception as e:
                 delay = min(WS_RECONNECT_BASE * (2 ** (_attempt - 1)), WS_RECONNECT_MAX)
-                print(f"  레벨 갱신 실패 (시도 {_attempt}): {e}", flush=True)
+                err_short = str(e)[:200] + ("..." if len(str(e)) > 200 else "")
+                print(f"  레벨 갱신 실패 (시도 {_attempt}): {err_short}", flush=True)
                 print(f"  {delay}초 후 재시도...", flush=True)
-                if _attempt == 1:
-                    await notify_error(f"시작 시 레벨 갱신 실패: {e}\n재시도 대기 중...")
+                if _attempt == 3:
+                    await notify_error(
+                        f"시작 시 레벨 갱신 3회 연속 실패\n"
+                        f"오류: {err_short}\n"
+                        f"계속 재시도 중 (최대 100회)..."
+                    )
                 await asyncio.sleep(delay)
+        if not _refresh_ok:
+            # 100회 모두 실패 — critical
+            from services.alerting.notifier import send_critical
+            await send_critical("시작 시 레벨 갱신 100회 모두 실패 — 봇 시작 불가, 즉시 점검 필요")
 
         # systemd Type=notify 환경에서 "READY=1" — 없으면 no-op
         try:
@@ -176,9 +206,10 @@ class RealtimeMonitor:
             if not self.running:
                 break
             try:
-                from services.execution.upbit_client import _create_exchange
+                # plan 20260503 P3-2: with_retry 적용 (조회 전용, 1h 주기라 즉시성 무관)
+                from services.execution.upbit_client import _create_exchange, with_retry
                 exchange = _create_exchange()
-                raw_balance = exchange.fetch_balance()
+                raw_balance = with_retry(exchange.fetch_balance)
 
                 # 거래소 보유 코인 (KRW·BTC·메타키·먼지 제외)
                 # 먼지 판별: 유효 마켓이 있고 평가액 > 5000원
@@ -199,7 +230,7 @@ class RealtimeMonitor:
                     valid = [c for c in alt_coins if f"{c}/KRW" in markets]
                     if valid:
                         try:
-                            tickers = exchange.fetch_tickers([f"{c}/KRW" for c in valid])
+                            tickers = with_retry(exchange.fetch_tickers, [f"{c}/KRW" for c in valid])
                             for c in valid:
                                 sym = f"{c}/KRW"
                                 price = float(tickers.get(sym, {}).get("last", 0) or 0)
@@ -210,23 +241,107 @@ class RealtimeMonitor:
                             for c in valid:
                                 exchange_coins.add(f"{c}/KRW")
 
-                # state 보유 코인
-                state_coins = set(self.state.get("positions", {}).keys())
+                # state 보유 코인 — 3개 전략 state 합집합 (lessons #10, worktree festive-thompson)
+                #   composite: self.state["positions"]      (multi_trading_state.json)
+                #   VB:        self._vb_positions            (vb_state.json) — DRY_RUN 시 가상 포지션 제외
+                #   EMA Trend: self._ema_trend_position      (ema_trend_state.json, BTC/KRW 단일)
+                composite_coins = set(self.state.get("positions", {}).keys())
+                # 2026-05-06: VB_DRY_RUN=True면 가상 포지션이라 거래소 실잔고와 불일치 정상 → 검증 제외
+                vb_coins = set()
+                if hasattr(self, "_vb_positions") and not VB_DRY_RUN:
+                    vb_coins = set(self._vb_positions.keys())
+                ema_coins = {"BTC/KRW"} if getattr(self, "_ema_trend_position", None) else set()
+                state_coins = composite_coins | vb_coins | ema_coins
 
                 only_exchange = exchange_coins - state_coins
                 only_state = state_coins - exchange_coins
 
                 if only_exchange or only_state:
-                    msg = "⚠️ *State ↔ Exchange 불일치 감지*\n"
-                    if only_exchange:
-                        msg += f"거래소에만 존재: {', '.join(only_exchange)}\n"
-                    if only_state:
-                        msg += f"State에만 존재: {', '.join(only_state)}\n"
-                    msg += "자동 보정 없음 — 수동 확인 필요"
-                    await notify_error(msg)
-                    print(f"  [교차검증] 불일치: exchange_only={only_exchange}, state_only={only_state}", flush=True)
+                    # plan 20260503 (race condition 보호 — AKT 12:15 false alarm 사고):
+                    # ① 메모리 state는 매수 직후 timing race로 누락 가능 → 파일에서 재로드 (AC P0+)
+                    # ② state 파일 mtime 60초 이내면 알림 보류, 다음 사이클(1h 후) 재검증.
+                    import time as _t
+                    _ws = Path(__file__).resolve().parents[2] / "workspace"
+                    state_files = [
+                        _ws / "multi_trading_state.json",
+                        _ws / "vb_state.json",
+                    ]
+                    # state 파일 재로드 — 메모리 self.state 누락 보강
+                    try:
+                        reloaded_composite = set()
+                        if state_files[0].exists():
+                            with open(state_files[0], "r", encoding="utf-8") as f:
+                                reloaded_composite = set(json.load(f).get("positions", {}).keys())
+                        reloaded_vb = set()
+                        if state_files[1].exists():
+                            with open(state_files[1], "r", encoding="utf-8") as f:
+                                reloaded_vb = set(json.load(f).get("positions", {}).keys())
+                        reloaded_state = reloaded_composite | reloaded_vb | ema_coins
+                        only_exchange = exchange_coins - reloaded_state
+                        only_state = reloaded_state - exchange_coins
+                        if not only_exchange and not only_state:
+                            print(f"  [교차검증] 재로드 후 일치 OK — false alarm 회피", flush=True)
+                            continue
+                    except Exception as _e:
+                        print(f"  [교차검증] state 재로드 실패, 메모리 기준 진행: {_e}", flush=True)
+
+                    youngest = max(
+                        (f.stat().st_mtime for f in state_files if f.exists()),
+                        default=0,
+                    )
+                    state_age = _t.time() - youngest
+                    if state_age < 60:
+                        print(f"  [교차검증] 차집합 발견했지만 state 최근 갱신({state_age:.0f}s) — "
+                              f"알림 보류, 다음 사이클 재검증 "
+                              f"(exchange_only={only_exchange}, state_only={only_state})", flush=True)
+                    else:
+                        # plan 20260504: 2회 연속 동일 차집합 시만 알림 (false alarm 추가 차단)
+                        # 2026-05-06 디바운스 2→3회 강화 (ML LIVE 활성화로 매매 빈도 ↑, 시차 알림 노이즈 ↓)
+                        # signature 형식: "count|sigs"
+                        REQUIRED_CONSEC = 3
+                        pending_flag = Path("/tmp/bata_state_mismatch_pending")
+                        sig = "|".join(sorted(only_exchange) + sorted(only_state))
+                        if pending_flag.exists():
+                            try:
+                                last_raw = pending_flag.read_text(encoding="utf-8").strip()
+                                if "::" in last_raw:
+                                    last_count_str, last_sig = last_raw.split("::", 1)
+                                    last_count = int(last_count_str) if last_count_str.isdigit() else 1
+                                else:
+                                    last_count = 1
+                                    last_sig = last_raw
+                            except Exception:
+                                last_count, last_sig = 1, ""
+                            if last_sig == sig:
+                                new_count = last_count + 1
+                                if new_count >= REQUIRED_CONSEC:
+                                    msg = f"⚠️ *State ↔ Exchange 불일치 ({new_count}회 연속 확인)*\n"
+                                    if only_exchange:
+                                        msg += f"거래소에만 존재: {', '.join(only_exchange)}\n"
+                                    if only_state:
+                                        msg += f"State에만 존재: {', '.join(only_state)}\n"
+                                    msg += f"자동 보정 없음 — 수동 확인 필요 (state {state_age:.0f}s 전 갱신, {new_count}회 연속)"
+                                    await notify_error(msg)
+                                    print(f"  [교차검증] {new_count}회 연속 불일치 — 알림 발송 + pending 클리어", flush=True)
+                                    pending_flag.unlink(missing_ok=True)
+                                else:
+                                    pending_flag.write_text(f"{new_count}::{sig}", encoding="utf-8")
+                                    print(f"  [교차검증] 차집합 {new_count}회 누적 (필요 {REQUIRED_CONSEC}회), 다음 사이클 재확인", flush=True)
+                            else:
+                                pending_flag.write_text(f"1::{sig}", encoding="utf-8")
+                                print(f"  [교차검증] signature 변경 ({last_sig[:60]} → {sig[:60]}), 카운터 리셋", flush=True)
+                        else:
+                            pending_flag.write_text(f"1::{sig}", encoding="utf-8")
+                            print(f"  [교차검증] 차집합 1회 발견 — 다음 사이클(1h 후) 재확인 대기 "
+                                  f"(exchange_only={only_exchange}, state_only={only_state})", flush=True)
                 else:
-                    print(f"  [교차검증] 일치 OK — {len(exchange_coins)}종목", flush=True)
+                    # 일치 OK 시 pending 클리어 (1회차 차집합 후 회복된 케이스)
+                    pending_flag = Path("/tmp/bata_state_mismatch_pending")
+                    if pending_flag.exists():
+                        pending_flag.unlink(missing_ok=True)
+                        print(f"  [교차검증] 일치 OK — pending 클리어 (false alarm 회피)", flush=True)
+                    else:
+                        print(f"  [교차검증] 일치 OK — {len(exchange_coins)}종목", flush=True)
             except Exception as e:
                 print(f"  [교차검증] 오류: {e}", flush=True)
 
@@ -241,6 +356,11 @@ class RealtimeMonitor:
         try:
             balance = get_balance()
             total_krw = balance.get("total_krw", 0)
+        except RateLimitExhausted as e:
+            # plan 20260503 P0 (cto 2차 #4): 주기 CB도 잔고 실패 시 동일 알람 정책
+            print(f"  [CB-주기체크] 잔고 조회 429: {e}", flush=True)
+            await self._notify_balance_fetch_fail("__periodic__", "rate_limit_periodic", str(e))
+            return
         except Exception as e:
             print(f"  [CB-주기체크] 잔고 조회 실패: {e}", flush=True)
             return
@@ -294,6 +414,14 @@ class RealtimeMonitor:
                 print(f"  [청산] {symbol} 실패: {e}", flush=True)
 
     async def _refresh_levels(self):
+        # plan 20260504_2 AC14: 09:00 KST 자동 reset (cron 추가 없이 _refresh_levels 시점)
+        try:
+            from services.execution import daily_pl as _dpl
+            if _dpl.reset_if_new_day():
+                print(f"  [일일손익] 새 날 reset 완료", flush=True)
+        except Exception as _e:
+            print(f"  [일일손익] reset 실패 (무시): {_e}", flush=True)
+
         """전체 종목 레벨 갱신 (전략에 따라 일봉 또는 4시간봉)."""
         # ── CB 주기 체크 (L2 발동 / L1 자동 해제) ──
         await self._check_circuit_breaker_periodic()
@@ -385,6 +513,17 @@ class RealtimeMonitor:
                     level["latest_vol"] = latest_vol
                     level["trend_ok"] = latest_close > sma_trend
                     level["vol_ok"] = latest_vol > vol_sma * _DT_VOL_THRESHOLD
+                else:
+                    # composite/그 외 — 거래량 필터용 vol_sma 5일 평균 (cto M4, plan AC8)
+                    if len(df) >= 6:
+                        try:
+                            vol_sma = float(pd.Series(df["volume"]).rolling(5).mean().iloc[-1])
+                            latest_vol = float(df["volume"].iloc[-1])
+                            level["vol_sma"] = vol_sma
+                            level["latest_vol"] = latest_vol
+                        except Exception:
+                            level["vol_sma"] = 0
+                            level["latest_vol"] = 0
 
                 new_levels[symbol] = level
                 await asyncio.sleep(0.12)
@@ -457,9 +596,17 @@ class RealtimeMonitor:
             print(f"  보고 전송 오류: {e}", flush=True)
 
     async def _send_periodic_report(self):
-        """4시간 정기 분석 보고 — 검증 플랜 누적 성적 포함."""
+        """정기 분석 보고 — plan 20260503 P3-1 (lessons #19 완전 해소).
+
+        services.reporting.periodic_analysis 함수 호출로 산식 통일.
+        텔레그램 발송은 plan P0(20260503_1)에서 비활성화 — 콘솔만.
+        5연패 자동 중단은 보존 (회귀 검증 필수).
+        """
+        from services.reporting.periodic_analysis import (
+            build_strategy_summary, check_consec_loss, build_market_snapshot,
+        )
+
         positions = self.state.get("positions", {})
-        closed = self.state.get("closed_trades", [])
         now = datetime.now(tz=timezone.utc)
         now_str = now.strftime("%m/%d %H:%M UTC")
 
@@ -471,94 +618,35 @@ class RealtimeMonitor:
             krw = 0
             total = 0
 
-        # ── 누적 성적표 (현재 전략 기간만 집계) ──
-        # 전략 전환 시점 이후 거래만 카운트
-        strategy_start = self.state.get("strategy_start", "2026-03-29")
-        current_trades = [t for t in closed if t.get("exit_date", "") >= strategy_start]
-
-        n_trades = len(current_trades)
-        wins = [t for t in current_trades if t["return_pct"] > 0]
-        losses = [t for t in current_trades if t["return_pct"] <= 0]
-        win_rate = len(wins) / n_trades * 100 if n_trades > 0 else 0
-        avg_ret = sum(t["return_pct"] for t in current_trades) / n_trades if n_trades > 0 else 0
-        total_ret = sum(t["return_pct"] for t in current_trades)
-
-        # 연속 손실 카운트 (현재 전략 거래만)
-        consec_loss = 0
-        for t in reversed(current_trades):
-            if t["return_pct"] <= 0:
-                consec_loss += 1
-            else:
-                break
-
-        # ── 검증 플랜 기준일 ──
-        start_date_str = self.state.get("strategy_start", "2026-03-29")
-        start_date = datetime.strptime(start_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-        days_elapsed = (now - start_date).days
-
-        # 체크포인트 판정
-        checkpoint = ""
-        if days_elapsed >= 7:
-            if n_trades >= 15:
-                verdict = "PASS" if win_rate >= 35 else "FAIL"
-                checkpoint = f"\n🏁 *7일 최종판정*: {verdict} ({n_trades}건, {win_rate:.0f}%)"
-                if win_rate >= 35:
-                    checkpoint += "\n→ 증액 검토 가능"
-                else:
-                    checkpoint += "\n→ 전략 변경 권장"
-            else:
-                checkpoint = f"\n📅 7일차 — 거래 {n_trades}건 (15건 미달, 계속 관찰)"
-        elif days_elapsed >= 5:
-            if n_trades >= 10:
-                verdict = "OK" if win_rate >= 30 else "경고"
-                checkpoint = f"\n📅 5일 중간점검: {verdict} ({n_trades}건, {win_rate:.0f}%)"
-                if win_rate < 30:
-                    checkpoint += "\n→ 전략 수정 검토 필요"
-            else:
-                checkpoint = f"\n📅 5일차 — 거래 {n_trades}건 (10건 미달)"
-        elif days_elapsed >= 3:
-            if n_trades >= 5 and win_rate == 0:
-                checkpoint = f"\n🚨 3일 긴급: 전패 ({n_trades}건 0승) → 중단 권장"
-            elif n_trades >= 5:
-                checkpoint = f"\n📅 3일 방향확인: {n_trades}건, {win_rate:.0f}% — 계속 진행"
-            else:
-                checkpoint = f"\n📅 {days_elapsed}일차 — 거래 {n_trades}건"
-
-        # ── 5연패 자동 중단 ──
-        if consec_loss >= 5:
+        # ── 5연패 자동 중단 (회귀 보존 — cto P3 review #3) ──
+        consec, n_trades, wins_n = check_consec_loss(self.state)
+        if consec >= 5:
+            win_rate = wins_n / n_trades * 100 if n_trades > 0 else 0
             self.running = False
             await send(
                 f"🛑 *5연패 자동 중단*\n"
-                f"연속 {consec_loss}건 손실 — 검증 플랜 조기 탈출\n"
-                f"승률: {win_rate:.0f}% ({len(wins)}/{n_trades})\n"
+                f"연속 {consec}건 손실 — 검증 플랜 조기 탈출\n"
+                f"승률: {win_rate:.0f}% ({wins_n}/{n_trades})\n"
                 f"원인 분석 후 전략 수정 필요\n"
                 f"재시작: `sudo systemctl restart btc-trader`"
             )
             print(f"\n!!! 5연패 자동 중단 !!!", flush=True)
             return
 
-        # ── 시장 분석 ──
+        # ── 시장 + 누적 성적 (함수 호출로 통일) ──
+        market = build_market_snapshot()
         market_msg = ""
-        try:
-            import urllib.request, json as _json
-            # BTC 시세
-            _ex = ccxt.upbit({"enableRateLimit": True})
-            _btc = _ex.fetch_ticker("BTC/KRW")
-            btc_price = _btc["last"]
-            btc_chg = _btc.get("percentage", 0) or 0
-            # Fear & Greed
-            _fg = _json.loads(urllib.request.urlopen(
-                "https://api.alternative.me/fng/?limit=1", timeout=5
-            ).read())
-            fg_val = _fg["data"][0]["value"]
-            fg_label = _fg["data"][0]["value_classification"]
+        if market.get("btc_price") is not None:
+            _btc_chg = market.get("btc_chg") or 0  # lessons #12: None 대비
             market_msg = (
                 f"\n*시장*\n"
-                f"  BTC: {btc_price:,.0f} ({btc_chg:+.1f}%)\n"
-                f"  F&G: {fg_val} ({fg_label})\n"
+                f"  BTC: {market['btc_price']:,.0f} ({_btc_chg:+.1f}%)\n"
+                f"  F&G: {market.get('fg_value', '?')} ({market.get('fg_label', '?')})\n"
             )
-        except Exception:
+        else:
             market_msg = "\n*시장* 조회 실패\n"
+
+        summary = build_strategy_summary(self.state)
 
         # ── 메시지 조합 ──
         msg = f"📋 *정기 분석* ({now_str})\n"
@@ -582,33 +670,24 @@ class RealtimeMonitor:
         else:
             msg += "  없음\n"
 
-        # 누적 성적
-        msg += f"\n*누적 성적* ({days_elapsed}일차)\n"
-        msg += f"  거래: {n_trades}건\n"
-        msg += f"  승률: {win_rate:.0f}% ({len(wins)}승 {len(losses)}패)\n"
-        msg += f"  평균: {avg_ret:+.1f}% | 합계: {total_ret:+.1f}%\n"
-        if consec_loss > 0:
-            msg += f"  연속손실: {consec_loss}건 ({'⚠️' if consec_loss >= 3 else ''})\n"
-
-        # 백테스트 대비
-        msg += f"\n*백테스트 대비*\n"
-        msg += f"  승률: {win_rate:.0f}% (목표 35%+)\n"
-        msg += f"  평균: {avg_ret:+.1f}% (목표 +0.5%+)\n"
-
-        # 체크포인트
-        if checkpoint:
-            msg += checkpoint
+        # ── 누적 성적 + 백테스트 대비 + 체크포인트 (build_strategy_summary 통일) ──
+        msg += f"\n*전략 성과*\n"
+        for ln in summary.split("\n"):
+            msg += f"  {ln}\n"
 
         # 잔고
         msg += f"\n\nKRW: {krw:,.0f} | 평가: {total:,.0f}"
 
-        # 다음 보고 시각
+        # plan 20260503 P0 (AC15, AC16): 정기 분석 텔레그램 발송 비활성화 → 18:00 daily_report 통합
+        # 4h 주기 일 6회 → 18:00 KST 일 1회 (노이즈 -83%)
+        # 함수 추출은 P2 plan에서 진행. 현재는 send(msg) 호출만 차단.
+        # 메시지 자체는 콘솔/journalctl에 남아 사후 분석 가능
         next_h = ((now.hour // 4) + 1) * 4
         if next_h >= 24:
             next_h = 0
-        msg += f"\n⏰ 다음: {next_h:02d}:05 UTC ({next_h+9:02d}:05 KST)"
-
-        await send(msg)
+        msg += f"\n⏰ 다음: {next_h:02d}:05 UTC ({next_h+9:02d}:05 KST) — 18:00 통합으로 대체"
+        print(f"\n[정기분석-텔레그램비활성화]\n{msg}\n", flush=True)
+        # await send(msg)  # plan 20260503 P0: 18:00 통합으로 이전
 
     async def _run_websocket(self):
         """웹소켓 연결 및 실시간 체결가 수신."""
@@ -767,9 +846,14 @@ class RealtimeMonitor:
                 except (ValueError, KeyError):
                     pass
 
-            # 트레일링스탑 이탈
+            # 트레일링스탑 이탈 (SL 우선 — cto M1)
             if price < pos.get("trail_stop", 0):
                 await self._execute_sell(symbol, price)
+                return
+
+            # 부분 익절 단계 평가 (SL 미발동 시) — plan 20260504_2 AC2
+            if TP_ENABLED and not IS_DAYTRADING:
+                await self._check_tp_levels(symbol, price, pos)
             return
 
         # ── 보조 전략 감시 (levels 등록 여부와 무관하게 실행) ──
@@ -1115,8 +1199,12 @@ class RealtimeMonitor:
             if "history" not in existing:
                 existing["history"] = []
             VB_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-            with open(VB_STATE_FILE, "w", encoding="utf-8") as f:
+            # plan 20260503 P0+: atomic write
+            import os as _os
+            tmp = VB_STATE_FILE.with_suffix(VB_STATE_FILE.suffix + ".tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(existing, f, ensure_ascii=False, indent=2)
+            _os.replace(tmp, VB_STATE_FILE)
         except Exception as e:
             print(f"  [VB] 상태 저장 오류: {e}", flush=True)
 
@@ -1131,11 +1219,14 @@ class RealtimeMonitor:
         return {}
 
     def _save_vb_full_state(self, state: dict) -> None:
-        """vb_state 전체 저장 (필터 필드 포함)."""
+        """vb_state 전체 저장 (필터 필드 포함). plan 20260503 P0+: atomic write."""
         try:
             VB_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-            with open(VB_STATE_FILE, "w", encoding="utf-8") as f:
+            import os as _os
+            tmp = VB_STATE_FILE.with_suffix(VB_STATE_FILE.suffix + ".tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(state, f, ensure_ascii=False, indent=2)
+            _os.replace(tmp, VB_STATE_FILE)
         except Exception as e:
             print(f"  [VB] 전체 상태 저장 오류: {e}", flush=True)
 
@@ -1419,6 +1510,117 @@ class RealtimeMonitor:
         """성공 시 연속 오류 카운트 초기화."""
         self.consecutive_errors = 0
 
+    async def _check_tp_levels(self, symbol: str, price: float, pos: dict):
+        """plan 20260504_2 AC2-AC4: 부분 익절 단계별 매도.
+
+        잔량 회계 모델 (cto BLOCK-1):
+          - entry_amount_krw: 불변 (최초 매수 KRW)
+          - tp_sold_levels: 이미 매도된 단계 인덱스 list
+          - 매도 후 fetch_balance 재조회로 remaining_qty 갱신
+        실패 시 state 변경 안 함, 다음 가격 틱에서 재평가 (lessons #3 즉시성).
+        """
+        entry = pos.get("entry_price", 0)
+        if entry <= 0:
+            return
+        ret_pct = (price / entry - 1.0)
+        sold_levels = set(pos.get("tp_sold_levels", []))
+
+        for idx, tp in enumerate(TP_LEVELS):
+            if idx in sold_levels:
+                continue
+            if ret_pct < tp["trigger_pct"]:
+                continue
+            # TP 트리거 — 부분 매도
+            try:
+                coin = symbol.split("/")[0]
+                ex = _create_exchange()
+                bal = ex.fetch_balance()
+                cur_total = float(bal.get(coin, {}).get("total", 0) or 0)
+                cur_free = float(bal.get(coin, {}).get("free", 0) or 0)
+                if cur_total <= 0:
+                    print(f"  [TP] {symbol} 잔고 없음 (total=0) — TP 스킵, position 정리 필요", flush=True)
+                    return
+                # 매도 수량: 매수 시점 entry_qty 기준 비율 (잔량 변동 무관 일관성)
+                # 단, 최초 진입 후 첫 TP에선 entry_qty 미저장 가능 → cur_total 기준
+                entry_qty = pos.get("entry_qty") or cur_total
+                sell_qty = round(entry_qty * tp["sell_ratio"], 8)
+                if sell_qty > cur_free:
+                    sell_qty = round(cur_free, 8)
+                if sell_qty <= 0:
+                    print(f"  [TP] {symbol} sell_qty {sell_qty} <= 0 — 스킵", flush=True)
+                    return
+                # 최소 주문 검증
+                if sell_qty * price < MIN_ORDER_KRW:
+                    print(f"  [TP] {symbol} 매도금 {sell_qty*price:.0f} < 최소 {MIN_ORDER_KRW}, 잔량 마지막 단계로 통합", flush=True)
+                    sell_qty = round(cur_free, 8)
+                # 시장가 매도 (lessons #3: retry 없음)
+                order = sell_market_coin(symbol, sell_qty)
+                exec_price = float(order.get("price") or price)
+                pl_krw = (exec_price - entry) * sell_qty
+                # state 갱신
+                sold_levels.add(idx)
+                pos["tp_sold_levels"] = sorted(sold_levels)
+                # entry_qty 최초 기록
+                if "entry_qty" not in pos:
+                    pos["entry_qty"] = entry_qty
+                # remaining_qty 재조회
+                bal_after = ex.fetch_balance()
+                pos["remaining_qty"] = float(bal_after.get(coin, {}).get("total", 0) or 0)
+                save_state(self.state)
+                # 일일 손익 기록
+                from services.execution import daily_pl as _dpl
+                _dpl.record_sell(symbol, pl_krw, exec_price, sell_qty)
+                # 알림
+                msg = (
+                    f"[TP{idx+1}] {symbol} 부분 익절\n"
+                    f"  단계: +{tp['trigger_pct']*100:.0f}% / 매도 비율 {tp['sell_ratio']*100:.0f}%\n"
+                    f"  체결가: {exec_price:,.4f} | 수량: {sell_qty}\n"
+                    f"  실현손익: {pl_krw:+,.0f} KRW\n"
+                    f"  잔량: {pos['remaining_qty']}"
+                )
+                print(f"  [TP{idx+1}] {symbol} 부분 익절 체결 — pl={pl_krw:+.0f}", flush=True)
+                try:
+                    from services.alerting.notifier import send_report
+                    await send_report(msg, parse_mode=None)
+                except Exception:
+                    pass
+                # 같은 틱에서 다음 단계도 트리거 가능 — break 하지 않음
+            except Exception as e:
+                print(f"  [TP] {symbol} 부분 매도 실패: {e} — state 미변경, 다음 틱 재평가", flush=True)
+                return
+
+    async def _notify_balance_fetch_fail(self, symbol: str, kind: str, detail: str):
+        """plan 20260503 P0 (AC8): 잔고 조회 실패 시 알람 — 첫 알람 즉시, 2회차부터 1h 디바운스.
+
+        영구 매수 차단 트랩 방지: 사용자가 즉시 인지하여 수동 복구할 수 있도록.
+        """
+        import time as _t
+        flag_path = Path("/tmp/bata_balance_fail_alert_flag")
+        now = _t.time()
+        debounce_sec = 3600  # 1h
+        send_alarm = True
+        if flag_path.exists():
+            age = now - flag_path.stat().st_mtime
+            if age < debounce_sec:
+                send_alarm = False
+                print(f"  [잔고실패] 디바운스 ({int(age)}s < {debounce_sec}s) — 알람 스킵", flush=True)
+        if send_alarm:
+            try:
+                msg = (
+                    f"[BATA] 잔고 조회 실패 — 매수 차단\n"
+                    f"종목: {symbol}\n"
+                    f"종류: {kind}\n"
+                    f"상세: {detail[:200]}\n"
+                    f"조치: 서버 healthcheck + critical_healthcheck.log 확인\n"
+                    f"디바운스 1h (다음 알람은 복구 안 되면 1시간 후)"
+                )
+                # plan 20260503 P3-3: send_critical 등급 마이그레이션
+                from services.alerting.notifier import send_critical
+                await send_critical(msg)
+                flag_path.touch()
+            except Exception as e:
+                print(f"  [잔고실패] 알람 발송 실패: {e}", flush=True)
+
     def _get_consec_loss(self) -> int:
         """현재 전략 시작일 이후 거래에서 연속 손실 횟수를 반환한다."""
         closed = self.state.get("closed_trades", [])
@@ -1440,7 +1642,14 @@ class RealtimeMonitor:
         now_ts = datetime.now(tz=timezone.utc).timestamp()
         if now_ts < cooldown_until:
             remaining_h = (cooldown_until - now_ts) / 3600
-            print(f"  [쿨다운] 연패 쿨다운 중 — {remaining_h:.1f}h 남음 (매수 스킵)", flush=True)
+            # lessons #14 — 이벤트 루프 내 로그 throttle 필수.
+            # 종목수×신호빈도 곱으로 폭발 → systemd WatchdogSec 미충족 → 만성 재시작 (5-3 13회).
+            from services.common.log_throttle import throttled_print
+            throttled_print(
+                "loss_cooldown_skip",
+                f"  [쿨다운] 연패 쿨다운 중 — {remaining_h:.1f}h 남음 (매수 스킵)",
+                interval_sec=60,
+            )
             return True
         # 쿨다운 만료 — 상태에서 제거
         self.state.pop("cooldown_until", None)
@@ -1453,6 +1662,18 @@ class RealtimeMonitor:
             return
         if self._is_in_cooldown(symbol):
             return
+
+        # ── 신호 발화 dedupe (lessons #1, C-FIX 20260505 → 20260506 완화) ───
+        # 60초 내 재시도만 차단. ORDER/KRW 1.6건/초 폭주 → 분당 1회로 차단.
+        # 같은 봉 차단은 제거 — 진짜 신호까지 막혀 매수 0건 발생 (1.5h 257건 차단 / 매수 0건).
+        _now_ts = _time.time()
+        _last = self._signal_dedupe.get(symbol)
+        if _last is not None and (_now_ts - _last["ts"]) < 60:
+            if _now_ts - self._dedupe_log_ts > 60:
+                print(f"  [신호 dedupe] {symbol} 60s 내 재시도 차단", flush=True)
+                self._dedupe_log_ts = _now_ts
+            return
+        self._signal_dedupe[symbol] = {"ts": _now_ts}
 
         # ── 계좌 레벨 서킷브레이커 ─────────────────────────
         if CIRCUIT_BREAKER_ENABLED:
@@ -1485,8 +1706,24 @@ class RealtimeMonitor:
                         self._cb_log_ts = _now
                     record_block("cb_l1", symbol)
                     return
+            except RateLimitExhausted as e:
+                # plan 20260503 P0 (AC7-AC10): 잔고 조회 429 → 매수 차단 (silent fallback 금지)
+                print(f"  [서킷브레이커] 잔고 조회 429 실패, 매수 차단: {e}", flush=True)
+                last = load_last_known_balance(max_age_hours=24)
+                if last:
+                    _last_total = last.get("total_krw") or 0
+                    print(f"  [서킷브레이커] last_known 캐시 ({_last_total:,.0f}) 사용", flush=True)
+                else:
+                    print(f"  [서킷브레이커] 캐시 만료/없음, 보수적 평가로 매수 차단", flush=True)
+                await self._notify_balance_fetch_fail(symbol, "rate_limit", str(e))
+                record_block("balance_fetch_fail", symbol)
+                return
             except Exception as e:
-                print(f"  [서킷브레이커] 잔고 조회 실패, 매수 진행: {e}", flush=True)
+                # plan 20260503 P0: 일반 오류도 매수 차단 (이전엔 silent 매수 진행 → 안전장치 우회)
+                print(f"  [서킷브레이커] 잔고 조회 실패, 매수 차단: {e}", flush=True)
+                await self._notify_balance_fetch_fail(symbol, "general", str(e))
+                record_block("balance_fetch_fail", symbol)
+                return
 
         # 연패 쿨다운 확인 (3연패 시 3일 매수 중단)
         if self._is_loss_cooldown():
@@ -1503,14 +1740,90 @@ class RealtimeMonitor:
             return
 
         today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
+
+        # 거래량 필터 — plan 20260504_2 AC7 (가짜 돌파 차단)
+        if VOL_FILTER_ENABLED and not IS_DAYTRADING:
+            vol_sma = level.get("vol_sma", 0) or 0
+            latest_vol = level.get("latest_vol", 0) or 0
+            if vol_sma > 0 and latest_vol < vol_sma * VOL_FILTER_MULTIPLIER:
+                from services.common.log_throttle import throttled_print
+                throttled_print(
+                    f"vol_filter_{symbol}",
+                    f"  [{symbol}] 거래량 필터 — {latest_vol:.0f} < {vol_sma:.0f}×{VOL_FILTER_MULTIPLIER} 차단",
+                    interval_sec=60,
+                )
+                record_block("vol_filter", symbol)
+                return
+
+        # 일일 손실 한도 — plan 20260504_2 AC12 (단일 사건 후 추가 손실 방어)
+        if DAILY_LOSS_LIMIT_ENABLED:
+            from services.execution import daily_pl as _dpl
+            blocked, loss_pct, limit_pct = _dpl.is_daily_loss_blocked(
+                DAILY_LOSS_LIMIT_PCT, DAILY_LOSS_BASE_KRW
+            )
+            if blocked:
+                # 첫 발동 시 critical 알람
+                state_d = _dpl.get_state()
+                if not state_d.get("alarm_sent_today"):
+                    try:
+                        from services.alerting.notifier import send_critical
+                        await send_critical(
+                            f"[BATA] 일일 손실 한도 발동 — 매수 24h 차단\n"
+                            f"실현손익: {(state_d.get('realized_pl_krw') or 0):,.0f} KRW\n"
+                            f"손실률: {loss_pct*100:.2f}% / 한도 {limit_pct*100:.0f}%\n"
+                            f"기존 포지션 트레일링은 정상, 09:00 KST 자동 reset",
+                            parse_mode=None,
+                        )
+                        state_d["alarm_sent_today"] = True
+                        _dpl._save(state_d)
+                    except Exception as _e:
+                        print(f"  [일일손실] 알람 실패: {_e}", flush=True)
+                record_block("daily_loss_limit", symbol)
+                return
+
         # 변동성 필터 — ATR이 가격의 MAX_ATR_PCT 이상이면 진입 차단
         # (lessons/20260408_5 — ONG 같은 고변동 알트 방어)
         if not IS_DAYTRADING and level.get("atr"):
             atr_pct = level["atr"] / price
             if atr_pct > MAX_ATR_PCT:
-                print(f"  [{symbol}] ATR 필터 — ATR/price={atr_pct:.1%} > {MAX_ATR_PCT:.0%} 차단", flush=True)
+                # plan 20260503 (lessons #14 강화): ATR 차단 로그 throttle (종목당 60s 1회)
+                from services.common.log_throttle import throttled_print
+                throttled_print(
+                    f"atr_filter_{symbol}",
+                    f"  [{symbol}] ATR 필터 — ATR/price={atr_pct:.1%} > {MAX_ATR_PCT:.0%} 차단",
+                    interval_sec=60,
+                )
                 record_block("atr_filter", symbol)
                 return
+        # ── ML 신호 필터 게이트 (fail-open, lessons #6) ─────
+        # 모든 사전 필터(서킷브레이커/F&G/EMA200/거래량/ATR) 통과 후 마지막 게이트.
+        # ML 비활성/모델부재/추론실패 시 score=1.0 → 항상 통과.
+        _ml_flt = _get_ml_filter()
+        _ml_score = 1.0
+        if _ml_flt.is_active:
+            _ohlcv = level.get("ohlcv")  # 주입 시 사용, 없으면 fail-open
+            if _ohlcv is not None:
+                try:
+                    _ml_score = _ml_flt.score(symbol, _ohlcv, pd.Timestamp.now(tz="UTC"))
+                except Exception as _e:
+                    print(f"  [{symbol}] ML 점수 실패: {_e} — fail-open", flush=True)
+        _ml_pass = _ml_flt.passes(_ml_score)
+        _ml_shadow.log_decision(
+            symbol=symbol, signal_ts=pd.Timestamp.now(tz="UTC"),
+            signal_type="DC_breakout_realtime", score=_ml_score,
+            threshold=_ml_flt.threshold, will_buy=_ml_pass,
+            ml_active=_ml_flt.is_active,
+        )
+        if not _ml_pass:
+            from services.common.log_throttle import throttled_print
+            throttled_print(
+                f"ml_filter_{symbol}",
+                f"  [{symbol}] ML 차단 score={_ml_score:.3f} < {_ml_flt.threshold}",
+                interval_sec=60,
+            )
+            record_block("ml_filter", symbol)
+            return
+
         if IS_DAYTRADING:
             trail_stop = price * (1 - _DT_TRAIL_PCT)
         else:
@@ -1522,6 +1835,11 @@ class RealtimeMonitor:
         try:
             balance = get_balance()
             available = balance["krw"]
+        except RateLimitExhausted as e:
+            # plan 20260503 P0 (AC4 — cto 2차 review): 두 번째 잔고 조회도 critical 알람 + 매수 차단
+            self._set_cooldown(symbol)
+            await self._notify_balance_fetch_fail(symbol, "rate_limit_buy", str(e))
+            return
         except Exception as e:
             self._set_cooldown(symbol)
             await self._handle_error(f"balance_{symbol}", f"잔고 조회 실패: {e}")
@@ -1556,12 +1874,21 @@ class RealtimeMonitor:
 
         self._reset_errors()
 
+        # plan 20260504_2 AC3 (cto BLOCK-1): entry_qty/entry_amount_krw 불변 저장 — 부분 익절 잔량 회계 기준
+        # DRY_RUN인 경우 order는 None이므로 추정값 사용
+        try:
+            entry_qty = float((order or {}).get("amount") if not DRY_RUN else 0) or (order_amount / exec_price if exec_price > 0 else 0)
+        except Exception:
+            entry_qty = 0
         positions[symbol] = {
             "entry_date": today,
             "entry_price": exec_price,
             "highest": exec_price,
             "trail_stop": trail_stop,
             "order_amount": order_amount,
+            "entry_amount_krw": order_amount,    # 불변 (TP 잔량 회계 기준)
+            "entry_qty": entry_qty,              # 불변 (부분 매도 수량 산정 기준)
+            "tp_sold_levels": [],                # 단계별 매도 추적
         }
         self.state["positions"] = positions
         save_state(self.state)
@@ -1601,13 +1928,22 @@ class RealtimeMonitor:
                 coin_id = symbol.split("/")[0]
                 ex = _create_exchange()
                 bal = ex.fetch_balance()
-                coin_amount = float(bal.get(coin_id, {}).get("free", 0))
+                # worktree festive-thompson: locked(used) 잔고 보존 — 거래소 잔고가 진짜 0일 때만 state 정리
+                amounts = bal.get(coin_id, {}) if isinstance(bal.get(coin_id), dict) else {}
+                total_amount = float(amounts.get("total", 0) or 0)
+                free_amount = float(amounts.get("free", 0) or 0)
 
-                if coin_amount <= 0:
-                    print(f"  {symbol} 잔고 없음")
+                if total_amount <= 0:
+                    print(f"  {symbol} 잔고 없음 (total=0)")
                     del positions[symbol]
                     self.state["positions"] = positions
                     save_state(self.state)
+                    return
+
+                # 매도 가능 수량: free 우선 (locked 제외), free=0이면 매도 불가 → 보존
+                coin_amount = free_amount if free_amount > 0 else 0
+                if coin_amount <= 0:
+                    print(f"  {symbol} 매도 가능 수량 없음 (free=0, total={total_amount}) — 포지션 보존")
                     return
 
                 order = sell_market_coin(symbol, coin_amount)
@@ -1620,6 +1956,16 @@ class RealtimeMonitor:
 
         self._reset_errors()
         ret_pct = (exec_price / pos["entry_price"] - 1) * 100
+
+        # 일일 손실 한도 — 실현 KRW 손익 누적 (plan 20260504_2 AC13)
+        try:
+            from services.execution import daily_pl as _dpl
+            sold_qty_full = float(coin_amount) if not DRY_RUN else float(pos.get("entry_qty") or 0)
+            if sold_qty_full > 0:
+                pl_krw = (float(exec_price) - float(pos["entry_price"])) * sold_qty_full
+                _dpl.record_sell(symbol, pl_krw, float(exec_price), sold_qty_full)
+        except Exception as _e:
+            print(f"  [일일손익] 기록 실패 (무시): {_e}", flush=True)
 
         self.state.setdefault("closed_trades", []).append({
             "symbol": symbol, "entry_date": pos["entry_date"],

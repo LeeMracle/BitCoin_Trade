@@ -32,7 +32,9 @@
   - 추세추종 전환 → **DC(50)+ATR(14)x3.0** OOS Sharpe 1.123, MDD -18.7% (엄격 기준 통과)
   - 보조: RSI(10)>50<45+EMA(150) OOS Sharpe 1.040, MDD -14.9%
 - [ ] Phase 3: 페이퍼 트레이딩 진행 중
-  - 메인: **DC(15)+ATR(14)x3.0 + 200EMA 레짐 필터** — `services/paper_trading/` (DC50→20→15 단계적 공격 전환, [경위](docs/decisions/20260426_1_dc15_switch.md))
+  - 메인: **DC(12)+ATR(14)x3.0 + ML 게이트(threshold 0.45)** — `services/paper_trading/` + `services/ml/` (DC50→20→15→10→15→12 단계적 공격→보수화→재적극화, [DC15 경위](docs/decisions/20260426_1_dc15_switch.md), [DC10 시도→DC15 복귀](docs/decisions/20260504_1_three_strategy_enhancements.md), [DC12 + ATR 10% + VOL 1.0 동시 튜닝](docs/decisions/20260505_1_strategy_param_tuning.md), [ML LIVE 가속 0.45 보수 시작](docs/decisions/20260505_2_ml_live_acceleration.md))
+  - **레짐 필터(EMA200) 해제** (2026-05-03 [plan 20260503_2](workspace/plans/20260503_2_enable_trading_in_bear.md)) — 거래 빈도 우선, 백테스트 미달 수용. 안전장치는 하드 손절 캡(-10%) + 서킷브레이커(-20%/-25%) + ATR 필터로 유지
+  - **종목 풀 확대**: MIN_VOLUME_KRW 5억 → 3억 (2026-05-03 plan 20260503_5) — 117 → 약 150 종목 감시
   - 보조: RSI(10)>50/<45+EMA(150) — 관찰용
   - 일일 체크: `python scripts/daily_check.py` (09:05 KST 실행 권장)
   - 텔레그램 알림: `services/.env.example` 참고하여 `.env` 설정 필요
@@ -120,3 +122,11 @@
 | 17 | 다중 프로젝트 공존 서버에서 프로세스 판정 시 `/proc/<pid>/cwd` + 전체 systemd unit 역탐색 필수 — 좀비 오판 방지 | [lessons/20260421_1](docs/lessons/20260421_1_multi_project_process_misdiagnosis.md) |
 | 18 | venv 디렉터리 리네임 시 crontab/systemd unit의 인터프리터 경로 동시 갱신 필수 — stderr→로그파일 리디렉션은 silent fail 유발 | [lessons/20260425_1](docs/lessons/20260425_1_crontab_venv_path_drift.md) |
 | 19 | 모듈이 config 상수를 import하지 않고 자체 정의하면 동기화 누락 위험 — 운영 변경 권장 시 코드베이스 전체 grep 필수 + import 통일 | [lessons/20260425_2](docs/lessons/20260425_2_config_constant_self_definition.md) |
+| 20 | 다중 API 키 운영 시 키↔환경(서버 IP) 매핑 미명시는 silent fail 직결 — critical 경로는 단명(매시 5분) 헬스체크 + 즉시 알람 + 디바운스 세트 필수, daily report만으로는 실시간 감시 불가 | [lessons/20260502_1](docs/lessons/20260502_1_upbit_keyset_ip_mapping.md) |
+| 21 | ccxt `enableRateLimit`은 인스턴스 수명에서만 throttle 추적 — `_create_exchange()` 매번 호출 시 무효. 모듈 싱글톤 + 명시 백오프 wrapper 둘 다 필수. 안전장치는 fail-closed 원칙(잔고 조회 실패 → 매수 차단), 헬스체크 판정 기준은 "정상 동작에도 항상 갱신되는 값"이어야 false alarm 회피 | [lessons/20260503_1](docs/lessons/20260503_1_rate_limit_cb_fallback_healthcheck_loop.md) |
+| 22 | wrapper(retry/backoff) 일괄 적용 금지 — 조회 경로만 적용, 매수/매도 즉시성 경로는 lessons #3 위배. 알림 등급(level) 도입은 default 호환 유지로 점진 마이그레이션. 신규 통합 cron 추가 시 기존 cron과 동일 거래 회피 로직 사전 설계 필수 (없으면 알림 2~3배 폭주) | [lessons/20260503_2](docs/lessons/20260503_2_p3_wrapper_alert_levels_function_unification.md) |
+| 23 | 침묵 모드 cron은 항상 heartbeat 파일과 짝 — 텔레그램 발송 안 해도 cron 죽음 감지 불가 시 더 큰 사고. retry/backoff는 idempotent 호출(조회)만 안전, 주문(매수/매도)에 적용 시 중복 주문 위험. 신규 cron은 pre_deploy_check 등록 검증 룰과 함께 추가 | [lessons/20260503_3](docs/lessons/20260503_3_p4_alert_migration_digest_cron_buy_wrapper_hold.md) |
+| 24 | 장시간 가동 스크립트(daily_live.py --realtime)는 systemd 단독 가동, cron 직접 호출 금지 — 매시 새 인스턴스 추가로 좀비 누적·race condition 다중 발화. 다중 프로젝트 환경 crontab 갱신은 grep -v 위험 (다른 프로젝트 라인 우연 매칭 삭제). 백업 디렉터리는 .disabled 등 명시적 격리. ps grep만으로 프로젝트 판단 금지 — `/proc/<PID>/cwd` 확인 필수 | [lessons/20260504_1](docs/lessons/20260504_1_zombie_processes_crontab_overwritten_bak_dirs.md) |
+| 25 | 부분 익절 잔량 회계는 "불변 입력(entry_qty/entry_amount_krw) + 가변 추적(tp_sold_levels)" 분리. SL/TP 동시 트리거 시 SL 우선 정책 명문화. 매도 retry 금지(lessons #3) — 실패 시 next-tick 재평가. 정기 reset은 cron보다 기존 함수 진입 시점 호출이 안전 (lessons #18/#24 회피) | [lessons/20260504_2](docs/lessons/20260504_2_strategy_enhancements_partial_tp_volume_daily_loss.md) |
+| 26 | "모든 매수 경로"에 적용되는 안전장치(필터·게이트)는 신규 추가 시 `grep buy_market` 등으로 모든 진입점 열거 + task별 분리 필수. fail-open 정책이라도 "일부 경로 누락"은 lessons #6 위배 면책 안 됨. pre_deploy_check에 매수 경로 hook 존재 강제 룰 등록 (자동 사각지대 차단) | [lessons/20260504_3](docs/lessons/20260504_3_ml_filter_realtime_path_missing.md) |
+| 27 | systemd 재시작은 cron으로 fork된 별도 PID(좀비)를 죽이지 않음 — 옛 코드 메모리로 알림 발사 지속. `daily_live.py` (no --realtime)도 종료 안 하면 좀비 누적. 알림 메시지에 PID/instance 자동 prefix + 다중 프로젝트 동거 환경에서 crontab 통째 갱신은 다른 프로젝트 라인 보존 책임. pre_deploy_check에 `pgrep -af daily_live.py` 좀비 카운트 룰 등록 | [lessons/20260506_1](docs/lessons/20260506_1_zombie_bot_old_code_alert.md) |

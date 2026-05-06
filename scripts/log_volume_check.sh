@@ -29,34 +29,25 @@ elif [ "$ERRORS" -gt 100 ]; then
     ALERT="오류 로그 ${ERRORS}줄 — 반복 오류 의심"
 fi
 
-# 텔레그램 보고 (항상 발송 — 일일 요약)
+# P1 (plan 20260502): 정상 케이스 발송 제거 → 18:00 KST daily_report 헬스체크에 흡수.
+# 이상 감지 시만 즉시 텔레그램 발송 (필요 시 critical 알람으로도 잡힘).
 cd /home/ubuntu/BitCoin_Trade
 source .venv/bin/activate
 
 if [ -n "$ALERT" ]; then
+    # plan 20260503_4 P4-1: send_critical 등급 마이그레이션 (parse_mode=None 안전)
     PYTHONUTF8=1 python3 -c "
 import asyncio
-from services.alerting.notifier import send
-msg = '''📊 *일일 로그 볼륨 보고* ($YESTERDAY)
+from services.alerting.notifier import send_critical
+msg = '''일일 로그 볼륨 이상 ($YESTERDAY)
 
 총 로그: ${TOTAL}줄
 오류 로그: ${ERRORS}줄
 마켓없음 스팸: ${MARKET_SPAM}줄
 
-🔴 이상 감지: $ALERT'''
-asyncio.run(send(msg))
+이상 감지: $ALERT'''
+asyncio.run(send_critical(msg, parse_mode=None))
 "
 else
-    PYTHONUTF8=1 python3 -c "
-import asyncio
-from services.alerting.notifier import send
-msg = '''📊 *일일 로그 볼륨 보고* ($YESTERDAY)
-
-총 로그: ${TOTAL}줄
-오류 로그: ${ERRORS}줄
-마켓없음 스팸: ${MARKET_SPAM}줄
-
-✅ 정상 범위'''
-asyncio.run(send(msg))
-"
+    echo "$(date): 정상 범위 — 텔레그램 발송 생략 (18:00 daily_report에 흡수)" >> "$LOG_DIR/log_volume.log"
 fi

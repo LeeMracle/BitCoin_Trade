@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>BATA ML 신호 필터 아키텍처</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Pretendard', 'Segoe UI', sans-serif;
+    margin: 0;
+    background: #0d1117;
+    color: #e6edf3;
+    line-height: 1.6;
+  }
+  .wrap { max-width: 1400px; margin: 0 auto; padding: 32px; }
+  h1 {
+    font-size: 28px;
+    border-bottom: 2px solid #ff8c42;
+    padding-bottom: 12px;
+    margin-bottom: 8px;
+  }
+  .subtitle { color: #8b949e; margin-top: 0; margin-bottom: 32px; }
+  h2 {
+    color: #ff8c42;
+    font-size: 22px;
+    margin-top: 48px;
+    border-left: 4px solid #ff8c42;
+    padding-left: 12px;
+  }
+  h3 { color: #79c0ff; font-size: 17px; margin-top: 24px; }
+  .card {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 20px;
+    margin: 16px 0;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+    margin: 16px 0;
+  }
+  .layer {
+    background: #161b22;
+    border-left: 4px solid #58a6ff;
+    border-radius: 6px;
+    padding: 16px;
+  }
+  .layer.data { border-left-color: #3fb950; }
+  .layer.feature { border-left-color: #d29922; }
+  .layer.model { border-left-color: #f778ba; }
+  .layer.serve { border-left-color: #ff8c42; }
+  .layer.ops { border-left-color: #a5a5ff; }
+  .layer h4 { margin: 0 0 8px 0; color: #fff; font-size: 16px; }
+  .layer ul { margin: 8px 0 0 16px; padding: 0; font-size: 14px; color: #c9d1d9; }
+  .layer li { margin: 4px 0; }
+  code {
+    background: #1c2128;
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: #79c0ff;
+    font-size: 13px;
+  }
+  pre {
+    background: #1c2128;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 16px;
+    overflow-x: auto;
+    font-size: 13px;
+  }
+  pre code { background: transparent; padding: 0; color: #c9d1d9; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 14px;
+  }
+  th, td {
+    border: 1px solid #30363d;
+    padding: 8px 12px;
+    text-align: left;
+  }
+  th { background: #1c2128; color: #ff8c42; }
+  tr:nth-child(even) { background: #161b22; }
+  .mermaid {
+    background: #fff;
+    border-radius: 8px;
+    padding: 20px;
+    margin: 20px 0;
+    text-align: center;
+  }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-right: 4px;
+  }
+  .badge.new { background: #238636; color: #fff; }
+  .badge.exist { background: #1f6feb; color: #fff; }
+  .badge.mod { background: #d29922; color: #000; }
+  .footer {
+    margin-top: 64px;
+    padding-top: 16px;
+    border-top: 1px solid #30363d;
+    color: #8b949e;
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>BATA — ML 신호 필터 시스템 아키텍처</h1>
+<p class="subtitle">백테스트 데이터 기반 매수 신호 품질 스코어링 시스템 / v0.1 / 2026-05-04</p>
+
+<h2>1. 전체 아키텍처 (Bird's Eye View)</h2>
+<div class="card">
+<div class="mermaid">
+flowchart TB
+    subgraph DATA["📦 Data Layer"]
+        BT[("백테스트 결과<br/>DuckDB")]
+        OHLCV[("실시간 OHLCV<br/>Upbit API")]
+        TRADES[("실거래 로그<br/>JSON/SQLite")]
+    end
+
+    subgraph FEAT["🔧 Feature Engineering"]
+        F1["기술적 지표<br/>RSI, ATR, EMA"]
+        F2["시장 컨텍스트<br/>BTC추세, 도미넌스"]
+        F3["종목 메타<br/>거래대금, 변동성"]
+        FSTORE[("Feature Store<br/>Parquet")]
+    end
+
+    subgraph TRAIN["🧠 Training Pipeline"]
+        SAMPLE["라벨링<br/>+5% 도달 여부"]
+        SPLIT["Walk-Forward<br/>분할"]
+        XGB["XGBoost<br/>학습"]
+        EVAL["검증<br/>AUC, Precision"]
+        REG[("Model Registry<br/>.pkl + meta")]
+    end
+
+    subgraph SERVE["⚡ Inference Service"]
+        SIG["DC15 신호 발생"]
+        SCORE["점수 계산<br/>predict_proba"]
+        GATE{"≥ threshold?"}
+        SIZE["포지션 사이징<br/>점수 × Kelly"]
+    end
+
+    subgraph EXEC["💰 Execution (기존)"]
+        BUY["매수 실행<br/>upbit_client"]
+        TRADER["multi_trader.py"]
+    end
+
+    subgraph OPS["📊 Monitoring & Ops"]
+        SHADOW["Shadow Mode<br/>비교 로깅"]
+        DRIFT["Drift Detection<br/>PSI, KS"]
+        RETRAIN["주기 재학습<br/>월 1회"]
+        ALERT["텔레그램 알림"]
+    end
+
+    BT --> SAMPLE
+    OHLCV --> F1 & F2 & F3
+    TRADES --> SAMPLE
+    F1 & F2 & F3 --> FSTORE
+    FSTORE --> SAMPLE
+    SAMPLE --> SPLIT --> XGB --> EVAL --> REG
+
+    OHLCV --> SIG
+    SIG --> FSTORE
+    FSTORE --> SCORE
+    REG --> SCORE
+    SCORE --> GATE
+    GATE -->|YES| SIZE --> BUY
+    GATE -->|NO| SHADOW
+    BUY --> TRADER
+    BUY --> SHADOW
+    SHADOW --> ALERT
+    TRADES --> DRIFT
+    DRIFT --> RETRAIN
+    RETRAIN --> XGB
+
+    style DATA fill:#0d4429,stroke:#3fb950,color:#fff
+    style FEAT fill:#3d2e0d,stroke:#d29922,color:#fff
+    style TRAIN fill:#3d0d2e,stroke:#f778ba,color:#fff
+    style SERVE fill:#3d1f0d,stroke:#ff8c42,color:#fff
+    style OPS fill:#1d1d3d,stroke:#a5a5ff,color:#fff
+    style EXEC fill:#0d2a3d,stroke:#58a6ff,color:#fff
+</div>
+</div>
+
+<h2>2. 레이어별 책임</h2>
+<div class="grid">
+  <div class="layer data">
+    <h4>📦 Data Layer <span class="badge exist">기존</span></h4>
+    <ul>
+      <li><b>BT 결과</b>: <code>data/cache.duckdb</code> 백테스트 trade 테이블</li>
+      <li><b>실시간 OHLCV</b>: ccxt 1m/15m/1d</li>
+      <li><b>실거래 로그</b>: <code>workspace/jarvis_*.json</code></li>
+    </ul>
+  </div>
+  <div class="layer feature">
+    <h4>🔧 Feature Store <span class="badge new">신규</span></h4>
+    <ul>
+      <li><b>위치</b>: <code>data/features/{date}.parquet</code></li>
+      <li><b>30~40 features</b>, 학습/추론 동일 함수</li>
+      <li><b>Lookahead 방지</b>: 봉 마감 후 계산 강제</li>
+    </ul>
+  </div>
+  <div class="layer model">
+    <h4>🧠 Training <span class="badge new">신규</span></h4>
+    <ul>
+      <li><b>Walk-forward CV</b>: 분기별 fold 6~8개</li>
+      <li><b>XGBoost / LightGBM</b> binary classifier</li>
+      <li><b>슬리피지 0.2% 가정</b>으로 라벨 보정</li>
+    </ul>
+  </div>
+  <div class="layer serve">
+    <h4>⚡ Inference <span class="badge new">신규</span></h4>
+    <ul>
+      <li><b>multi_trader 매수 직전 hook</b></li>
+      <li><b>p95 latency &lt; 50ms</b> (모델 메모리 상주)</li>
+      <li><b>Threshold 0.55</b> (튜닝 가능)</li>
+    </ul>
+  </div>
+  <div class="layer serve">
+    <h4>💰 Execution <span class="badge mod">수정</span></h4>
+    <ul>
+      <li><code>multi_trader.py</code> 매수 분기에 ML gate 삽입</li>
+      <li><b>점수 × 기본수량</b> 동적 사이징 (옵션)</li>
+      <li><b>차단 사유 로깅</b> 필수 (shadow 비교용)</li>
+    </ul>
+  </div>
+  <div class="layer ops">
+    <h4>📊 MLOps <span class="badge new">신규</span></h4>
+    <ul>
+      <li><b>Shadow mode</b> 3개월 → A/B → 채택</li>
+      <li><b>PSI/KS drift</b> 주간 리포트</li>
+      <li><b>월 1회 재학습</b> (cron)</li>
+    </ul>
+  </div>
+</div>
+
+<h2>3. 학습 파이프라인 상세</h2>
+<div class="card">
+<div class="mermaid">
+flowchart LR
+    A[("백테스트<br/>trade log")] --> B["진입 시점<br/>컨텍스트 추출"]
+    OHLCV[("OHLCV")] --> C["Feature 30+개<br/>계산"]
+    B --> C
+    C --> D{"라벨링<br/>+5% 도달?"}
+    D -->|YES, 1| E["positive 샘플"]
+    D -->|NO, 0| F["negative 샘플"]
+    E --> G["Train/Val/Test<br/>Walk-Forward"]
+    F --> G
+    G --> H["XGBoost<br/>fit"]
+    H --> I["검증<br/>AUC ROC<br/>Precision@K<br/>SHAP"]
+    I --> J{"PASS?"}
+    J -->|YES| K[("Model Registry<br/>v{N}.pkl + meta.json")]
+    J -->|NO| L["하이퍼파라미터<br/>재튜닝"]
+    L --> H
+
+    style A fill:#0d4429,color:#fff
+    style OHLCV fill:#0d4429,color:#fff
+    style K fill:#3d1f0d,color:#fff
+    style J fill:#3d0d2e,color:#fff
+</div>
+</div>
+
+<h2>4. 추론 (Inference) 플로우 — 매수 신호 발생 시</h2>
+<div class="card">
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant RM as realtime_monitor
+    participant MT as multi_trader
+    participant FS as FeatureStore
+    participant ML as MLFilter
+    participant UB as upbit_client
+    participant TG as Telegram
+
+    RM->>MT: DC15 돌파 감지 (KRW-BTC)
+    MT->>FS: 현재 시점 feature 요청
+    FS-->>MT: feature vector (30+개)
+    MT->>ML: predict(features)
+    ML-->>MT: score=0.62
+
+    alt score >= 0.55
+        MT->>UB: 매수 주문 (size = base × score)
+        UB-->>MT: 체결 OK
+        MT->>TG: ✅ 매수 + ML score
+    else score < 0.55
+        MT->>TG: 🚫 차단 (ML score 0.43)
+        Note over MT: shadow log 기록<br/>실제 결과 추적
+    end
+</div>
+</div>
+
+<h2>5. 디렉터리 구조 (제안)</h2>
+<pre><code>services/
+├── execution/
+│   ├── multi_trader.py         # ★ ML gate 삽입
+│   ├── upbit_client.py
+│   └── config.py
+├── ml/                         # ★ NEW
+│   ├── __init__.py
+│   ├── features.py             # Feature 계산 (학습/추론 공용)
+│   ├── feature_store.py        # parquet read/write
+│   ├── labeler.py              # 백테스트 → 라벨 변환
+│   ├── trainer.py              # XGBoost 학습 + walk-forward
+│   ├── inference.py            # MLFilter 클래스 (주입형)
+│   ├── registry.py             # 모델 버전 관리
+│   ├── drift.py                # PSI/KS 계산
+│   └── shadow.py               # shadow mode 로거
+data/
+├── cache.duckdb
+├── features/                   # ★ NEW (parquet)
+│   └── {YYYYMMDD}.parquet
+└── models/                     # ★ NEW
+    ├── signal_filter_v1.pkl
+    ├── signal_filter_v1.meta.json
+    └── current → v1            # 심볼릭 링크 / 포인터
+scripts/
+├── ml_train.py                 # ★ NEW: 수동/cron 학습
+├── ml_evaluate.py              # ★ NEW: 검증 리포트
+├── ml_drift_check.py           # ★ NEW: 주간 드리프트
+└── pre_deploy_check.py         # ★ ML 모델 존재 검증 추가
+docs/decisions/
+└── 20260504_2_ml_signal_filter.md  # ★ ADR
+</code></pre>
+
+<h2>6. Feature 카탈로그 (초안)</h2>
+<table>
+  <tr><th>카테고리</th><th>Feature</th><th>설명</th><th>타입</th></tr>
+  <tr><td rowspan="6">기술 지표</td><td>rsi_14</td><td>RSI 14일</td><td>float</td></tr>
+  <tr><td>atr_14_pct</td><td>ATR / 종가 (변동성 정규화)</td><td>float</td></tr>
+  <tr><td>ema_dist_50</td><td>(price - EMA50) / EMA50</td><td>float</td></tr>
+  <tr><td>ema_dist_200</td><td>(price - EMA200) / EMA200</td><td>float</td></tr>
+  <tr><td>dc_breakout_strength</td><td>(price - DC_high) / ATR</td><td>float</td></tr>
+  <tr><td>vol_ratio_20</td><td>현재 거래량 / 20일 평균</td><td>float</td></tr>
+  <tr><td rowspan="4">시장 컨텍스트</td><td>btc_trend_30d</td><td>BTC 30일 수익률</td><td>float</td></tr>
+  <tr><td>btc_dominance</td><td>BTC 도미넌스 (CMC)</td><td>float</td></tr>
+  <tr><td>regime_label</td><td>BULL/BEAR/SIDE (사전 라벨)</td><td>cat</td></tr>
+  <tr><td>fear_greed</td><td>F&G 지수 (선택)</td><td>int</td></tr>
+  <tr><td rowspan="3">종목 메타</td><td>volume_krw_24h</td><td>24시간 거래대금</td><td>float</td></tr>
+  <tr><td>market_cap_rank</td><td>시총 순위 (Upbit 내)</td><td>int</td></tr>
+  <tr><td>days_since_listing</td><td>상장 경과일</td><td>int</td></tr>
+  <tr><td rowspan="3">시간/캘린더</td><td>hour_of_day</td><td>0~23</td><td>cat</td></tr>
+  <tr><td>day_of_week</td><td>0~6</td><td>cat</td></tr>
+  <tr><td>is_weekend</td><td>토/일 여부</td><td>bool</td></tr>
+  <tr><td rowspan="3">최근 성과</td><td>last_7d_return</td><td>최근 7일 수익률</td><td>float</td></tr>
+  <tr><td>max_drawdown_30d</td><td>30일 내 MDD</td><td>float</td></tr>
+  <tr><td>consecutive_up_days</td><td>연속 상승일 수</td><td>int</td></tr>
+</table>
+
+<h2>7. 운영 모드 전환 흐름 (Shadow → Live)</h2>
+<div class="card">
+<div class="mermaid">
+stateDiagram-v2
+    [*] --> Training: 학습 데이터 준비
+    Training --> Validation: walk-forward
+    Validation --> ShadowMode: AUC > 0.6
+    ShadowMode: 모든 신호 점수만 기록\n(매수는 기존 로직)
+    ShadowMode --> ABTest: 3개월 데이터 확보
+    ABTest: 50% 신호만 ML gate 적용\n수익률 비교
+    ABTest --> LiveMode: ML gate 우위 검증
+    ABTest --> Training: 성능 미달 → 재학습
+    LiveMode: 100% 매수 신호 ML 통과 필수
+    LiveMode --> DriftCheck: 주간 모니터링
+    DriftCheck --> LiveMode: 정상
+    DriftCheck --> Training: drift 감지 → 재학습
+    LiveMode --> Rollback: 실 수익 악화
+    Rollback --> ShadowMode
+</div>
+</div>
+
+<h2>8. 안전장치 & Lessons 반영</h2>
+<table>
+  <tr><th>위험</th><th>대응</th><th>관련 lesson</th></tr>
+  <tr><td>Lookahead bias</td><td>feature 계산은 봉 마감 후 timestamp 강제 검증</td><td>#1 tick vs bar</td></tr>
+  <tr><td>상승장 overfit</td><td>walk-forward + 하락장 fold 별도 평가</td><td>#2 backtest period bias</td></tr>
+  <tr><td>config 동기화 누락</td><td>threshold/모델 경로 → <code>config.py</code> 단일 출처 + grep 검증</td><td>#19 config 자체정의</td></tr>
+  <tr><td>모델 파일 부재로 매수 차단</td><td>fail-open vs fail-closed 정책 명시 (제안: <b>fail-open</b>=ML 없으면 기존 로직)</td><td>#21 fail-closed</td></tr>
+  <tr><td>추론 latency로 매수 지연</td><td>모델 프로세스 시작 시 1회 로드 + 메모리 상주, 50ms SLO</td><td>#3 즉시 체크</td></tr>
+  <tr><td>cron 학습 silent fail</td><td>학습 cron + heartbeat 파일 + pre_deploy_check 등록</td><td>#23 침묵 cron</td></tr>
+  <tr><td>모델 버전 충돌</td><td>registry에 hash + train_date + sample_size 메타 강제</td><td>#9 자동화 검증</td></tr>
+</table>
+
+<h2>9. 단계별 구현 로드맵 (4~6주)</h2>
+<table>
+  <tr><th>주차</th><th>단계</th><th>산출물</th><th>완료 기준</th></tr>
+  <tr><td>W1</td><td>Feature pipeline</td><td><code>services/ml/features.py</code>, <code>feature_store.py</code></td><td>임의 시점 feature 30개 추출 OK</td></tr>
+  <tr><td>W2</td><td>라벨링 + 학습</td><td><code>labeler.py</code>, <code>trainer.py</code>, 첫 모델</td><td>walk-forward AUC > 0.55</td></tr>
+  <tr><td>W3</td><td>검증 + SHAP</td><td>리포트 1건, top-10 feature</td><td>OOS Sharpe 시뮬 + 설명력 확보</td></tr>
+  <tr><td>W4</td><td>Shadow mode 통합</td><td><code>inference.py</code>, multi_trader hook</td><td>실거래에 score만 로깅 (차단 X)</td></tr>
+  <tr><td>W5~6</td><td>모니터링 + ADR</td><td>drift 스크립트, ADR, cron 등록</td><td>3개월 shadow 데이터 수집 시작</td></tr>
+  <tr><td>+12주</td><td>A/B 검증 후 LIVE</td><td>실 매수에 gate 적용</td><td>ML gate 우위 통계 검증</td></tr>
+</table>
+
+<h2>10. 예시 코드 스켈레톤</h2>
+
+<h3>services/ml/inference.py</h3>
+<pre><code class="language-python">import joblib, json
+from pathlib import Path
+from services.ml.features import compute_features
+
+class MLFilter:
+    def __init__(self, model_path: Path, threshold: float = 0.55):
+        self.model = joblib.load(model_path)
+        self.meta = json.loads((model_path.with_suffix('.meta.json')).read_text())
+        self.threshold = threshold
+
+    def score(self, symbol: str, ohlcv_df, market_ctx: dict) -> float:
+        x = compute_features(symbol, ohlcv_df, market_ctx)  # 학습과 동일 함수
+        return float(self.model.predict_proba([x])[0][1])
+
+    def passes(self, score: float) -> bool:
+        return score >= self.threshold
+</code></pre>
+
+<h3>services/execution/multi_trader.py (수정 패치)</h3>
+<pre><code class="language-python"># 매수 분기 직전
+score = ml_filter.score(symbol, ohlcv_df, market_ctx)
+shadow.log(symbol, score, signal_type="DC15", will_buy=ml_filter.passes(score))
+
+if not ml_filter.passes(score):
+    notifier.send(f"🚫 ML 차단 {symbol} score={score:.2f}", level="info")
+    return
+
+# 기존 매수 로직 그대로
+position_size = base_size * (0.7 + 0.6 * score)  # 0.55→1.03×, 1.0→1.3×
+upbit_client.buy(symbol, position_size)
+</code></pre>
+
+<div class="footer">
+<b>다음 액션</b>: 본 아키텍처 합의 후 <code>workspace/plans/20260504_3_ml_signal_filter.md</code> 작성 → W1 feature pipeline 착수.<br/>
+<b>핵심 원칙</b>: ML은 "신호 품질 스코어링"만 담당, 가격 예측 아님. Shadow → A/B → Live 단계적 도입. 기존 로직은 fail-open 안전망.<br/>
+<b>최초 작성</b>: 2026-05-04 (KST) / Jarvis
+</div>
+
+</div>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'default',
+    flowchart: { curve: 'basis', htmlLabels: true },
+    sequence: { showSequenceNumbers: false }
+  });
+</script>
+</body>
+</html>

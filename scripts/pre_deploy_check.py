@@ -1046,6 +1046,280 @@ def check_deploy_tooling() -> None:
 # 메인
 # ═══════════════════════════════════════════════════════════════════
 
+# ═══════════════════════════════════════════════════════════════════
+# 검증: 헬스체크 모듈 import 가능성 + critical cron 등록
+# ref: workspace/plans/20260502_reporting_system_overhaul.md
+# ref: docs/lessons/20260502_1_upbit_keyset_ip_mapping.md (#20)
+# ═══════════════════════════════════════════════════════════════════
+
+def check_healthcheck_module() -> None:
+    """services.healthcheck 모듈이 정상 import 가능한지 검증."""
+    try:
+        # sys.path 보장 (runner.py 자체에도 보강 있지만 이중 안전)
+        if str(PROJECT_ROOT) not in sys.path:
+            sys.path.insert(0, str(PROJECT_ROOT))
+        from services.healthcheck.runner import (
+            check_auth, check_jarvis_cron, run_all, build_health_section,
+        )
+        # callable 검증
+        for fn in (check_auth, check_jarvis_cron, run_all, build_health_section):
+            if not callable(fn):
+                errors.append(f"[헬스체크] {fn} not callable")
+    except Exception as e:
+        errors.append(f"[헬스체크] services.healthcheck 모듈 import 실패: {e}")
+
+
+def check_critical_healthcheck_cron() -> None:
+    """deploy_to_aws.sh에 critical_healthcheck cron 등록 여부 + 09:10 daily_report 제거 여부."""
+    deploy = PROJECT_ROOT / "scripts" / "deploy_to_aws.sh"
+    if not deploy.exists():
+        warnings.append("[critical] deploy_to_aws.sh 없음")
+        return
+    content = deploy.read_text(encoding="utf-8")
+    if "critical_healthcheck.py" not in content:
+        errors.append(
+            "[critical] deploy_to_aws.sh에 critical_healthcheck.py cron 미등록 "
+            "(plan 20260502 P0 #5)"
+        )
+    # 09:10 KST = "10 0 * * * ..." daily_report 패턴이 잔존하면 안 됨
+    if re.search(r'CRON_REPORT="10\s+0\s+\*', content):
+        errors.append(
+            "[critical] deploy_to_aws.sh에 09:10 KST daily_report cron 잔존 "
+            "(plan 20260502 P1: 18:00 단일화)"
+        )
+    # 스크립트 자체 존재 확인
+    crit = PROJECT_ROOT / "scripts" / "critical_healthcheck.py"
+    if not crit.exists():
+        errors.append("[critical] scripts/critical_healthcheck.py 파일 없음")
+
+
+def check_strategy_enhancement_config() -> None:
+    """plan 20260504_2 AC16 — 신규 전략 보강 config 키 존재 검증."""
+    cfg = PROJECT_ROOT / "services" / "execution" / "config.py"
+    if not cfg.exists():
+        return
+    content = cfg.read_text(encoding="utf-8")
+    required_keys = [
+        "TP_LEVELS", "TP_ENABLED",
+        "VOL_FILTER_ENABLED", "VOL_FILTER_MULTIPLIER",
+        "DAILY_LOSS_LIMIT_ENABLED", "DAILY_LOSS_LIMIT_PCT", "DAILY_LOSS_BASE_KRW",
+    ]
+    for k in required_keys:
+        if k not in content:
+            errors.append(f"[전략보강] config.py에 {k} 미정의 (plan 20260504_2)")
+
+
+def check_hourly_digest_cron() -> None:
+    """plan 20260503_4 P4-2 (cto #2): hourly_digest cron 등록 + 스크립트 존재 검증.
+
+    lessons #9 정면 위반 방지 — 자동화 전제 cron은 pre_deploy_check 검증 필수.
+    """
+    deploy = PROJECT_ROOT / "scripts" / "deploy_to_aws.sh"
+    if not deploy.exists():
+        return
+    content = deploy.read_text(encoding="utf-8")
+    if "hourly_digest.py" not in content:
+        errors.append(
+            "[digest] deploy_to_aws.sh에 hourly_digest.py cron 미등록 (plan 20260503_4 P4-2)"
+        )
+    digest = PROJECT_ROOT / "scripts" / "hourly_digest.py"
+    if not digest.exists():
+        errors.append("[digest] scripts/hourly_digest.py 파일 없음")
+
+
+def check_deploy_log_files() -> None:
+    """plan 20260503 P1 (AC19): deploy_to_aws.sh의 LOG_FILES 배열에 cron 라인의 모든 로그가 포함되어야 함.
+
+    silent fail 방지 (lessons #18) — cron의 stderr→로그 리디렉션이 파일 미생성 시 실패.
+    LOG_FILES = (...) 내용을 추출하고, 모든 CRON_* 라인의 ">> /var/log/X.log" 경로가 포함되었는지 검증.
+    """
+    deploy = PROJECT_ROOT / "scripts" / "deploy_to_aws.sh"
+    if not deploy.exists():
+        return
+    content = deploy.read_text(encoding="utf-8")
+
+    # LOG_FILES 배열 추출
+    m = re.search(r"LOG_FILES=\(([^)]+)\)", content)
+    if not m:
+        warnings.append("[배포로그] deploy_to_aws.sh에서 LOG_FILES=(...) 추출 실패")
+        return
+    log_files = set(re.findall(r"/var/log/[\w.]+\.log", m.group(1)))
+
+    # 모든 cron 라인의 redirect 경로 추출
+    cron_logs = set(re.findall(r">>\s+(/var/log/[\w.]+\.log)", content))
+
+    missing = cron_logs - log_files
+    if missing:
+        errors.append(
+            f"[배포로그] LOG_FILES 배열에 누락된 로그 파일: {sorted(missing)} "
+            f"(cron이 redirect 시 silent fail — lessons #18)"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 검증: ML 신호 필터 무결성 (plans/20260504_3_ml_signal_filter)
+# ═══════════════════════════════════════════════════════════════════
+
+def check_ml_filter_integrity() -> None:
+    """ML 신호 필터의 무결성:
+       1) services/ml/config.py 단일 출처 존재
+       2) current.pkl 있으면 current.meta.json 도 있어야 함
+       3) meta의 feature_columns가 config.FEATURE_COLUMNS와 정확히 일치
+       4) meta의 threshold가 0~1 범위
+       5) ML_FILTER_ENABLED=1인데 모델 부재 → fail-open 경고
+    """
+    import json
+
+    ml_cfg = PROJECT_ROOT / "services" / "ml" / "config.py"
+    if not ml_cfg.exists():
+        warnings.append("[ML] services/ml/config.py 없음 — ML 미도입 환경")
+        return
+
+    cfg_text = ml_cfg.read_text(encoding="utf-8")
+    if "FEATURE_COLUMNS" not in cfg_text:
+        errors.append("[ML] services/ml/config.py FEATURE_COLUMNS 정의 누락")
+        return
+
+    pkl = PROJECT_ROOT / "data" / "models" / "current.pkl"
+    meta = PROJECT_ROOT / "data" / "models" / "current.meta.json"
+
+    if pkl.exists() and not meta.exists():
+        errors.append("[ML] current.pkl 존재하지만 current.meta.json 없음 — 학습/배포 누락")
+        return
+
+    if meta.exists():
+        try:
+            m = json.loads(meta.read_text(encoding="utf-8"))
+        except Exception as e:
+            errors.append(f"[ML] current.meta.json 파싱 실패: {e}")
+            return
+        # threshold 범위
+        thr = m.get("threshold")
+        if thr is None or not (0.0 < float(thr) < 1.0):
+            errors.append(f"[ML] meta threshold 비정상: {thr}")
+        # feature 카탈로그 일치
+        try:
+            sys.path.insert(0, str(PROJECT_ROOT))
+            from services.ml.config import FEATURE_COLUMNS as _CFG_FEATS  # noqa: WPS433
+            meta_feats = m.get("feature_columns", [])
+            if meta_feats != list(_CFG_FEATS):
+                errors.append(
+                    f"[ML] feature 카탈로그 mismatch: meta {len(meta_feats)} vs config {len(_CFG_FEATS)} "
+                    "→ MLFilter는 fail-open이지만 학습/추론 drift 직결, 즉시 재학습 필요"
+                )
+        except Exception as e:
+            warnings.append(f"[ML] feature 카탈로그 검증 스킵 (import 실패): {e}")
+        # CV 메트릭 sanity
+        cv = m.get("cv_metrics", {})
+        if cv:
+            auc = cv.get("mean_auc", 0)
+            if auc < 0.5:
+                warnings.append(f"[ML] mean_auc={auc:.3f} < 0.5 — 모델이 random보다 못함, 배포 신중")
+
+    # ML_FILTER_ENABLED=1 인데 pkl 없음 → critical (운영에서 차단 의도가 무효화됨은 아니지만 fail-open)
+    import os
+    if os.getenv("ML_FILTER_ENABLED") == "1" and not pkl.exists():
+        warnings.append(
+            "[ML] ML_FILTER_ENABLED=1 인데 current.pkl 없음 — fail-open 모드로 동작 (의도가 맞는지 확인)"
+        )
+
+    # 모든 매수 경로에 ML hook이 있는지 확인 (lessons #6 위배 방지)
+    for path_rel in ("services/execution/multi_trader.py", "services/execution/realtime_monitor.py"):
+        p = PROJECT_ROOT / path_rel
+        if not p.exists():
+            continue
+        src = p.read_text(encoding="utf-8")
+        if "_get_ml_filter" not in src and "get_filter" not in src:
+            errors.append(
+                f"[ML] {path_rel}에 ML 필터 hook 누락 — lessons #6 (모든 매수 경로 필터 적용) 위배"
+            )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 검증: 시스템 메모리/swap 압박 (lessons #5, ML 활성 후 +210MB RSS)
+# ═══════════════════════════════════════════════════════════════════
+
+def check_system_memory() -> None:
+    """t3.micro 1GB 환경에서 free RAM/swap 사용률 점검.
+       AWS 환경에서만 의미 있음. 로컬 실행 시 자동 skip.
+    """
+    import shutil
+    if not shutil.which("free"):
+        return  # 윈도우 등 free 미설치 환경
+
+    try:
+        import subprocess
+        out = subprocess.check_output(["free", "-m"], text=True, timeout=5)
+    except Exception:
+        return
+
+    lines = out.strip().split("\n")
+    mem_line = next((l for l in lines if l.startswith("Mem:")), None)
+    swap_line = next((l for l in lines if l.startswith("Swap:")), None)
+    if not mem_line:
+        return
+
+    mem_parts = mem_line.split()
+    # Mem: total used free shared buff/cache available
+    if len(mem_parts) >= 7:
+        total = int(mem_parts[1])
+        avail = int(mem_parts[6])
+        if total < 2048:  # t3.micro 등 소형 인스턴스만 체크
+            if avail < 100:
+                errors.append(
+                    f"[메모리] 가용 RAM={avail}MB / total={total}MB — OOM 위험 임박 (lessons #5)"
+                )
+            elif avail < 200:
+                warnings.append(
+                    f"[메모리] 가용 RAM={avail}MB / total={total}MB — ML+cron 동시 실행 시 압박"
+                )
+
+    if swap_line:
+        sw_parts = swap_line.split()
+        if len(sw_parts) >= 3:
+            sw_total = int(sw_parts[1])
+            sw_used = int(sw_parts[2])
+            if sw_total > 0 and sw_used > sw_total * 0.8:
+                warnings.append(
+                    f"[메모리] swap 사용 {sw_used}/{sw_total}MB ({100*sw_used//sw_total}%) — t3.micro 압박"
+                )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 검증: 좀비 봇 프로세스 (lessons #27)
+# ═══════════════════════════════════════════════════════════════════
+
+def check_zombie_bot_processes() -> None:
+    """BitCoin_Trade cwd로 가동 중인 daily_live.py 인스턴스가 정상 1개뿐인지 검증.
+       --realtime 1개(systemd) + non-realtime 0개(즉시 종료 가정)가 정상.
+       좀비 누적 = lessons #27 회귀 (옛 코드 알림 발사 / crontab 갱신 누락).
+    """
+    import subprocess
+    try:
+        out = subprocess.check_output(
+            ["pgrep", "-af", "daily_live.py"],
+            stderr=subprocess.DEVNULL, text=True, timeout=5,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return  # pgrep 미설치(Windows) 또는 매치 없음 = skip
+    except Exception:
+        return
+
+    lines = [l for l in out.strip().split("\n") if "BitCoin_Trade" in l]
+    if not lines:
+        return  # 로컬 (BitCoin_Trade 프로세스 없음)
+    realtime = [l for l in lines if "--realtime" in l]
+    non_realtime = [l for l in lines if "--realtime" not in l]
+    if len(realtime) > 1:
+        errors.append(
+            f"[좀비] daily_live.py --realtime {len(realtime)}개 (1개여야 함, lessons #27)"
+        )
+    if non_realtime:
+        warnings.append(
+            f"[좀비] daily_live.py (no --realtime) {len(non_realtime)}개 — 누적 좀비 의심 (lessons #27)"
+        )
+
+
 def main() -> None:
     print("=" * 50)
     print("배포 전 검증 (pre-deploy check)")
@@ -1082,6 +1356,14 @@ def main() -> None:
     check_lint_history_script()
     check_vb_recheck_trigger()
     check_deploy_tooling()
+    check_healthcheck_module()
+    check_critical_healthcheck_cron()
+    check_hourly_digest_cron()
+    check_strategy_enhancement_config()
+    check_deploy_log_files()
+    check_ml_filter_integrity()
+    check_system_memory()
+    check_zombie_bot_processes()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")

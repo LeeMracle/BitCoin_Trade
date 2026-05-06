@@ -26,13 +26,18 @@ from services.execution.scanner import (
     get_krw_market_coins, scan_entry_signals, check_exit_signal,
 )
 from services.execution.upbit_client import get_balance, buy_market, sell_market
-from services.execution.config import STRATEGY
+from services.execution.config import STRATEGY, MAX_POSITIONS, MIN_ORDER_KRW
 from services.alerting.notifier import send, notify_error
 
-# 설정 — config.py:MAX_POSITIONS 와 동기화 필수 (lessons/20260425_2 참조)
-# TODO: config.py 직접 import 통일 권장 (자체 상수 패턴은 동기화 누락 위험)
-MAX_POSITIONS = 7           # 최대 동시 보유 종목 (04-25 5→7 확대, config.py와 동기화)
-MIN_ORDER_KRW = 5_000       # 업비트 최소 주문
+# ── ML 신호 필터 (Phase 3 보강, fail-open) ──────────────────
+# ML_FILTER_ENABLED=0(기본) 시 비활성 — 기존 매수 동작 100% 보존.
+# 모델 부재/로드 실패 시에도 자동 fail-open (lessons #21 역케이스).
+import pandas as _pd  # noqa: E402  (ML hook용 timestamp)
+from services.ml.inference import get_filter as _get_ml_filter  # noqa: E402
+from services.ml import shadow as _ml_shadow  # noqa: E402
+
+# 운영 상수는 config.py에서 import (lessons #19 — 자체정의 금지)
+# MAX_POSITIONS, MIN_ORDER_KRW 는 services/execution/config.py 단일 출처
 
 STATE_FILE = Path(__file__).resolve().parents[2] / "workspace" / "multi_trading_state.json"
 LOG_FILE = Path(__file__).resolve().parents[2] / "workspace" / "multi_trading_log.jsonl"
@@ -47,10 +52,17 @@ def load_state() -> dict:
 
 
 def save_state(state: dict):
+    """state 저장 — atomic write (tmp 파일 작성 후 os.replace).
+
+    plan 20260503 P0+: race condition 시 부분 쓰기 노출 방지.
+    """
+    import os
     state["last_updated"] = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(STATE_FILE, "w", encoding="utf-8") as f:
+    tmp = STATE_FILE.with_suffix(STATE_FILE.suffix + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, STATE_FILE)  # atomic on POSIX/Windows
 
 
 def append_log(entry: dict):
@@ -194,6 +206,27 @@ async def run(dry_run: bool = False):
                 print(f"\n  *** {symbol} 매수 신호! ***")
                 print(f"    가격: {sig['price']:,.0f}  Donchian상단: {sig['donchian_upper']:,.0f}")
                 print(f"    트레일링스탑: {sig['trail_stop']:,.0f}  금액: {order_amount:,.0f} KRW")
+
+                # ── ML 신호 필터 게이트 (fail-open) ─────────────────
+                _ml_flt = _get_ml_filter()
+                _ml_score = 1.0
+                if _ml_flt.is_active:
+                    _ohlcv = sig.get("ohlcv")  # scanner에서 향후 주입 (없으면 fail-open)
+                    if _ohlcv is not None:
+                        try:
+                            _ml_score = _ml_flt.score(symbol, _ohlcv, _pd.Timestamp.now(tz="UTC"))
+                        except Exception as _e:
+                            print(f"  [ML 점수 실패] {symbol}: {_e} — fail-open")
+                _ml_pass = _ml_flt.passes(_ml_score)
+                _ml_shadow.log_decision(
+                    symbol=symbol, signal_ts=_pd.Timestamp.now(tz="UTC"),
+                    signal_type="DC_breakout", score=_ml_score,
+                    threshold=_ml_flt.threshold, will_buy=_ml_pass,
+                    ml_active=_ml_flt.is_active,
+                )
+                if not _ml_pass:
+                    print(f"  [ML 차단] {symbol} score={_ml_score:.3f} < {_ml_flt.threshold}")
+                    continue
 
                 if dry_run:
                     print(f"  [DRY-RUN] 매수 생략 (상태 저장 안 함)")

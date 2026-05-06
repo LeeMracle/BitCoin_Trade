@@ -31,6 +31,75 @@ FILTER_STATS = ROOT / "workspace" / "filter_stats.json"
 KST = timezone(timedelta(hours=9))
 
 
+def _build_ml_section(now_kst) -> list[str]:
+    """ML 신호 필터 섹션 — 활성 여부, 오늘 의사결정 통계, 모델 메타.
+
+    파일이 없거나 ML 미도입 환경이면 빈 리스트 반환.
+    """
+    import json as _json
+    import os as _os
+
+    out: list[str] = []
+    out.append("🤖 ML 신호 필터")
+
+    # 활성 여부 (환경변수)
+    enabled = _os.getenv("ML_FILTER_ENABLED", "0") == "1"
+    out.append(f"  - 활성: {'ON' if enabled else 'OFF (fail-open)'}")
+
+    # 모델 메타
+    proj = Path(__file__).resolve().parents[1]
+    meta_path = proj / "data" / "models" / "current.meta.json"
+    if meta_path.exists():
+        try:
+            meta = _json.loads(meta_path.read_text(encoding="utf-8"))
+            auc = meta.get("cv_metrics", {}).get("mean_auc", 0)
+            out.append(
+                f"  - 모델: {meta.get('version','?')} "
+                f"({meta.get('feature_count','?')} feat, AUC={auc:.3f}, "
+                f"thresh={meta.get('threshold','?')})"
+            )
+        except Exception:
+            out.append("  - 모델 메타: 읽기 실패")
+    else:
+        out.append("  - 모델: 부재 (fail-open)")
+
+    # 오늘 shadow 결정 통계
+    shadow_dir = proj / "workspace" / "ml_shadow"
+    today_path = shadow_dir / f"{now_kst.strftime('%Y%m%d')}.jsonl"
+    if today_path.exists():
+        n_dec = n_buy = n_block = n_active = 0
+        score_sum = 0.0
+        for line in today_path.read_text(encoding="utf-8").splitlines():
+            try:
+                rec = _json.loads(line)
+            except Exception:
+                continue
+            if rec.get("kind") == "outcome":
+                continue
+            n_dec += 1
+            score_sum += rec.get("score", 0.0)
+            if rec.get("ml_active"):
+                n_active += 1
+            if rec.get("will_buy"):
+                n_buy += 1
+            else:
+                n_block += 1
+        if n_dec:
+            mean_score = score_sum / n_dec
+            block_rate = n_block / n_dec * 100
+            out.append(
+                f"  - 오늘 의사결정: {n_dec}건 (buy {n_buy}, block {n_block}, "
+                f"block_rate {block_rate:.1f}%)"
+            )
+            out.append(f"  - 평균 score: {mean_score:.3f} | ml_active 호출: {n_active}/{n_dec}")
+        else:
+            out.append("  - 오늘 의사결정: 0건 (신호 미발생)")
+    else:
+        out.append("  - 오늘 의사결정: 0건 (shadow log 없음)")
+
+    return out
+
+
 def _load_json(path: Path) -> dict:
     if path.exists():
         with open(path, "r", encoding="utf-8") as f:
@@ -41,8 +110,9 @@ def _load_json(path: Path) -> dict:
 def _build_report() -> str:
     """텔레그램 일일 보고 메시지 생성."""
     now_kst = datetime.now(tz=KST)
-    date_str = now_kst.strftime("%Y-%m-%d")
-    lines = [f"📋 *일일 보고* ({date_str})\n"]
+    date_str = now_kst.strftime("%Y-%m-%d %H:%M KST")
+    label = "마감 종합" if now_kst.hour >= 17 else "장중 시작"
+    lines = [f"📋 *일일 보고 — {label}* ({date_str})\n"]
 
     # ── 1. 업비트 실계좌 잔고 ──
     try:
@@ -77,6 +147,15 @@ def _build_report() -> str:
         lines.append(f"  누적수익: {total_ret:+.1f}%")
     else:
         lines.append(f"  거래: 0회")
+
+    # ── plan 20260503 P1 (AC16): 정기 분석 함수 추출 ──
+    # services/reporting/periodic_analysis.build_strategy_summary 사용 → lessons #19 분산 해소
+    try:
+        from services.reporting.periodic_analysis import build_strategy_summary
+        for ln in build_strategy_summary(multi).split("\n"):
+            lines.append(f"  {ln}")
+    except Exception as _e:
+        lines.append(f"  (검증 통계 계산 실패: {_e})")
 
     # ── 3. VB(변동성 돌파) 현황 ──
     lines.append("")
@@ -122,6 +201,7 @@ def _build_report() -> str:
             cb_l1_n = counters.get("cb_l1", 0)
             cb_l2_n = counters.get("cb_l2", 0)
             vb_a_n = counters.get("vb_gate_a_bearish", 0)
+            balance_fail_n = counters.get("balance_fetch_fail", 0)  # plan 20260503 P0+
             lines.append("")
             lines.append("🛡 *필터 차단 통계 (지난 24h)*")
             lines.append(f"  - 하락장(BTC<EMA200): {ema200_n}건")
@@ -129,9 +209,34 @@ def _build_report() -> str:
             lines.append(f"  - ATR 필터: {atr_n}건")
             lines.append(f"  - CB-L1/L2: {cb_l1_n}/{cb_l2_n}건")
             lines.append(f"  - VB 하락장(A): {vb_a_n}건")
+            lines.append(f"  - 잔고 조회 실패(매수 차단): {balance_fail_n}건")
             lines.append(f"  (기록: workspace/filter_stats.json)")
     except Exception:
         pass  # 파일 없거나 읽기 실패 시 섹션 생략
+
+    # ── 4.5 ML 신호 필터 섹션 (plan 20260504_3) ──
+    # ML 운영 상태 + 오늘 의사결정 분포 + 모델 메타
+    try:
+        ml_lines = _build_ml_section(now_kst)
+        if ml_lines:
+            lines.append("")
+            lines.extend(ml_lines)
+    except Exception as _e:
+        lines.append("")
+        lines.append(f"🤖 ML 섹션: 실행 실패 ({type(_e).__name__})")
+
+    # ── 5. 헬스체크 (마감 종합 한정 — 17시 이후 또는 BATA_FORCE_HEALTH=1) ──
+    # plan: workspace/plans/20260502_reporting_system_overhaul.md
+    import os as _os
+    force_health = _os.environ.get("BATA_FORCE_HEALTH") == "1"
+    if now_kst.hour >= 17 or force_health:
+        try:
+            from services.healthcheck.runner import build_health_section
+            lines.append("")
+            lines.append(build_health_section())
+        except Exception as e:
+            lines.append("")
+            lines.append(f"🩺 헬스체크: 실행 실패 ({type(e).__name__})")
 
     return "\n".join(lines)
 
@@ -142,7 +247,9 @@ async def main():
     msg = _build_report()
     print(msg)
 
-    ok = await send(msg)
+    # plan 20260502: 헬스체크 섹션 포함 시 Markdown parse 오류 방지를 위해 plain text로 발송
+    # (state↔balance, (), _ 등 escape 안 된 특수문자 다수)
+    ok = await send(msg, parse_mode=None)
     if ok:
         print("텔레그램 발송 성공")
     else:
