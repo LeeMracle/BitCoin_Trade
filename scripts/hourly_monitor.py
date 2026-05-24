@@ -114,6 +114,9 @@ try:
         "enableRateLimit": True,
     }})
     full_bal = exchange.fetch_balance()
+    # KRW 마켓만 사전 필터 — dust/비상장 알트의 ticker 실패가 전체 timeout 잠식 차단 (2026-05-23 fix)
+    markets = exchange.load_markets()
+    krw_symbols = {{s for s in markets if s.endswith("/KRW")}}
     total_eval = 0
     holdings = {{}}
     for cur, amt in full_bal["total"].items():
@@ -122,13 +125,16 @@ try:
         if cur == "KRW":
             total_eval += amt
             continue
+        sym = cur + "/KRW"
+        if sym not in krw_symbols:
+            continue
         try:
-            t = exchange.fetch_ticker(cur + "/KRW")
+            t = exchange.fetch_ticker(sym)
             price = t["last"]
             val = amt * price
             total_eval += val
-            holdings[cur + "/KRW"] = {{"amount": amt, "current_price": price, "eval_krw": val}}
-        except:
+            holdings[sym] = {{"amount": amt, "current_price": price, "eval_krw": val}}
+        except Exception:
             pass
     data["full_balance"] = {{"total_eval": total_eval, "holdings": holdings}}
 except Exception as e:

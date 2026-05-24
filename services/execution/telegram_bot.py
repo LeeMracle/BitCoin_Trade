@@ -10,6 +10,7 @@
   /mode     — 거래 주기 변경 (realtime/1h/4h/daily)
   /config   — 현재 설정 확인
   /reset    — 상태 초기화
+  /cooldown — 연패 쿨다운 상태 확인 및 수동 해제
   /help     — 명령어 목록
 """
 from __future__ import annotations
@@ -133,6 +134,7 @@ class TelegramCommandHandler:
             "/vb": self._cmd_vb,
             "/config": self._cmd_config,
             "/reset": self._cmd_reset,
+            "/cooldown": self._cmd_cooldown,
             "/help": self._cmd_help,
         }
 
@@ -166,6 +168,8 @@ class TelegramCommandHandler:
             "  `/vb` 상태 `/vb on` 실전 `/vb off` 중단 `/vb dry` DRY-RUN\n"
             "/config — 현재 설정 확인\n"
             "/reset — 상태 초기화\n"
+            "/cooldown — 연패 쿨다운 상태/해제\n"
+            "  `/cooldown` 상태 `/cooldown clear` 해제\n"
             "/help — 이 메시지"
         )
 
@@ -401,6 +405,116 @@ class TelegramCommandHandler:
             subprocess.Popen(["sudo", "systemctl", "restart", "btc-trader"])
         else:
             await send_message("사용법: `/vb` 상태 | `/vb on` 실전 | `/vb off` 중단 | `/vb dry` DRY-RUN")
+
+    async def _cmd_cooldown(self, args):
+        """연패 쿨다운 상태 확인 및 수동 해제."""
+        from datetime import datetime, timezone, timedelta
+        import json
+
+        KST = timezone(timedelta(hours=9))
+        now = datetime.now(tz=timezone.utc)
+
+        # ── 상태 수집 ──
+        # 1) DC/ATR composite 쿨다운 (multi_trading_state.json)
+        from services.execution.multi_trader import load_state, save_state
+        state = load_state()
+        dc_until_ts = state.get("cooldown_until")  # Unix timestamp or None
+        dc_active = dc_until_ts and now.timestamp() < dc_until_ts
+
+        # 2) VB 쿨다운 (vb_state.json)
+        vb_state_path = Path(__file__).resolve().parents[2] / "workspace" / "vb_state.json"
+        vb_until_iso = None
+        vb_active = False
+        if vb_state_path.exists():
+            try:
+                with open(vb_state_path, "r", encoding="utf-8") as f:
+                    vb_full = json.load(f)
+                vb_until_iso = vb_full.get("loss_cooldown_until")
+                if vb_until_iso:
+                    from services.execution.vb_filters import is_in_loss_cooldown
+                    vb_active = is_in_loss_cooldown(vb_until_iso, now)
+            except Exception:
+                pass
+
+        def _fmt_until(ts_or_iso, is_ts: bool) -> str:
+            try:
+                if is_ts:
+                    dt = datetime.fromtimestamp(float(ts_or_iso), tz=KST)
+                else:
+                    dt = datetime.fromisoformat(str(ts_or_iso))
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    dt = dt.astimezone(KST)
+                remaining = (dt - now.astimezone(KST)).total_seconds() / 3600
+                return f"{dt:%Y-%m-%d %H:%M KST} ({remaining:.1f}h 남음)"
+            except Exception:
+                return str(ts_or_iso)
+
+        if not args:
+            # 상태 표시
+            lines = ["🧊 *연패 쿨다운 상태*\n"]
+            if dc_active:
+                lines.append(f"DC전략: 🔴 *쿨다운 중*\n  해제: {_fmt_until(dc_until_ts, True)}")
+            else:
+                lines.append("DC전략: 🟢 정상")
+
+            if vb_active:
+                lines.append(f"VB전략: 🔴 *쿨다운 중*\n  해제: {_fmt_until(vb_until_iso, False)}")
+            else:
+                lines.append("VB전략: 🟢 정상")
+
+            if dc_active or vb_active:
+                lines.append("\n수동 해제: `/cooldown clear`")
+            await send_message("\n".join(lines))
+            return
+
+        if args[0].lower() == "clear":
+            if len(args) < 2 or args[1].lower() != "confirm":
+                # 확인 요청
+                active_list = []
+                if dc_active:
+                    active_list.append(f"DC전략 ({_fmt_until(dc_until_ts, True)})")
+                if vb_active:
+                    active_list.append(f"VB전략 ({_fmt_until(vb_until_iso, False)})")
+                if not active_list:
+                    await send_message("✅ 현재 활성 쿨다운 없음")
+                    return
+                target = "\n".join(f"  • {x}" for x in active_list)
+                await send_message(
+                    f"⚠️ *쿨다운 수동 해제 확인*\n\n"
+                    f"해제 대상:\n{target}\n\n"
+                    f"확인: `/cooldown clear confirm`"
+                )
+                return
+
+            # 실제 해제
+            cleared = []
+            if dc_active:
+                state.pop("cooldown_until", None)
+                save_state(state)
+                cleared.append("DC전략")
+
+            if vb_active:
+                try:
+                    with open(vb_state_path, "r", encoding="utf-8") as f:
+                        vb_full = json.load(f)
+                    vb_full.pop("loss_cooldown_until", None)
+                    import os as _os
+                    tmp = vb_state_path.with_suffix(vb_state_path.suffix + ".tmp")
+                    with open(tmp, "w", encoding="utf-8") as f:
+                        json.dump(vb_full, f, ensure_ascii=False, indent=2)
+                    _os.replace(tmp, vb_state_path)
+                    cleared.append("VB전략")
+                except Exception as e:
+                    await send_message(f"⚠️ VB 쿨다운 해제 실패: {e}")
+                    return
+
+            if cleared:
+                await send_message(f"✅ *쿨다운 해제 완료*\n해제: {', '.join(cleared)}\n신규 진입 재개됩니다.")
+            else:
+                await send_message("✅ 현재 활성 쿨다운 없음")
+        else:
+            await send_message("사용법: `/cooldown` 상태 | `/cooldown clear` 해제")
 
     async def _cmd_config(self, args):
         try:
