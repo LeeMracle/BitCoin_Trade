@@ -208,15 +208,15 @@ async def run(dry_run: bool = False):
                 print(f"    트레일링스탑: {sig['trail_stop']:,.0f}  금액: {order_amount:,.0f} KRW")
 
                 # ── ML 신호 필터 게이트 (fail-open) ─────────────────
+                # 2026-05-08 P1-FIX: ohlcv 가드 제거 → inference.py가 자동 fetch (P8-23-1)
                 _ml_flt = _get_ml_filter()
                 _ml_score = 1.0
                 if _ml_flt.is_active:
-                    _ohlcv = sig.get("ohlcv")  # scanner에서 향후 주입 (없으면 fail-open)
-                    if _ohlcv is not None:
-                        try:
-                            _ml_score = _ml_flt.score(symbol, _ohlcv, _pd.Timestamp.now(tz="UTC"))
-                        except Exception as _e:
-                            print(f"  [ML 점수 실패] {symbol}: {_e} — fail-open")
+                    _ohlcv = sig.get("ohlcv")  # 주입되면 사용, 아니면 자동 fetch
+                    try:
+                        _ml_score = _ml_flt.score(symbol, _ohlcv, _pd.Timestamp.now(tz="UTC"))
+                    except Exception as _e:
+                        print(f"  [ML 점수 실패] {symbol}: {_e} — fail-open")
                 _ml_pass = _ml_flt.passes(_ml_score)
                 _ml_shadow.log_decision(
                     symbol=symbol, signal_ts=_pd.Timestamp.now(tz="UTC"),
@@ -242,12 +242,50 @@ async def run(dry_run: bool = False):
                         await notify_error(msg)
                         continue
 
+                # 2026-05-24 보강 (lessons #32 / lessons #25 강화): scanner 매수 경로에도
+                # entry_qty/entry_amount_krw 저장 + 4단 fallback + invariant 가드.
+                # realtime_monitor.py:1966~2010 과 동형 로직 (모든 매수 경로 일관성, lessons #6).
+                # 신뢰도 순: order.filled > order.amount > 거래소 실잔량 > order_amount/exec_price 산식.
+                entry_qty = 0.0
+                o = order or {}
+                for k in ("filled", "amount"):
+                    try:
+                        v = o.get(k)
+                        if v is not None:
+                            entry_qty = float(v)
+                            if entry_qty > 0:
+                                break
+                    except Exception:
+                        continue
+                # 거래소 실잔량 fallback — 시장가 즉시 체결 후 fetch_balance 신뢰
+                if entry_qty <= 0:
+                    try:
+                        from services.execution.upbit_client import _create_exchange, _retry_on_429
+                        coin = symbol.split("/")[0]
+                        _ex_raw = _create_exchange()
+                        _bal_raw = _retry_on_429(_ex_raw.fetch_balance)
+                        ex_qty = float((_bal_raw.get(coin) or {}).get("total") or 0)
+                        if ex_qty > 0:
+                            entry_qty = ex_qty
+                    except Exception as _e:
+                        print(f"  [경고] {symbol} entry_qty fetch_balance fallback 실패: {_e}", flush=True)
+                # 최후 산식 fallback
+                if entry_qty <= 0:
+                    entry_qty = order_amount / exec_price if exec_price > 0 else 0
+                # invariant 위반 가드 — entry_qty=0 저장 절대 금지 (회귀방지)
+                if entry_qty <= 0:
+                    print(f"  [경고] {symbol} entry_qty 결정 불가 — order_amount/exec_price 모두 0", flush=True)
+                    entry_qty = 1e-9  # placeholder, 추후 fix_state_balance_mismatch.py로 보정
+
                 positions[symbol] = {
                     "entry_date": today,
                     "entry_price": exec_price,
                     "highest": exec_price,
                     "trail_stop": sig["trail_stop"],
                     "order_amount": order_amount,
+                    "entry_amount_krw": order_amount,    # 불변 (TP 잔량 회계 기준)
+                    "entry_qty": entry_qty,              # 불변 (부분 매도 수량 산정 기준)
+                    "tp_sold_levels": [],                # 단계별 매도 추적
                 }
                 available_krw -= order_amount
 

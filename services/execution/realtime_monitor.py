@@ -42,6 +42,7 @@ from services.execution.config import (
     VB_BEAR_MARKET_FILTER, VB_DEAD_SYMBOL_THRESHOLD, VB_MAX_WEEKLY_PER_SYMBOL,
     VB_LOSS_COOLDOWN_N, VB_LOSS_COOLDOWN_HOURS,
     CIRCUIT_BREAKER_ENABLED, CIRCUIT_BREAKER_INITIAL_CAPITAL,
+    DUST_IGNORE_THRESHOLD_KRW,
     EMA_TREND_ENABLED, EMA_TREND_DRY_RUN,
     EMA_TREND_EMA_PERIOD, EMA_TREND_FILTER_PERIOD,
     EMA_TREND_TRAIL_PCT, EMA_TREND_MAX_POSITIONS, EMA_TREND_POSITION_RATIO,
@@ -142,6 +143,8 @@ class RealtimeMonitor:
         # 폭주 차단: ORDER/KRW 한 종목 30h에 16,484회 → 봉당 1회 + 60s = 30h/15m = 120회 내외.
         self._signal_dedupe: dict[str, dict] = {}
         self._dedupe_log_ts: float = 0.0  # 차단 로그 60s throttle
+        # lessons #28: TP 트리거 시 거래소 잔고 0 감지 → N회 누적 시 state 자동 정리
+        self._orphan_seen_count: dict[str, int] = {}
 
     async def start(self):
         print("=" * 60, flush=True)
@@ -159,6 +162,13 @@ class RealtimeMonitor:
             mode = "DRY-RUN" if EMA_TREND_DRY_RUN else "실전"
             print(f"  EMA Trend: {mode}, EMA{EMA_TREND_EMA_PERIOD}/EMA{EMA_TREND_FILTER_PERIOD}, Trail{EMA_TREND_TRAIL_PCT*100:.0f}%", flush=True)
         print("=" * 60, flush=True)
+
+        # 시작 즉시 heartbeat 파일 touch — cron watchdog_check.sh 10분 임계 보호
+        # (레벨 갱신 ~5분 + 첫 WS 메시지까지 갭 보호, 2026-05-14)
+        try:
+            Path("/tmp/bata_heartbeat").touch()
+        except Exception:
+            pass
 
         # 시작 시 레벨 갱신 — API 장애(점검 등) 대비 재시도 (lessons #15)
         # 알림 정책: 첫 1~2회 실패는 일시적 429 가능성 높아 알림 X.
@@ -213,7 +223,9 @@ class RealtimeMonitor:
 
                 # 거래소 보유 코인 (KRW·BTC·메타키·먼지 제외)
                 # 먼지 판별: 유효 마켓이 있고 평가액 > 5000원
+                # exchange_value: dust 분리 판정용 (lessons #29) — only_exchange 차집합에서 사용
                 exchange_coins = set()
+                exchange_value: dict[str, float] = {}
                 alt_coins = {}
                 for coin, amounts in raw_balance.items():
                     if coin in _SKIP or not isinstance(amounts, dict):
@@ -234,10 +246,12 @@ class RealtimeMonitor:
                             for c in valid:
                                 sym = f"{c}/KRW"
                                 price = float(tickers.get(sym, {}).get("last", 0) or 0)
-                                if alt_coins[c] * price > 5000:
+                                value = alt_coins[c] * price
+                                if value > 5000:
                                     exchange_coins.add(sym)
+                                    exchange_value[sym] = value
                         except Exception:
-                            # 시세 조회 실패 시 보유량만으로 판단
+                            # 시세 조회 실패 시 보유량만으로 판단 (가치는 0으로 — dust 분리 비활성)
                             for c in valid:
                                 exchange_coins.add(f"{c}/KRW")
 
@@ -255,6 +269,17 @@ class RealtimeMonitor:
 
                 only_exchange = exchange_coins - state_coins
                 only_state = state_coins - exchange_coins
+
+                # lessons #29: 거래소에만 존재하는 dust(< DUST_IGNORE_THRESHOLD_KRW)는 알람 silence
+                # — state는 봇이 매도/정리한 종목이고 거래소엔 잔여 dust만 남은 케이스 (수동 매도 외 처리 불가).
+                # only_state(state에 있는데 잔고 없음)는 매도 누락 의심이므로 임계 적용 안 함.
+                if only_exchange and exchange_value:
+                    _dust = {s for s in only_exchange
+                             if 0 < exchange_value.get(s, 0) < DUST_IGNORE_THRESHOLD_KRW}
+                    if _dust:
+                        only_exchange = only_exchange - _dust
+                        _dust_str = ", ".join(f"{s}={int(exchange_value[s])}원" for s in sorted(_dust))
+                        print(f"  [교차검증] dust 무시 ({len(_dust)}종목, <{DUST_IGNORE_THRESHOLD_KRW//1000}k원): {_dust_str}", flush=True)
 
                 if only_exchange or only_state:
                     # plan 20260503 (race condition 보호 — AKT 12:15 false alarm 사고):
@@ -279,6 +304,13 @@ class RealtimeMonitor:
                         reloaded_state = reloaded_composite | reloaded_vb | ema_coins
                         only_exchange = exchange_coins - reloaded_state
                         only_state = reloaded_state - exchange_coins
+                        # lessons #29: reload 차집합에도 dust 필터 적용
+                        if only_exchange and exchange_value:
+                            _dust2 = {s for s in only_exchange
+                                      if 0 < exchange_value.get(s, 0) < DUST_IGNORE_THRESHOLD_KRW}
+                            if _dust2:
+                                only_exchange = only_exchange - _dust2
+                                print(f"  [교차검증] reload 후 dust 무시 ({len(_dust2)}종목)", flush=True)
                         if not only_exchange and not only_state:
                             print(f"  [교차검증] 재로드 후 일치 OK — false alarm 회피", flush=True)
                             continue
@@ -534,9 +566,12 @@ class RealtimeMonitor:
                 print(f"  진행: {idx}/{total} ({len(new_levels)}개 등록)", flush=True)
                 # 레벨 갱신 중 systemd watchdog ping — 4분 블로킹 루프에서 timeout 방지
                 # ref: lessons/20260417_2 (refresh_levels 중 watchdog ping 누락 → SIGABRT)
+                # 추가(2026-05-14): /tmp/bata_heartbeat 파일도 함께 갱신해야 cron 기반
+                # watchdog_check.sh(10분 임계)가 시작 단계에서 봇을 무한 재시작하지 않음.
                 try:
                     _sd_watchdog()
                     self._last_heartbeat = _time.monotonic()
+                    Path("/tmp/bata_heartbeat").touch()
                 except Exception:
                     pass
 
@@ -619,18 +654,38 @@ class RealtimeMonitor:
             total = 0
 
         # ── 5연패 자동 중단 (회귀 보존 — cto P3 review #3) ──
+        # lessons #30 (5/16): 알람 디바운스 — 매 _send_periodic_report 호출마다 재발사 차단
+        # cooldown_until 살아있는 동안은 이미 안내된 상태이므로 콘솔만 기록
         consec, n_trades, wins_n = check_consec_loss(self.state)
         if consec >= 5:
-            win_rate = wins_n / n_trades * 100 if n_trades > 0 else 0
-            self.running = False
-            await send(
-                f"🛑 *5연패 자동 중단*\n"
-                f"연속 {consec}건 손실 — 검증 플랜 조기 탈출\n"
-                f"승률: {win_rate:.0f}% ({wins_n}/{n_trades})\n"
-                f"원인 분석 후 전략 수정 필요\n"
-                f"재시작: `sudo systemctl restart btc-trader`"
-            )
-            print(f"\n!!! 5연패 자동 중단 !!!", flush=True)
+            import time as _t
+            now_ts = _t.time()
+            cd_until = self.state.get("cooldown_until", 0) or 0
+            alerted_until = self.state.get("consec_loss_alerted_until", 0) or 0
+            if alerted_until > now_ts or cd_until > now_ts:
+                # 이미 알람 발사 + cooldown 작동 중 → 콘솔만
+                # lessons #30 강화 (5/20): cooldown_until이 alerted_until보다 길면 동기화 →
+                # cooldown 갱신 후 alerted_until reset돼도 silence 유지
+                if cd_until > alerted_until:
+                    self.state["consec_loss_alerted_until"] = cd_until
+                    alerted_until = cd_until
+                    save_state(self.state)  # 2026-05-22: 재시작 시 silence 유실 방지 (lessons #30 강화)
+                remain = max(alerted_until, cd_until) - now_ts
+                print(f"  [5연패] cooldown 활성 ({remain/3600:.1f}h 남음) — 알람 skip", flush=True)
+            else:
+                win_rate = wins_n / n_trades * 100 if n_trades > 0 else 0
+                self.running = False
+                await send(
+                    f"🛑 *5연패 자동 중단*\n"
+                    f"연속 {consec}건 손실 — 검증 플랜 조기 탈출\n"
+                    f"승률: {win_rate:.0f}% ({wins_n}/{n_trades})\n"
+                    f"원인 분석 후 전략 수정 필요\n"
+                    f"재시작: `sudo systemctl restart btc-trader`"
+                )
+                # 72h 디바운스 (cooldown 자동 기간과 동일)
+                self.state["consec_loss_alerted_until"] = now_ts + 3600 * 72
+                save_state(self.state)  # 2026-05-22: 재시작 시 알람 재발사 방지 (lessons #30 강화)
+                print(f"\n!!! 5연패 자동 중단 !!!", flush=True)
             return
 
         # ── 시장 + 누적 성적 (함수 호출로 통일) ──
@@ -1538,7 +1593,36 @@ class RealtimeMonitor:
                 cur_total = float(bal.get(coin, {}).get("total", 0) or 0)
                 cur_free = float(bal.get(coin, {}).get("free", 0) or 0)
                 if cur_total <= 0:
-                    print(f"  [TP] {symbol} 잔고 없음 (total=0) — TP 스킵, position 정리 필요", flush=True)
+                    # lessons #28: 잔고 0 N회 누적 시 자동 정리 (false alarm 영구 차단)
+                    cnt = self._orphan_seen_count.get(symbol, 0) + 1
+                    self._orphan_seen_count[symbol] = cnt
+                    if cnt < 3:
+                        print(
+                            f"  [TP] {symbol} 잔고 없음 (total=0) — TP 스킵 ({cnt}/3회 누적)",
+                            flush=True,
+                        )
+                        return
+                    # 3회 누적 — 자동 정리
+                    KST = timezone(timedelta(hours=9))
+                    ep = pos.get("entry_price", 0) or 0
+                    ret_pct = ((price - ep) / ep * 100.0) if ep > 0 else 0.0
+                    self.state.setdefault("closed_trades", []).append({
+                        "symbol": symbol,
+                        "entry_date": pos.get("entry_date", ""),
+                        "entry_price": ep,
+                        "exit_date": datetime.now(KST).strftime("%Y-%m-%d %H:%M"),
+                        "exit_price": price,
+                        "return_pct": round(ret_pct, 2),
+                        "exit_reason": "auto_cleanup_zero_balance",
+                    })
+                    self.state.get("positions", {}).pop(symbol, None)
+                    save_state(self.state)
+                    self._orphan_seen_count.pop(symbol, None)
+                    print(
+                        f"  [TP] {symbol} 잔고 없음 {cnt}회 — 자동 정리 (state.positions 제거, "
+                        f"return_pct={ret_pct:+.2f}%)",
+                        flush=True,
+                    )
                     return
                 # 매도 수량: 매수 시점 entry_qty 기준 비율 (잔량 변동 무관 일관성)
                 # 단, 최초 진입 후 첫 TP에선 entry_qty 미저장 가능 → cur_total 기준
@@ -1666,6 +1750,7 @@ class RealtimeMonitor:
         # ── 신호 발화 dedupe (lessons #1, C-FIX 20260505 → 20260506 완화) ───
         # 60초 내 재시도만 차단. ORDER/KRW 1.6건/초 폭주 → 분당 1회로 차단.
         # 같은 봉 차단은 제거 — 진짜 신호까지 막혀 매수 0건 발생 (1.5h 257건 차단 / 매수 0건).
+        # 2026-05-22: dedupe 갱신을 모든 필터 통과 후로 이동 — 진짜 차단 사유(REGIME/VOL/ATR/ML) 로그 가시화.
         _now_ts = _time.time()
         _last = self._signal_dedupe.get(symbol)
         if _last is not None and (_now_ts - _last["ts"]) < 60:
@@ -1673,7 +1758,6 @@ class RealtimeMonitor:
                 print(f"  [신호 dedupe] {symbol} 60s 내 재시도 차단", flush=True)
                 self._dedupe_log_ts = _now_ts
             return
-        self._signal_dedupe[symbol] = {"ts": _now_ts}
 
         # ── 계좌 레벨 서킷브레이커 ─────────────────────────
         if CIRCUIT_BREAKER_ENABLED:
@@ -1798,15 +1882,17 @@ class RealtimeMonitor:
         # ── ML 신호 필터 게이트 (fail-open, lessons #6) ─────
         # 모든 사전 필터(서킷브레이커/F&G/EMA200/거래량/ATR) 통과 후 마지막 게이트.
         # ML 비활성/모델부재/추론실패 시 score=1.0 → 항상 통과.
+        # 2026-05-08 P1-FIX: level["ohlcv"] 가드 제거 → score() 항상 호출.
+        # inference.py가 ohlcv=None 시 ccxt 자동 fetch + 60s LRU 캐시 (P8-23-1).
+        # 이전엔 가드로 막혀 score=1.0 고정 → ML 실효 0이었음.
         _ml_flt = _get_ml_filter()
         _ml_score = 1.0
         if _ml_flt.is_active:
-            _ohlcv = level.get("ohlcv")  # 주입 시 사용, 없으면 fail-open
-            if _ohlcv is not None:
-                try:
-                    _ml_score = _ml_flt.score(symbol, _ohlcv, pd.Timestamp.now(tz="UTC"))
-                except Exception as _e:
-                    print(f"  [{symbol}] ML 점수 실패: {_e} — fail-open", flush=True)
+            _ohlcv = level.get("ohlcv")  # 주입되면 사용, 아니면 inference.py가 자동 fetch
+            try:
+                _ml_score = _ml_flt.score(symbol, _ohlcv, pd.Timestamp.now(tz="UTC"))
+            except Exception as _e:
+                print(f"  [{symbol}] ML 점수 실패: {_e} — fail-open", flush=True)
         _ml_pass = _ml_flt.passes(_ml_score)
         _ml_shadow.log_decision(
             symbol=symbol, signal_ts=pd.Timestamp.now(tz="UTC"),
@@ -1823,6 +1909,9 @@ class RealtimeMonitor:
             )
             record_block("ml_filter", symbol)
             return
+
+        # 모든 필터 통과 — 진짜 매수 시도 직전에 dedupe 갱신 (2026-05-22 이동)
+        self._signal_dedupe[symbol] = {"ts": _time.time()}
 
         if IS_DAYTRADING:
             trail_stop = price * (1 - _DT_TRAIL_PCT)
@@ -1875,11 +1964,40 @@ class RealtimeMonitor:
         self._reset_errors()
 
         # plan 20260504_2 AC3 (cto BLOCK-1): entry_qty/entry_amount_krw 불변 저장 — 부분 익절 잔량 회계 기준
-        # DRY_RUN인 경우 order는 None이므로 추정값 사용
-        try:
-            entry_qty = float((order or {}).get("amount") if not DRY_RUN else 0) or (order_amount / exec_price if exec_price > 0 else 0)
-        except Exception:
-            entry_qty = 0
+        # 2026-05-24 보강 (lessons #25 강화): 업비트 시장가 매수는 order["amount"]가 None인 경우가
+        # 많음 — float(None) → TypeError → entry_qty=0 저장되어 부분 TP 시 매도 수량 산정 어긋남.
+        # 신뢰도 순: order.filled > order.amount > 거래소 실잔량 > order_amount/exec_price 산식.
+        entry_qty = 0.0
+        if not DRY_RUN:
+            o = order or {}
+            for k in ("filled", "amount"):
+                try:
+                    v = o.get(k)
+                    if v is not None:
+                        entry_qty = float(v)
+                        if entry_qty > 0:
+                            break
+                except Exception:
+                    continue
+            # 거래소 실잔량 fallback — 시장가 즉시 체결 후 fetch_balance 신뢰
+            if entry_qty <= 0:
+                try:
+                    from services.execution.upbit_client import _create_exchange, _retry_on_429
+                    coin = symbol.split("/")[0]
+                    _ex_raw = _create_exchange()
+                    _bal_raw = _retry_on_429(_ex_raw.fetch_balance)
+                    ex_qty = float((_bal_raw.get(coin) or {}).get("total") or 0)
+                    if ex_qty > 0:
+                        entry_qty = ex_qty
+                except Exception as _e:
+                    print(f"  [경고] {symbol} entry_qty fetch_balance fallback 실패: {_e}", flush=True)
+        # 최후 산식 fallback (DRY_RUN 포함)
+        if entry_qty <= 0:
+            entry_qty = order_amount / exec_price if exec_price > 0 else 0
+        # invariant 위반 가드 — entry_qty=0 저장 절대 금지 (회귀방지)
+        if entry_qty <= 0:
+            print(f"  [경고] {symbol} entry_qty 결정 불가 — order_amount/exec_price 모두 0", flush=True)
+            entry_qty = 1e-9  # placeholder, 추후 fix_state_balance_mismatch.py로 보정
         positions[symbol] = {
             "entry_date": today,
             "entry_price": exec_price,

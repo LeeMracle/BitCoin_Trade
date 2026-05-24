@@ -105,7 +105,7 @@ PROJECT_DIR="/home/ubuntu/BitCoin_Trade"
 
 # 로그 파일 초기화 (lessons/20260418_2 — cron은 /var/log/에 새 파일을 생성할 권한이 없어 redirect가 silent fail)
 # 배포 때마다 touch로 보장. 기존 파일이 있으면 내용 유지.
-LOG_FILES=(/var/log/btc_trader.log /var/log/btc_report.log /var/log/watchdog_check.log /var/log/log_volume.log /var/log/jarvis_executor.log /var/log/vb_recheck_trigger.log /var/log/regime_check.log /var/log/critical_healthcheck.log /var/log/hourly_digest.log /var/log/ml_outcome.log)
+LOG_FILES=(/var/log/btc_trader.log /var/log/btc_report.log /var/log/watchdog_check.log /var/log/log_volume.log /var/log/jarvis_executor.log /var/log/vb_recheck_trigger.log /var/log/regime_check.log /var/log/critical_healthcheck.log /var/log/hourly_digest.log /var/log/ml_outcome.log /var/log/ml_weekly_review.log)
 sudo touch "${LOG_FILES[@]}"
 sudo chown ubuntu:ubuntu "${LOG_FILES[@]}"
 
@@ -134,6 +134,9 @@ CRON_CRITICAL="5 * * * * cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_DIR
 # CRON_DIGEST="30 * * * * cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_DIR $PROJECT_DIR/.venv/bin/python scripts/hourly_digest.py >> /var/log/hourly_digest.log 2>&1"
 # plan 20260504_3 P1: ML outcome 매칭 — 매일 KST 03:00 (UTC 18:00) 어제 결정의 24h 도달 여부 기록
 CRON_ML_OUTCOME="0 18 * * * cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_DIR $PROJECT_DIR/.venv/bin/python scripts/ml_outcome_match.py --days 3 >> /var/log/ml_outcome.log 2>&1"
+# ADR 20260505-2: ML LIVE 주간 자동 평가 — 매주 일 19:00 UTC (월 04:00 KST)
+# threshold 강화/롤백 판정 근거 텔레그램 보고
+CRON_ML_WEEKLY="0 19 * * 0 cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_DIR $PROJECT_DIR/.venv/bin/python scripts/ml_weekly_review.py >> /var/log/ml_weekly_review.log 2>&1"
 
 # 기존 등록 제거 후 추가
 (crontab -l 2>/dev/null \
@@ -146,7 +149,8 @@ CRON_ML_OUTCOME="0 18 * * * cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_
     | grep -v "regime_check.py" \
     | grep -v "critical_healthcheck.py" \
     | grep -v "hourly_digest.py" \
-    | grep -v "ml_outcome_match.py"; \
+    | grep -v "ml_outcome_match.py" \
+    | grep -v "ml_weekly_review.py"; \
     echo "$CRON_LIVE"; \
     echo "$CRON_REPORT_18"; \
     echo "$CRON_WATCHDOG"; \
@@ -155,7 +159,8 @@ CRON_ML_OUTCOME="0 18 * * * cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_
     echo "$CRON_VB_RECHECK"; \
     echo "$CRON_REGIME"; \
     echo "$CRON_CRITICAL"; \
-    echo "$CRON_ML_OUTCOME") | crontab -
+    echo "$CRON_ML_OUTCOME"; \
+    echo "$CRON_ML_WEEKLY") | crontab -
 
 # watchdog/log_volume 스크립트 실행권한 부여
 chmod +x "$PROJECT_DIR/scripts/watchdog_check.sh" "$PROJECT_DIR/scripts/log_volume_check.sh" 2>/dev/null

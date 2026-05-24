@@ -532,6 +532,64 @@ def check_service_watchdog_sec() -> None:
         )
 
 
+def check_cron_var_echo_consistency() -> None:
+    """deploy_to_aws.sh의 활성 CRON_xxx 변수 정의와 echo 등록의 1:1 일관성 검증.
+
+    배경: lessons #31 — 5/14에 ml_weekly_review/ml_outcome_match cron 변수만 추가하고
+    echo 블록 등록 누락 시, deploy 직접 실행해도 cron이 등록 안 됨 (silent fail).
+    또한 scp+restart 우회 시에는 deploy_to_aws.sh 자체가 안 돌므로 G6 패치 효과 없음 —
+    하지만 적어도 deploy 스크립트의 내적 정합성은 항상 보장해야 한다.
+
+    검증 규칙:
+      1. ^CRON_(\\w+)= 매칭 → 활성 변수 추출 (주석 라인 제외)
+      2. echo "$CRON_\\w+" 매칭 → echo 등록 변수 추출
+      3. 정의됐는데 echo 안 된 변수 = errors (lessons #31 시나리오)
+      4. echo 됐는데 정의 안 된 변수 = errors (오타/리네임 누락)
+
+    ref: docs/lessons/20260520_1_cron_registration_missing.md
+    ref: docs/lessons/20260524_1_g6_deploy_guard.md
+    """
+    d_path = PROJECT_ROOT / "scripts" / "deploy_to_aws.sh"
+    if not d_path.exists():
+        return
+    txt = d_path.read_text(encoding="utf-8")
+
+    defined: set[str] = set()
+    for raw_line in txt.splitlines():
+        # 라인 앞 공백 제외 후 # 로 시작하면 주석 → 비활성 변수로 간주
+        stripped = raw_line.lstrip()
+        if stripped.startswith("#"):
+            continue
+        m = re.match(r'^([A-Z_]*CRON_[A-Z0-9_]+)\s*=', stripped)
+        if m:
+            defined.add(m.group(1))
+
+    # echo 등록 추출 — `echo "$CRON_XXX"` 패턴
+    # 주석 라인의 echo도 제외 (예: "# CRON_DIGEST 비활성" 코멘트)
+    echoed: set[str] = set()
+    for raw_line in txt.splitlines():
+        stripped = raw_line.lstrip()
+        if stripped.startswith("#"):
+            continue
+        for m in re.finditer(r'echo\s+"\$([A-Z_]*CRON_[A-Z0-9_]+)"', raw_line):
+            echoed.add(m.group(1))
+
+    missing_echo = defined - echoed
+    missing_def = echoed - defined
+
+    if missing_echo:
+        errors.append(
+            "[CRON정합] deploy_to_aws.sh에 정의됐으나 echo 블록에 등록 안 된 변수: "
+            f"{sorted(missing_echo)} — lessons #31 시나리오 (cron silent fail). "
+            "echo \"$VAR\" 라인을 crontab 등록 파이프에 추가하세요."
+        )
+    if missing_def:
+        errors.append(
+            "[CRON정합] deploy_to_aws.sh에 echo 됐으나 정의 안 된 변수: "
+            f"{sorted(missing_def)} — 오타 또는 리네임 누락. "
+        )
+
+
 def check_deploy_cron_registered() -> None:
     """deploy_to_aws.sh가 watchdog/log_volume cron + 로그 파일 초기화를 등록하는지.
 
@@ -1320,6 +1378,153 @@ def check_zombie_bot_processes() -> None:
         )
 
 
+# ═══════════════════════════════════════════════════════════════════
+# 검증 X1: entry_qty=0 저장 invariant (lessons #25 강화)
+# ref: docs/lessons/20260524_2_state_qty_zero_and_cron_loss.md
+# ═══════════════════════════════════════════════════════════════════
+
+def check_entry_qty_invariant() -> None:
+    """모든 매수 경로(realtime_monitor.py / multi_trader.py)의 entry_qty 결정 로직에
+    fallback 체인과 invariant 가드가 있는지.
+
+    배경: 2026-05-24 발견 — 업비트 시장가 매수 시 order["amount"]=None이면
+    float(None) → TypeError → entry_qty=0 저장. 5/5 MTL 케이스: entry_qty=0이라
+    부분 TP 수량 산정에서 cur_total fallback으로 매도는 됐지만 state는 영구히
+    잔량 정합 불일치 (entry_qty=0, remaining_qty=93 vs 거래소 46).
+
+    2026-05-24 P2-1 보강 (lessons #6 정신):
+    P1 close 직후 발견 — scanner 경로(multi_trader.py:245)에도 동일 로직 필요.
+    한 경로만 가드하면 다른 경로에서 동형 회귀 가능. 모든 매수 경로를 강제 검증.
+
+    검증규칙 (lessons #25/#32 강화):
+      각 매수 경로마다:
+        - order.filled 또는 order.amount 외에도 fetch_balance fallback 존재
+        - entry_qty <= 0 invariant 가드 (placeholder 또는 경고 로그)
+        - positions[symbol] dict에 entry_qty / entry_amount_krw / tp_sold_levels 저장
+    """
+    # 검증 대상: (파일경로, 라벨)
+    targets = [
+        (PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py", "realtime_monitor"),
+        (PROJECT_ROOT / "services" / "execution" / "multi_trader.py", "multi_trader(scanner)"),
+    ]
+    for path, label in targets:
+        if not path.exists():
+            continue
+        txt = path.read_text(encoding="utf-8")
+        # 옛 형태 (한 줄 표현식) → 회귀 의심
+        if re.search(r'entry_qty\s*=\s*float\(\(order\s+or\s+\{\}\)\.get\("amount"\)', txt):
+            errors.append(
+                f"[entry_qty-invariant:{label}] 옛 entry_qty 결정 로직(float(None) 위험) 잔존 — "
+                "fetch_balance fallback 누락 (lessons #25/#32 강화, 2026-05-24)"
+            )
+            continue
+        # entry_qty 결정 블록 + positions[symbol] dict 본문 추출
+        # (entry_qty = ... ~ "save_state" 또는 다음 함수 정의 직전까지)
+        block_match = re.search(
+            r"entry_qty\s*=\s*0(?:\.0)?.*?positions\[symbol\]\s*=\s*\{[^}]*\}",
+            txt, re.DOTALL
+        )
+        if not block_match:
+            errors.append(
+                f"[entry_qty-invariant:{label}] entry_qty 결정 블록 미발견 — "
+                "scanner 매수 경로에 fallback 체인 누락 (lessons #6/#32, 2026-05-24)"
+            )
+            continue
+        block = block_match.group(0)
+        # fallback 체인 검증
+        if "filled" not in block:
+            errors.append(
+                f"[entry_qty-invariant:{label}] entry_qty 결정 블록에 order.filled fallback 누락 "
+                "(order.amount는 시장가 매수에서 None일 수 있음, lessons #25 강화)"
+            )
+        if "fetch_balance" not in block and "_bal_raw" not in block:
+            errors.append(
+                f"[entry_qty-invariant:{label}] entry_qty 결정 블록에 fetch_balance fallback 누락 — "
+                "order 정보가 모두 None일 때 거래소 실잔량 미러링 불가"
+            )
+        # invariant 가드: entry_qty <= 0 체크
+        if not re.search(r"entry_qty\s*<=?\s*0", block):
+            warnings.append(
+                f"[entry_qty-invariant:{label}] entry_qty <=0 invariant 가드 미발견 — "
+                "0 저장 시 부분 TP 수량 산정 어긋남 위험"
+            )
+        # state 저장 키 검증 (lessons #32 후속 — entry_amount_krw / tp_sold_levels 동시 저장)
+        if "entry_amount_krw" not in block:
+            errors.append(
+                f"[entry_qty-invariant:{label}] positions[symbol] 저장에 entry_amount_krw 누락 — "
+                "부분 TP 잔량 회계 기준 누락 (lessons #25/#32, 2026-05-24)"
+            )
+        if "tp_sold_levels" not in block:
+            warnings.append(
+                f"[entry_qty-invariant:{label}] positions[symbol] 저장에 tp_sold_levels 미초기화 — "
+                "단계별 매도 추적 KeyError 위험 (lessons #25)"
+            )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 검증 X2: fix_state_balance_mismatch.py 잔량 미러링 (lessons #10/#25)
+# ref: docs/lessons/20260524_2_state_qty_zero_and_cron_loss.md
+# ═══════════════════════════════════════════════════════════════════
+
+def check_state_qty_mirror_in_fix() -> None:
+    """scripts/fix_state_balance_mismatch.py가 종목 add/remove 외에 잔량(qty) 미러링도
+    수행하는지 검증.
+
+    배경: 기존 fix는 종목 존재 유무만 확인 → state.qty=0 + 거래소.qty=46 같은
+    잔량 drift는 통과. lessons #10 "state는 거래소 미러" 원칙 미충족.
+    """
+    f_path = PROJECT_ROOT / "scripts" / "fix_state_balance_mismatch.py"
+    if not f_path.exists():
+        warnings.append(
+            "[state-mirror] scripts/fix_state_balance_mismatch.py 없음"
+        )
+        return
+    txt = f_path.read_text(encoding="utf-8")
+    if "qty_fixes" not in txt and "qty 미러" not in txt and "잔량 미러" not in txt:
+        errors.append(
+            "[state-mirror] fix_state_balance_mismatch.py에 잔량 미러링 로직 없음 — "
+            "종목 일치 시 잔량(qty) drift 통과 위험 (lessons #10/#25 강화, 2026-05-24)"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 검증 X3: deploy_to_aws.sh BitCoin cron 최소 카운트 (lessons #31 강화)
+# ref: docs/lessons/20260524_2_state_qty_zero_and_cron_loss.md
+# ═══════════════════════════════════════════════════════════════════
+
+def check_btc_cron_count_baseline() -> None:
+    """deploy_to_aws.sh가 등록하는 BitCoin cron 변수가 최소 baseline 이상인지.
+
+    배경: 2026-05-24 발견 — AWS crontab에 BitCoin cron이 ml_outcome/ml_weekly_review
+    2개만 남고 watchdog/critical/regime/daily_report 등 6개 누락. 원인은 hotfix scp
+    또는 다른 프로젝트 deploy가 crontab 통째 갱신 시 BitCoin 라인 미보존 가능성.
+    deploy_to_aws.sh 자체는 8+ 개를 등록해야 하므로, 변수 활성 개수가 baseline 이상이어야 함.
+
+    Baseline (2026-05-24 기준): CRON_LIVE/REPORT_18/WATCHDOG/LOGVOL/VB_RECHECK/REGIME/
+    CRITICAL/ML_OUTCOME/ML_WEEKLY = 9개 (CRON_DIGEST/JARVIS는 비활성 주석).
+    """
+    d_path = PROJECT_ROOT / "scripts" / "deploy_to_aws.sh"
+    if not d_path.exists():
+        return
+    txt = d_path.read_text(encoding="utf-8")
+    # 활성(주석 아닌) CRON_xxx 변수 카운트
+    active = set()
+    for raw in txt.splitlines():
+        stripped = raw.lstrip()
+        if stripped.startswith("#"):
+            continue
+        m = re.match(r'^(CRON_[A-Z0-9_]+)\s*=', stripped)
+        if m:
+            active.add(m.group(1))
+    BASELINE = 8  # 일시 비활성을 1개 허용
+    if len(active) < BASELINE:
+        errors.append(
+            f"[cron-baseline] deploy_to_aws.sh 활성 CRON_xxx 변수 {len(active)}개 "
+            f"(baseline {BASELINE}+ 필요) — 핵심 BitCoin cron 누락 의심 "
+            f"(lessons #24/#31 강화, 2026-05-24): {sorted(active)}"
+        )
+
+
 def main() -> None:
     print("=" * 50)
     print("배포 전 검증 (pre-deploy check)")
@@ -1341,6 +1546,7 @@ def main() -> None:
     check_monitoring_hooks()
     check_watchdog_script()
     check_service_watchdog_sec()
+    check_cron_var_echo_consistency()
     check_deploy_cron_registered()
     check_balance_log_throttle()
     check_filter_stats_integration()
@@ -1364,6 +1570,9 @@ def main() -> None:
     check_ml_filter_integrity()
     check_system_memory()
     check_zombie_bot_processes()
+    check_entry_qty_invariant()
+    check_state_qty_mirror_in_fix()
+    check_btc_cron_count_baseline()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")
