@@ -30,3 +30,22 @@ workspace/runs/
 
 # 바이너리 캐시
 data/cache.duckdb
+
+# 진단/임시 스크립트 (로컬 전용, output/_*.py 패턴)
+output/_*.py
+output/_*.txt
+output/aws_state.json
+
+# BATA 무관 산출물 (ERP 컨설팅, 팀 재구성 중간본)
+output/ERP*.docx
+output/team_v0.*
+output/today_trade_status.py
+output/fix_sun_remaining_qty.py
+output/sun_diagnosis.py
+output/adr_20260516_2_eval.py
+scripts/generate_erp_sales_strategy_report.py
+
+# ML 산출물 (로컬 전용, 대용량/모델 바이너리)
+data/features/
+data/models/
+workspace/ml_shadow/
