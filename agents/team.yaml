@@ -1,78 +1,231 @@
-version: 0.2
+# BATA Agent Team v0.5.1 — Role-Based (4 agents)
+# 갱신일: 2026-05-24 (KST)
+# 이전: v0.2 (Phase 2 기준) → v0.5.1 (Phase 3+4 운영 기준)
+# 검토 히스토리:
+#   v0.3 — 12 agents (폐기, 과대)
+#   v0.4 — 4 agents 라이프사이클 축 (폐기, 책임 모호)
+#   v0.5 — 4 agents 도메인 축 (채택)
+#   v0.5.1 — v0.5 + G6 갭 보완 (engineer 도구/룰 강화)
+# 참조:
+#   output/team_v0.5_role_based.yaml (전체 설계)
+#   output/team_v0.5_gap_review.md (갭 분석 — G1/G3/G4/G5/G6/G2 6개)
 
+version: 0.5.1
+mode: "OPERATING"
 exchange: upbit
-market_type: spot       # 현물 전용 — long/flat only, 숏·레버리지 없음
+market_type: spot
 base_currency: KRW
-symbol: "BTC/KRW"
-current_phase: 2        # 1=완료, 2=진행중, 3=대기, 4=대기
+
+problems_to_solve:
+  - "P1. 오류 반복: 수정 후에도 비슷한 오류 재발"
+  - "P2. 무수익: 거래는 돌지만 PnL 안 남"
 
 user_interface:
-  primary_agent: pm_orchestrator
-  policy: "사용자는 PM Orchestrator에게만 말한다"
+  primary_agent: pm
+  policy: "사용자는 PM 한 명에게만 말한다"
 
+# ══════════════════════════════════════════════════════════════════
+# 4 AGENTS — 도메인 전문성 축
+# ══════════════════════════════════════════════════════════════════
 agents:
-  pm_orchestrator:
-    role: "단일 사용자 접점. 단계 판단·위임·아티팩트 검토·마일스톤 추적"
+
+  pm:
+    role: "사용자 단일 접점. 우선순위·승인·주간 리뷰 주재"
     skill: "project-orchestrator"
-    may_delegate_to:
-      - market_analyst
-      - strategy_researcher
-      - backtest_engineer
-      - execution_risk_guard
-    required_artifacts:
-      - decision_log
-      - release_checklist
+    domain: "PROJECT"
+    delegates_to: [investment_expert, engineer, operator]
+    decides:
+      - "안정화(P1) vs 수익(P2) 자원 배분"
+      - "전략 변경 최종 승인 (expert 권고 + engineer 게이트 후)"
+      - "긴급 정지·롤백 판단"
+    weekly_audit:
+      - "incident 4단계 close 변환율 점검 (G4 후속)"
+      - "도메인 vs SW 변경 발의자 분리 점검 (G2 후속)"
+    kpi: ["주간 리뷰 1회", "미결 incident 0건"]
 
-  market_analyst:
-    role: "BTC/KRW 시장 레짐 분석 (추세/횡보 판단)"
-    skill: "market-analyst"
-    reports_to: pm_orchestrator
-    tools:
-      - market_data.get_ohlcv
-      - market_data.get_ticker
-      - market_data.get_macro_series
-    outputs:
-      - regime_report      # workspace/research/{date}_regime.md
+  investment_expert:
+    role: "투자전문가. 시장·종목·전략·수익성 진단"
+    domain: "FINANCE"
+    skill_set: [market-analyst, strategy-researcher, backtest-engineer, strategy-pipeline]
+    owns: "P2 무수익"
+    sole_authority:
+      - "도메인 파라미터 변경 발의 (MAX_POSITIONS, TP/SL, ML threshold, MIN_VOLUME 등)"
+      - "종목 blacklist 결정"
+    weekly_diagnosis_questions:
+      - "Q1. 백테스트 vs 실거래 Sharpe drift?"
+      - "Q2. 수수료·슬리피지 차감 net PnL?"
+      - "Q3. 필터별 차단량 + 차단 거래의 가상 PnL?"
+      - "Q4. 종목별 PnL 편차?"
+      - "Q5. 손익비 vs 승률 균형?"
+    change_protocol:
+      - "1. 가설 + 진단 근거"
+      - "2. 백테스트 IS/OOS + 하락장 통과"
+      - "3. 가능 시 페이퍼 1주"
+      - "4. ADR(docs/decisions/) 작성"
+      - "5. engineer 게이트 → pm 승인 → 실거래"
+      - "6. 1주 drift 추적, -5% 초과 시 자동 롤백"
+    kpi: ["주간 진단 리포트 1건", "월간 net PnL ≥ 0", "Sharpe drift < 0.5"]
 
-  strategy_researcher:
-    role: "가설 → 테스트 가능한 strategy_spec 작성"
-    skill: "strategy-researcher"
-    reports_to: pm_orchestrator
-    tools:
-      - market_data.get_ohlcv    # 데이터 확인용
-    outputs:
-      - strategy_spec            # workspace/specs/{id}_spec.md
-      - parameter_ranges
+  engineer:
+    role: "프로그램 기획·개발·유지보수·배포·회귀방지 전 영역"
+    domain: "SOFTWARE"
+    skill_set: [cto]
+    owns: "P1 오류 반복"
+    duties:
+      planning:
+        - "도메인 요구 → 구현 스펙 변환"
+        - "변경 영향 범위 사전 분석 (모든 매수/매도/cron 경로 grep)"
+        - "workspace/plans/ Execution Plan 작성"
+      development:
+        - "전략 코드, 실행 로직, 안전장치 구현"
+      maintenance:
+        - "오류 RCA → 수정 → 검증"
+      deploy:
+        - "정식: scripts/deploy_to_aws.sh (전체 — 인프라 변경 포함)"
+        - "우회: scripts/hotfix_deploy.sh (코드 1~2파일 — G6 안전 wrapper)"
+        - "raw scp + restart 금지 — 예외 시 PM 사전 승인"
+      reliability:
+        - "lessons grep 선결, pre_deploy_check 신규 룰 추가"
+        - "ccxt 싱글톤, fail-closed, hard SL 등 안전장치 유지"
+    incident_close_rule:               # G4 — 4단계 모두 완료해야 close
+      step_1: "RCA 1줄 + 재현 절차"
+      step_2: "수정 + 검증"
+      step_3: "docs/lessons/YYYYMMDD_N_*.md 생성"
+      step_4: "scripts/pre_deploy_check.py 룰 ≥ 1개 추가"
+    tools_to_use:                      # G6 패치 결과물
+      - "scripts/pre_deploy_check.py — 모든 배포 전 강제 실행"
+      - "scripts/hotfix_deploy.sh — 우회 시에도 검증 강제"
+      - "scripts/deploy_to_aws.sh — 인프라 변경 시 사용"
+      - "check_cron_var_echo_consistency() — CRON 정의↔echo 정합 (lessons #31/#32)"
+    kpi:
+      - "동일 원인 재발 0건/주"
+      - "incident → lesson 변환율 100%"
+      - "pre_deploy_check 룰 누적 ≥ 1/주"
+      - "raw scp 사용 0건"
 
-  backtest_engineer:
-    role: "strategy_spec 구현, 시뮬레이션 실행, 실험 기록"
-    skill: "backtest-engineer"
-    reports_to: pm_orchestrator
-    tools:
-      - market_data.get_ohlcv
-      - experiment_tracker.create_experiment
-      - experiment_tracker.log_run
-      - experiment_tracker.compare_runs
-    outputs:
-      - workspace/runs/{run_id}/config.json
-      - workspace/runs/{run_id}/metrics.json
-      - workspace/runs/{run_id}/equity_curve.csv
-      - workspace/runs/{run_id}/trade_log.csv
+  operator:
+    role: "라이브 봇 모니터링. 알람 트리아지 → 전문가 라우팅"
+    domain: "OPERATIONS"
+    skill_set: [monitor, daily-work]
+    owns: "알람 분류 정확도"
+    duties:
+      monitoring:
+        - "9분 cycle 헬스/포지션/PnL 텔레그램 보고"
+        - "일일 시작(09:05) / 종료(23:00) 브리핑"
+        - "state↔balance / 좀비 / cron 등록 상태"
+      triage:
+        - "(A) 코드·시스템 이상 → engineer"
+        - "(B) PnL·전략 시그널 이상 → investment_expert"
+        - "(C) dust/noise → silence"
+        - "(D) 단순 좀비 → 1차 재시작 + engineer 통보"
+      reporting: ["주간 운영 지표 → pm 리뷰 인풋", "incident timeline 기록"]
+    kpi:
+      - "false alarm rate < 5%"
+      - "오분류율 < 10%"
+      - "좀비 발견-조치 lag < 1시간"
 
-  execution_risk_guard:
-    role: "거래 실행 안전 관리. IP·권한·Rate Limit 점검, 포지션 정합성"
-    skill: "execution-risk-guard"
-    reports_to: pm_orchestrator
-    phase_active: 3           # Phase 3 이후 활성화
-    tools:
-      - exchange_execution.*  # Phase 3 구현 예정
-      - alerting.*            # Phase 3 구현 예정
-    outputs:
-      - execution_policy
-      - incident_log           # workspace/runs/{date}/incident_log.json
+# ══════════════════════════════════════════════════════════════════
+# 알람 라우팅 매트릭스 (Operator 의사결정)
+# ══════════════════════════════════════════════════════════════════
+alert_routing:
+  engineer:
+    - "code error / exception / traceback"
+    - "cron 미실행 / systemd fail"
+    - "state-balance mismatch"
+    - "좀비 프로세스 / 중복 PID"
+    - "ccxt rate limit / API 오류"
+    - "메모리 부족 / 디스크 풀"
+  investment_expert:
+    - "일일 PnL -5% 초과"
+    - "월간 net PnL < 0"
+    - "특정 종목 연속 손실"
+    - "백테스트 vs 실거래 drift 임계 초과"
+    - "시장 레짐 급변 (FOMC/CPI)"
+    - "ML 게이트 통과율 급변"
+  joint:
+    "5연패 서킷브레이커": [engineer, investment_expert]
+    "신규 사고 패턴": ["engineer (RCA)", "investment_expert (영향 평가)"]
+  silence:
+    - "dust 잔여 / 5만원 미만 (lessons #29)"
+
+# ══════════════════════════════════════════════════════════════════
+# 워크플로우
+# ══════════════════════════════════════════════════════════════════
+workflows:
+  daily:
+    "09:05": "operator start → 이상 시 라우팅"
+    "09:10~23:00": "operator 9분 cycle"
+    "23:00": "operator end → pm 일일 요약"
+
+  cycle_p1_error:
+    trigger: "operator가 코드/시스템 알람 감지"
+    flow:
+      - "operator → engineer 에스컬레이션"
+      - "engineer: lessons grep → RCA → 수정 → 검증"
+      - "engineer: deploy_to_aws.sh 또는 hotfix_deploy.sh (raw scp 금지)"
+      - "engineer: lessons 작성 + pre_deploy_check 룰 추가"
+      - "operator: 24h 회귀 감시"
+      - "incident close (4단계 완료 후)"
+
+  cycle_p2_profit:
+    trigger: "월요일 09:30 KST 정기"
+    flow:
+      - "investment_expert: 주간 진단 5Q + 가설 + ADR"
+      - "engineer: gate (영향·회귀 검토)"
+      - "pm: 승인"
+      - "engineer: 배포"
+      - "operator: 1주 drift 추적, 임계 초과 시 롤백 콜"
+
+# ══════════════════════════════════════════════════════════════════
+# 갭 백로그 (v0.5_gap_review 6건 중 진행 상태)
+# ══════════════════════════════════════════════════════════════════
+gap_backlog:
+  G6_deploy_guard:
+    status: "CLOSED (2026-05-24)"
+    artifacts:
+      - "scripts/pre_deploy_check.py:check_cron_var_echo_consistency()"
+      - "scripts/hotfix_deploy.sh"
+      - "docs/lessons/20260524_1_g6_deploy_guard.md (lessons #32)"
+      - "workspace/plans/20260524_g6_deploy_guard.md"
+    verification: "PENDING — 별도 세션/cto review 권장 (cross_review_policy)"
+  G1_hotfix_workflow:
+    status: "TODO (engineer 책임에 'raw scp 금지, hotfix_deploy.sh 사용' 명문화 완료, 운영 정착 모니터 필요)"
+  G3_alert_catalog:
+    status: "TODO (operator 신규 책임 — 알람 카탈로그 소유)"
+    priority: "HIGH"
+  G4_incident_audit:
+    status: "TODO (PM 주간 audit + scripts/incident_audit.py 신규 필요)"
+  G5_data_pipeline_health:
+    status: "TODO (operator 9분 cycle에 데이터 헬스 추가)"
+  G2_change_classification:
+    status: "TODO (investment_expert 도메인 파라미터 sole_authority 명문화 완료, 실무 준수 모니터 필요)"
+
+# ══════════════════════════════════════════════════════════════════
+# 핵심 룰 (반복 오류 차단 5하드룰 — v0.5 계승)
+# ══════════════════════════════════════════════════════════════════
+hard_rules:
+  R1: "incident는 lessons + pre_deploy_check 룰 등록까지 끝나야 close"
+  R2: "모든 수정 착수 전 docs/lessons/ grep 선결"
+  R3: "배포 = 코드 + 인프라(cron/systemd) 동시 확인 + post_deploy 헬스 PASS"
+  R4: "동일 세션 자기평가 금지 — cto gate 또는 별도 세션"
+  R5: "변경 영향 범위는 grep으로 모든 경로 열거"
 
 handoff_rules:
-  - "전문 에이전트는 사용자에게 직접 응답하지 않는다"
-  - "PM Orchestrator가 결과를 합쳐 단일 응답 반환"
-  - "실전 거래: Execution Risk Guard 승인 → PM Orchestrator 최종 확인"
-  - "인샘플 성과만으로 다음 단계 이동 금지"
+  - "전문 에이전트는 사용자에게 직접 응답하지 않는다 (PM 단일 접점)"
+  - "Investment Expert가 도메인 파라미터 발의 독점 (Engineer 단독 변경 금지)"
+  - "Engineer는 raw scp 금지 — deploy_to_aws.sh 또는 hotfix_deploy.sh 사용"
+  - "Operator가 알람 분류 책임 — 오분류는 KPI 감점"
+  - "PM 매주 금요일 incident audit (4단계 close 변환율)"
+
+# ══════════════════════════════════════════════════════════════════
+# 성공 체크포인트
+# ══════════════════════════════════════════════════════════════════
+success_checkpoints:
+  "2주":
+    P1: "동일 원인 재발 0건"
+    P2: "주간 진단 2건 누적"
+    Ops: "false alarm <5%, 오분류 <10%"
+  "4주":
+    P1: "pre_deploy_check 룰 +4, lessons #33+ 신규 패턴 정리"
+    P2: "월간 net PnL ≥ 0"
+    Ops: "장애 lag <1시간 유지"

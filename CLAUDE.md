@@ -44,18 +44,127 @@
   - 배포: `bash scripts/deploy_to_aws.sh`
   - 일일 실행: `scripts/daily_live.py` (cron UTC 00:05 = KST 09:05)
 
-## 에이전트 팀 구조
+## 에이전트 팀 구조 (v0.5.1, 도메인 축 4 + 보조 1)
 
-사용자는 **PM Orchestrator**에게만 말한다. 나머지 에이전트는 내부 전용.
+사용자는 **bata-pm**에게만 말한다. 나머지 에이전트는 PM이 위임 호출한다.
+정의 파일: `.claude/agents/*.md` (Claude Code sub-agents). 상세 책임: [agents/team.yaml](agents/team.yaml)
 
-| 에이전트 | 역할 | 스킬 파일 |
+| 에이전트 | 도메인 | 단일 책임 | 정의 파일 | 사용 스킬 |
+| --- | --- | --- | --- | --- |
+| **bata-pm** | PROJECT | 사용자 접점·우선순위·승인·주간 audit | `.claude/agents/bata-pm.md` | project-orchestrator |
+| **bata-investment-expert** | FINANCE | **P2 무수익** — 시장·전략·진단·도메인 파라미터 발의(독점) | `.claude/agents/bata-investment-expert.md` | market-analyst, strategy-researcher, backtest-engineer, strategy-pipeline |
+| **bata-engineer** | SOFTWARE | **P1 오류 반복** — 기획·개발·유지보수·배포·회귀방지 | `.claude/agents/bata-engineer.md` | cto |
+| **bata-operator** | OPERATIONS | 모니터링·알람 트리아지·일일/주간 보고 | `.claude/agents/bata-operator.md` | monitor, daily-work |
+| btc-market-news-analyst | MARKET | (보조) 시황·뉴스 종합 브리핑 | `.claude/agents/btc-market-news-analyst.md` | — |
+
+## 에이전트 호출 파이프라인 (PM 주도)
+
+PM은 사용자 요청을 받아 **싱글 / 병렬 / 순차** 3가지 패턴으로 다른 에이전트를 호출한다.
+실제 호출은 `Agent` 툴에 `subagent_type` 지정 — 병렬 호출은 **단일 메시지에 multiple Agent 블록** (반드시 동시).
+
+### 호출 패턴 3종
+
+| 패턴 | 언제 | 호출 방식 |
 | --- | --- | --- |
-| PM Orchestrator | 단일 사용자 접점, 작업 라우팅, 마일스톤 추적 | [skills/project-orchestrator/SKILL.md](skills/project-orchestrator/SKILL.md) |
-| Market Analyst | 시장 레짐 분석, 매크로 데이터 | [skills/market-analyst/SKILL.md](skills/market-analyst/SKILL.md) |
-| Strategy Researcher | 가설 → 테스트 가능한 트레이딩 규칙 | [skills/strategy-researcher/SKILL.md](skills/strategy-researcher/SKILL.md) |
-| Backtest Engineer | 시뮬레이션, 메트릭, 재현 가능한 백테스트 | [skills/backtest-engineer/SKILL.md](skills/backtest-engineer/SKILL.md) |
-| Execution Risk Guard | 주문 라우팅, 포지션 조정, 리스크 한도 | [skills/execution-risk-guard/SKILL.md](skills/execution-risk-guard/SKILL.md) |
-| **Strategy Pipeline** | 전략 발굴 → 구현 → 백테스트 → 검증 → 등록 파이프라인 | [skills/strategy-pipeline/SKILL.md](skills/strategy-pipeline/SKILL.md) |
+| **싱글** | 도메인 단일·책임자 명확 | `Agent(subagent_type="bata-engineer", ...)` 1회 |
+| **병렬** | 독립 작업 동시 진행 (audit, RCA+영향평가) | 단일 메시지에 `Agent` 블록 N개 동시 호출 |
+| **순차** | A 결과가 B 입력 (게이트, 승인 체인) | A 완료 → 결과 검토 → B 호출 |
+
+### 표준 파이프라인 5종
+
+#### 1. 일일 사이클 (daily)
+```
+09:05 PM → [싱글] bata-operator (start 브리핑)
+            ↓ (이상 항목 있으면)
+            PM이 분류해서 engineer 또는 expert에게 [싱글] 위임
+09:10~23:00 operator 9분 cycle (자동)
+23:00 PM → [싱글] bata-operator (end 브리핑)
+            → PM이 당일 요약 (직접)
+```
+
+#### 2. P1 사이클 — 오류 반복 차단 (incident)
+```
+알람 발생
+  ↓
+PM → [싱글] bata-operator (트리아지)
+  ↓ (분류 결과: 코드 오류)
+PM → [싱글] bata-engineer (RCA → 수정 → 배포 → lessons → 룰)
+  ↓
+PM → [싱글] bata-operator (24h 회귀 감시 위임)
+  ↓ (24h 후)
+PM: incident 4단계 close 확인 → close 또는 보강 지시
+```
+
+#### 3. P2 사이클 — 주간 수익 개선 (월요일 09:30)
+```
+PM → [싱글] bata-investment-expert (주간 5Q 진단 + ADR 발의)
+  ↓ (ADR 산출)
+PM → [싱글] bata-engineer (게이트: 영향 grep + pre_deploy_check)
+  ↓ (게이트 PASS)
+PM: 승인 결정 (직접)
+  ↓ (승인)
+PM → [싱글] bata-engineer (배포 — deploy_to_aws.sh 또는 hotfix_deploy.sh)
+  ↓
+PM → [싱글] bata-operator (1주 drift 추적, 임계 초과 시 롤백 콜)
+```
+
+#### 4. 주간 audit (금요일) — **병렬 fan-out**
+```
+PM → [병렬] {
+  bata-engineer:           "이번 주 incident 4단계 close 변환율 + 신규 lessons/룰 카운트"
+  bata-investment-expert:  "이번 주 PnL/drift/필터 효과 요약"
+  bata-operator:           "이번 주 false alarm rate / 오분류율 / 좀비 lag"
+}
+  ↓ (3개 결과 동시 회수)
+PM: 통합 audit 보고서 작성 (직접) → 사용자 보고
+```
+
+#### 5. 신규 사고 패턴 (lessons에 없음) — **병렬**
+```
+PM → [병렬] {
+  bata-engineer:           "RCA + 수정안 + lessons/룰 후보"
+  bata-investment-expert:  "이 사고가 전략 수익에 미친 영향 + 도메인 권고"
+}
+  ↓ (RCA + 영향 평가 동시)
+PM: 종합 → 우선순위 결정 → engineer 단독 또는 expert 합의로 다음 단계
+```
+
+### 호출 코드 예시
+
+**싱글 호출 (engineer 위임)**
+```
+Agent(
+  subagent_type="bata-engineer",
+  description="realtime_monitor KeyError RCA",
+  prompt="2026-05-24 22:15 KST 알람: realtime_monitor.py에서 KeyError 'pnl_realized'. RCA + 4단계 close 진행. 영향 범위 grep 결과 포함."
+)
+```
+
+**병렬 호출 (주간 audit fan-out — 단일 메시지에 3개 Agent 블록)**
+```
+[같은 메시지에서 동시 호출]
+Agent(subagent_type="bata-engineer", description="W## incident audit", prompt="...")
+Agent(subagent_type="bata-investment-expert", description="W## PnL audit", prompt="...")
+Agent(subagent_type="bata-operator", description="W## ops audit", prompt="...")
+```
+
+**순차 호출 (P2 사이클)**
+```
+1) Agent(subagent_type="bata-investment-expert", ...) → ADR 회수
+2) PM 검토 후
+3) Agent(subagent_type="bata-engineer", ..., prompt="ADR <링크> 게이트 검토") → 게이트 결과 회수
+4) PM 승인
+5) Agent(subagent_type="bata-engineer", ..., prompt="배포 실행") → 배포 결과 회수
+6) Agent(subagent_type="bata-operator", ..., prompt="1주 drift 추적")
+```
+
+### PM 호출 규칙
+
+- **싱글이 기본** — 단일 도메인 작업은 무조건 싱글 (병렬 남용 금지)
+- **병렬은 audit·신규 사고만** — 독립 fan-out에만 사용. 의존 작업을 병렬로 돌리면 결과 불일치
+- **순차에서 PM 직접 처리 단계 명시** — 게이트 결과 검토, 승인은 PM 본인 (위임 X)
+- **하드룰 R4 (자기평가 금지)** — engineer가 만든 코드를 engineer가 PASS 판정하면 안 됨. 게이트는 별도 호출 또는 `cto` review
+- **incident close는 PM이 직접 확인** — 4단계(lessons 작성, 룰 등록) 완료 검증 후 PM이 close 판정
 
 ## 핵심 파일 위치
 
@@ -130,3 +239,8 @@
 | 25 | 부분 익절 잔량 회계는 "불변 입력(entry_qty/entry_amount_krw) + 가변 추적(tp_sold_levels)" 분리. SL/TP 동시 트리거 시 SL 우선 정책 명문화. 매도 retry 금지(lessons #3) — 실패 시 next-tick 재평가. 정기 reset은 cron보다 기존 함수 진입 시점 호출이 안전 (lessons #18/#24 회피) | [lessons/20260504_2](docs/lessons/20260504_2_strategy_enhancements_partial_tp_volume_daily_loss.md) |
 | 26 | "모든 매수 경로"에 적용되는 안전장치(필터·게이트)는 신규 추가 시 `grep buy_market` 등으로 모든 진입점 열거 + task별 분리 필수. fail-open 정책이라도 "일부 경로 누락"은 lessons #6 위배 면책 안 됨. pre_deploy_check에 매수 경로 hook 존재 강제 룰 등록 (자동 사각지대 차단) | [lessons/20260504_3](docs/lessons/20260504_3_ml_filter_realtime_path_missing.md) |
 | 27 | systemd 재시작은 cron으로 fork된 별도 PID(좀비)를 죽이지 않음 — 옛 코드 메모리로 알림 발사 지속. `daily_live.py` (no --realtime)도 종료 안 하면 좀비 누적. 알림 메시지에 PID/instance 자동 prefix + 다중 프로젝트 동거 환경에서 crontab 통째 갱신은 다른 프로젝트 라인 보존 책임. pre_deploy_check에 `pgrep -af daily_live.py` 좀비 카운트 룰 등록 | [lessons/20260506_1](docs/lessons/20260506_1_zombie_bot_old_code_alert.md) |
+| 28 | state 보정 도구는 모든 state 파일 커버 필수(`fix_state_balance_mismatch.py`는 multi+vb 동시 처리). 봇이 "잔고 0 — 정리 필요"를 인지하면 즉시 자동 정리(N=3회 누적 후 closed_trades+positions.pop) — 수동 의존 시 알람 피로 누적. 알람 디바운스만으로는 false alarm 영구 차단 불가, 근본 정합 + 자동 정리가 짝 | [lessons/20260511_1](docs/lessons/20260511_1_fix_state_vb_orphan.md) |
+| 29 | "거래소에만 존재" 차집합 알람은 dust(<5만원, state에 없음) 자동 silence 필수 — 봇이 정리(state)했지만 거래소 잔여 dust는 수동 매도 외 처리 불가 → 디바운스(3회)만으론 영구 알람 루프. 임계 단일 게이트(5천원)는 정책 없음, 컨텍스트(state 비교) 기반 분리 필요. only_state(매도 누락)는 임계 미적용 — 진짜 사고 알람 유지 | [lessons/20260515_1](docs/lessons/20260515_1_dust_only_exchange_alert_loop.md) |
+| 30 | 안전장치(5연패 자동 중단) 알람도 발사 후 디바운스 필수 — self.running=False만으로 cycle 중단 가정 금지. cooldown_until(매수 차단)과 alerted_until(알람 silence)은 분리 플래그로 관리. _send_periodic_report 매 cycle(9분) 호출 시 동일 5연패 재인지 → 동일 알람 4회 반복 사고 | [lessons/20260516_1](docs/lessons/20260516_1_consec_loss_alert_loop.md) |
+| 31 | 코드 변경(scp)과 인프라 변경(crontab/systemd)은 별도 채널 — scp+restart로는 cron 절대 갱신 안 됨. deploy_to_aws.sh 우회 시 cron 미등록 silent fail (ml_weekly_review/ml_outcome_match 5/15~5/19 누락). silence 플래그(alerted_until)와 매수 차단(cooldown_until)이 독립 관리 시 cooldown 갱신 후 alerted_until 자동 동기화 책임 코드 명시 필수. pre_deploy_check에 "기록된 cron 실제 등록" 검증 룰 추가 필요 (lessons #9 강화) | [lessons/20260520_1](docs/lessons/20260520_1_cron_registration_missing.md) |
+| 32 | 업비트 시장가 매수 응답 `order["amount"]`는 None일 수 있음 — `float(None)` → TypeError → entry_qty=0 영구 저장 → 부분 TP 후 state 잔량 회계 영구 drift. 결정 사슬은 `order.filled` → `order.amount` → `fetch_balance` → `order_amount/exec_price` 4단 + `entry_qty<=0` invariant 가드 필수. fix_state_balance_mismatch는 종목 add/remove 외에 잔량(qty) 미러링도 수행해야 함 (lessons #10 "state는 거래소 미러" = 종목+수량 양면). AWS crontab은 다른 프로젝트 deploy로 BitCoin 라인 7개 누락 가능 — pre_deploy_check에 deploy_to_aws.sh 활성 CRON_xxx baseline ≥ 8 검증 추가 | [lessons/20260524_2](docs/lessons/20260524_2_state_qty_zero_and_cron_loss.md) |

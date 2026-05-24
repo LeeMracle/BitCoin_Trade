@@ -94,3 +94,10 @@ ssh ... 'sudo sed -i s/ML_SHADOW_MODE=0/ML_SHADOW_MODE=1/ /etc/systemd/system/bt
 - 5-12 평가 → 0.50 강화 또는 롤백
 - 6월: 시드 증액 결정 (PF 1.2 안정 시)
 - v3 모델 (P8-24): 1개월 후 재학습 (더 많은 OOS 데이터)
+
+## 운영 업데이트 (2026-05-14)
+
+- **5-12 평가 시점 누락** → 5-14 ml_weekly_review 실행: 매수 0건/9일, 차단률 99.1%, PF 0.42 (목표 미달)
+- **threshold 0.45 → 0.40 완화** (ADR 롤백 조건 "1주 매수 0건" 명중)
+- **ml_weekly_review.py cron 등록** — 매주 일 19:00 UTC 자동 평가 → 텔레그램 발송
+- 다음 평가일: 5-19 → 0.40 효과 검토 후 0.45 복귀 또는 SHADOW 복귀 결정
