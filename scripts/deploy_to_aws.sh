@@ -130,6 +130,9 @@ CRON_VB_RECHECK="15 0 * * * cd $PROJECT_DIR && PYTHONUTF8=1 $PROJECT_DIR/.venv/b
 # healthcheck 임계도 2h → 26h 동시 조정 (services/healthcheck/runner.py)
 # lessons #37 (20260801_2): --notify 필수. 미부여 시 BULL 전환 발생해도 텔레그램 침묵.
 CRON_REGIME="30 0 * * * cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_DIR $PROJECT_DIR/.venv/bin/python scripts/regime_check.py --notify >> /var/log/regime_check.log 2>&1"
+# lessons #38 (20260801_3): 아침 브리핑 채널 부재 사고 → 09:32 KST 통합 브리핑 신설
+# regime_check(09:30) 완료 2분 후 실행하여 regime_state.json 신선한 값 읽기 (BEAR 지속 상태에서도 매일 침묵 방지)
+CRON_DAILY_BRIEFING="32 0 * * * cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_DIR $PROJECT_DIR/.venv/bin/python scripts/daily_check.py --notify --skip-console >> /var/log/btc_report.log 2>&1"
 # plan 20260502 P0: 매시 5분 critical 헬스체크 (인증·jarvis cron) — FAIL 시만 즉시 알람, 30분 디바운스
 # 배경: 2026-05-01 23:00 KST 인증실패 8h 무감지 사고 재발 방지 (lessons #20)
 CRON_CRITICAL="5 * * * * cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_DIR $PROJECT_DIR/.venv/bin/python scripts/critical_healthcheck.py >> /var/log/critical_healthcheck.log 2>&1"
@@ -150,6 +153,7 @@ CRON_ML_WEEKLY="0 19 * * 0 cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_D
     | grep -v "jarvis_executor.py" \
     | grep -v "vb_recheck_trigger.py" \
     | grep -v "regime_check.py" \
+    | grep -v "daily_check.py" \
     | grep -v "critical_healthcheck.py" \
     | grep -v "hourly_digest.py" \
     | grep -v "ml_outcome_match.py" \
@@ -161,6 +165,7 @@ CRON_ML_WEEKLY="0 19 * * 0 cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_D
     : "echo $CRON_JARVIS (STOP — 2026-05-05, 활성화 시 :까지 제거)"; \
     echo "$CRON_VB_RECHECK"; \
     echo "$CRON_REGIME"; \
+    echo "$CRON_DAILY_BRIEFING"; \
     echo "$CRON_CRITICAL"; \
     echo "$CRON_ML_OUTCOME"; \
     echo "$CRON_ML_WEEKLY") | crontab -
@@ -169,7 +174,7 @@ CRON_ML_WEEKLY="0 19 * * 0 cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_D
 chmod +x "$PROJECT_DIR/scripts/watchdog_check.sh" "$PROJECT_DIR/scripts/log_volume_check.sh" 2>/dev/null
 
 echo "crontab 등록 완료:"
-crontab -l | grep -E "(btc_(trader|report)|watchdog_check|log_volume_check|jarvis_executor|vb_recheck_trigger|regime_check|critical_healthcheck)"
+crontab -l | grep -E "(btc_(trader|report)|watchdog_check|log_volume_check|jarvis_executor|vb_recheck_trigger|regime_check|daily_check|critical_healthcheck)"
 CRON_SCRIPT
 
 echo ""
@@ -179,12 +184,13 @@ echo "[사후 실측 검증] 서버 crontab BitCoin_Trade 라인 카운트..."
 # 배포 성공 = 서버 반영 확인까지. baseline < 8 이면 exit 1로 배포 실패 처리.
 # 변수명은 CRON_xxx 패턴 회피 (pre_deploy_check.check_cron_var_echo_consistency 오탐 방지)
 BTC_REMOTE_LINES=$($SSH_CMD "crontab -l 2>/dev/null | grep -c BitCoin_Trade" || echo "0")
-if [ "$BTC_REMOTE_LINES" -lt 8 ]; then
-    echo "[FAIL] 서버 crontab BitCoin_Trade 라인 $BTC_REMOTE_LINES (< 8 baseline) — lessons #36 회귀"
-    echo "       다중 프로젝트(Stock_Trade) crontab 덮어쓰기 의심. 즉시 조치 필요."
+# lessons #38 (20260801_3): 아침 브리핑 신설로 baseline 8 → 9 상향
+if [ "$BTC_REMOTE_LINES" -lt 9 ]; then
+    echo "[FAIL] 서버 crontab BitCoin_Trade 라인 $BTC_REMOTE_LINES (< 9 baseline) — lessons #36/#38 회귀"
+    echo "       다중 프로젝트(Stock_Trade) crontab 덮어쓰기 또는 daily_check 미등록 의심. 즉시 조치 필요."
     exit 1
 fi
-echo "[OK] 서버 crontab BitCoin_Trade 라인 $BTC_REMOTE_LINES (>= 8 baseline)"
+echo "[OK] 서버 crontab BitCoin_Trade 라인 $BTC_REMOTE_LINES (>= 9 baseline)"
 
 echo ""
 echo "=== 배포 완료! ==="

@@ -1669,7 +1669,7 @@ def check_btc_cron_count_baseline() -> None:
         m = re.match(r'^(CRON_[A-Z0-9_]+)\s*=', stripped)
         if m:
             active.add(m.group(1))
-    BASELINE = 8  # 일시 비활성을 1개 허용
+    BASELINE = 9  # lessons #38 (2026-08-01): 아침 브리핑 신설로 8→9 상향, 서버 실측 게이트와 통일
     if len(active) < BASELINE:
         errors.append(
             f"[cron-baseline] deploy_to_aws.sh 활성 CRON_xxx 변수 {len(active)}개 "
@@ -1965,15 +1965,16 @@ def check_deploy_post_check_remote_cron() -> None:
             line_matched = True
             break
     # 사후 게이트 exit 1 분기도 함께 존재하는지 확인 (검증만 하고 exit 안 하면 무의미)
+    # lessons #38 (2026-08-01): 아침 브리핑 신설로 baseline 8→9 상향 — 정규식은 8 이상 정수 허용
     has_exit_guard = re.search(
-        r'if\s+\[\s+"\$[A-Z_]+"\s+-lt\s+8\s+\];\s+then[\s\S]{0,300}?exit\s+1',
+        r'if\s+\[\s+"\$[A-Z_]+"\s+-lt\s+\d+\s+\];\s+then[\s\S]{0,300}?exit\s+1',
         txt,
     ) is not None
     if not (line_matched and has_exit_guard):
         errors.append(
             "[lessons #36] deploy_to_aws.sh에 사후 SSH 실측 검증 게이트 부재 — "
             f"실측라인={line_matched}, exit1가드={has_exit_guard}. "
-            "'ssh ... crontab -l | grep -c BitCoin_Trade' + baseline<8 시 exit 1 게이트 필수 "
+            "'ssh ... crontab -l | grep -c BitCoin_Trade' + baseline 미만 시 exit 1 게이트 필수 "
             "(로컬 정적 검사만으로는 다중 프로젝트 crontab 덮어쓰기 방어 불가, 2026-08-01 소실 재발)"
         )
 
@@ -2013,6 +2014,81 @@ def check_regime_notify_flag() -> None:
             "regime_check.py:81은 notify=False 시 텔레그램 발송 안 함(should_notify 무의미). "
             "CRON_REGIME=\"... scripts/regime_check.py --notify >> ...\" 형태로 부여 필수 "
             "(BULL 전환 알림 누락 silent fail 방지)"
+        )
+
+
+def check_morning_briefing_registered() -> None:
+    """CRON_DAILY_BRIEFING(scripts/daily_check.py --notify)이 deploy_to_aws.sh에 등록되어 있는지.
+
+    배경 (lessons #38, 2026-08-01):
+        lessons #33/#34로 CRON_LIVE(09:05 KST 아침 트리거)를 제거하면서 대체 아침
+        브리핑 채널을 마련하지 않음 → 사용자 접점은 18:00 daily_report만 존재.
+        CLAUDE.md "09:05 KST 실행 권장" 문서만 있고 crontab에는 실제 미등록 상태 2개월 방치.
+        regime_check --notify는 전환 시에만 발송 → BEAR 지속 상태에서 아침 침묵.
+
+    검증:
+        1) deploy_to_aws.sh 안에 CRON_DAILY_BRIEFING= 변수 정의
+        2) 해당 변수 값에 daily_check.py + --notify 동시 포함
+        3) 실행 시각 "32 0 * * *" (KST 09:32)
+        4) echo "$CRON_DAILY_BRIEFING" 등록 라인 존재
+        5) grep -v "daily_check.py" 기존 정리 라인 존재
+        6) 사후 실측 게이트 baseline ≥ 9
+    """
+    d_path = PROJECT_ROOT / "scripts" / "deploy_to_aws.sh"
+    if not d_path.exists():
+        return
+    txt = d_path.read_text(encoding="utf-8")
+    lines = txt.splitlines()
+
+    # 1~3) 변수 정의 라인 검사
+    var_ok = False
+    for raw_line in lines:
+        stripped = raw_line.lstrip()
+        if stripped.startswith("#"):
+            continue
+        if "CRON_DAILY_BRIEFING=" not in raw_line:
+            continue
+        if (
+            "daily_check.py" in raw_line
+            and "--notify" in raw_line
+            and "32 0 * * *" in raw_line
+        ):
+            var_ok = True
+            break
+    if not var_ok:
+        errors.append(
+            "[lessons #38] deploy_to_aws.sh의 CRON_DAILY_BRIEFING 정의 부재 또는 형식 오류 — "
+            "'32 0 * * *' 시각 + daily_check.py + --notify 3요소 동시 필요 "
+            "(아침 브리핑 침묵 회귀 방지)"
+        )
+
+    # 4) echo 등록 라인
+    if 'echo "$CRON_DAILY_BRIEFING"' not in txt:
+        errors.append(
+            "[lessons #38] deploy_to_aws.sh에 `echo \"$CRON_DAILY_BRIEFING\"` 등록 라인 부재 — "
+            "변수만 정의하고 crontab 등록 파이프에 추가하지 않으면 서버 미반영 (lessons #32 동일 패턴)"
+        )
+
+    # 5) grep -v "daily_check.py" 정리 라인
+    if 'grep -v "daily_check.py"' not in txt:
+        errors.append(
+            "[lessons #38] deploy_to_aws.sh crontab 재작성 파이프에 "
+            "`| grep -v \"daily_check.py\"` 부재 — 기존 등록 중복 리스크"
+        )
+
+    # 6) 사후 실측 게이트 baseline ≥ 9
+    baseline_ok = False
+    for raw_line in lines:
+        if 'BTC_REMOTE_LINES' not in raw_line:
+            continue
+        if '-lt 9' in raw_line or '-lt "9"' in raw_line:
+            baseline_ok = True
+            break
+    if not baseline_ok:
+        errors.append(
+            "[lessons #38] deploy_to_aws.sh 사후 실측 게이트 baseline이 9 미만 — "
+            "아침 브리핑 추가로 baseline 8→9 상향 필수 "
+            "(< 9 시 exit 1 조건이 daily_check 미등록을 잡지 못함)"
         )
 
 
@@ -2074,6 +2150,7 @@ def main() -> None:
     check_consec_loss_floor_consistency()
     check_deploy_post_check_remote_cron()
     check_regime_notify_flag()
+    check_morning_briefing_registered()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")
