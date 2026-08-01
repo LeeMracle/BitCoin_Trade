@@ -77,9 +77,10 @@ from services.execution.upbit_client import (
 )
 from services.alerting.notifier import send, notify_error
 
-# ── ML 신호 필터 (Phase 3 보강, fail-open) ──────────────────
+# ── ML 신호 필터 (lessons #36 B7/B8: fail-CLOSED, 2026-06-04 재작성) ──────────────────
 # multi_trader.py와 동일 정책. ML_FILTER_ENABLED=0(기본) 시 zero-cost.
-# 실시간 매수 경로에도 동일 게이트 적용 — lessons #6 (모든 매수 경로 필터)
+# 실시간 매수 경로(DC + EMA-TREND) 모두에 동일 게이트 적용 — lessons #6/#26 (모든 매수 경로 필터)
+# 정책: ML_FILTER_ENABLED=0 또는 ML_SHADOW_MODE=1 → 통과, LIVE + 로드 실패 → 차단
 from services.ml.inference import get_filter as _get_ml_filter  # noqa: E402
 from services.ml import shadow as _ml_shadow  # noqa: E402
 from services.common.sd_notify import ready as _sd_ready, watchdog_ping as _sd_watchdog
@@ -161,6 +162,40 @@ class RealtimeMonitor:
         if EMA_TREND_ENABLED:
             mode = "DRY-RUN" if EMA_TREND_DRY_RUN else "실전"
             print(f"  EMA Trend: {mode}, EMA{EMA_TREND_EMA_PERIOD}/EMA{EMA_TREND_FILTER_PERIOD}, Trail{EMA_TREND_TRAIL_PCT*100:.0f}%", flush=True)
+
+        # ── ML readiness probe (lessons #36 #4, 2026-06-04 재작성) ─────
+        # 부팅 직후 1회 ML 게이트 상태 출력 — 모델 로드 실패가 운영자에게 가시화되어야 함.
+        # 부팅 시 매수 일시 차단까지는 도입하지 않음 (start() 직후 첫 신호까지 갭이 있고
+        # _execute_buy 각 호출 시점에 fail-CLOSED 분기가 이미 안전망 역할).
+        try:
+            import os as _os_probe
+            _ml_probe = _get_ml_filter()
+            _model_loaded = bool(_ml_probe.is_active)
+            _active = bool(_ml_probe.is_active)
+            _threshold = float(_ml_probe.threshold)
+            _shadow_mode = _os_probe.getenv("ML_SHADOW_MODE", "1") == "1"
+            _filter_enabled = _os_probe.getenv("ML_FILTER_ENABLED", "0") == "1"
+            _live_gate = _filter_enabled and not _shadow_mode
+            print(
+                f"  [ML-readiness] model_loaded={_model_loaded} "
+                f"active={_active} threshold={_threshold:.2f} "
+                f"shadow_mode={_shadow_mode} live_gate={_live_gate} "
+                f"status={_ml_probe.status}",
+                flush=True,
+            )
+            # LIVE 모드인데 모델 로드 실패면 추가 경고 (운영 가시성)
+            if _live_gate and not _model_loaded:
+                print(
+                    f"  [ML-readiness] WARNING: LIVE 모드 진입했으나 모델 미로드 — "
+                    f"매수 경로 fail-CLOSED로 차단됨. status={_ml_probe.status}",
+                    flush=True,
+                )
+        except Exception as _probe_e:
+            print(
+                f"  [ML-readiness] probe 실패: {_probe_e} — 매수 경로에서 개별 확인",
+                flush=True,
+            )
+
         print("=" * 60, flush=True)
 
         # 시작 즉시 heartbeat 파일 touch — cron watchdog_check.sh 10분 임계 보호
@@ -674,18 +709,26 @@ class RealtimeMonitor:
                 print(f"  [5연패] cooldown 활성 ({remain/3600:.1f}h 남음) — 알람 skip", flush=True)
             else:
                 win_rate = wins_n / n_trades * 100 if n_trades > 0 else 0
-                self.running = False
-                await send(
-                    f"🛑 *5연패 자동 중단*\n"
-                    f"연속 {consec}건 손실 — 검증 플랜 조기 탈출\n"
-                    f"승률: {win_rate:.0f}% ({wins_n}/{n_trades})\n"
-                    f"원인 분석 후 전략 수정 필요\n"
-                    f"재시작: `sudo systemctl restart btc-trader`"
-                )
-                # 72h 디바운스 (cooldown 자동 기간과 동일)
-                self.state["consec_loss_alerted_until"] = now_ts + 3600 * 72
+                # ── B9 (lessons #37, 2026-06-04): self.running=False 제거 ──
+                # 사유: systemd Restart=always + WatchdogSec=5min 환경에서 self.running=False만 하면
+                # sd_notify STOPPING=1 미발사 → systemd가 watchdog timeout → SIGABRT(code 6) → 자동 재시작
+                # → 5연패 안전장치 무력화. 봇 부활 후 cooldown_until만 살아있으면 다행, 우연 의존.
+                # 조치: process는 유지하고 cooldown_until + alerted_until 강제 연장으로 매수 차단 + silence 보장.
+                # 매수 경로(_is_loss_cooldown)는 cooldown_until만 보므로 cooldown_until 강제 연장이 핵심.
+                cooldown_target = now_ts + 3600 * 72
+                cur_cd = self.state.get("cooldown_until", 0) or 0
+                self.state["cooldown_until"] = max(cur_cd, cooldown_target)
+                # silence 디바운스도 cooldown_until과 동기화 (lessons #30/#31 invariant)
+                self.state["consec_loss_alerted_until"] = self.state["cooldown_until"]
                 save_state(self.state)  # 2026-05-22: 재시작 시 알람 재발사 방지 (lessons #30 강화)
-                print(f"\n!!! 5연패 자동 중단 !!!", flush=True)
+                await send(
+                    f"🛑 *5연패 cooldown 72h 자동 연장*\n"
+                    f"연속 {consec}건 손실 — 신규 매수 차단 ({cooldown_target} until)\n"
+                    f"승률: {win_rate:.0f}% ({wins_n}/{n_trades})\n"
+                    f"봇은 정상 가동 — 기존 포지션 트레일링/SL 계속 처리\n"
+                    f"원인 분석 후 cooldown 해제 또는 전략 수정 필요"
+                )
+                print(f"\n!!! 5연패 cooldown 72h 강제 연장 (B9: process 유지) !!!", flush=True)
             return
 
         # ── 시장 + 누적 성적 (함수 호출로 통일) ──
@@ -1215,6 +1258,75 @@ class RealtimeMonitor:
 
             if not EMA_TREND_DRY_RUN:
                 # 실전 매수 (DRY_RUN=False 시에만)
+                # ── B7 (lessons #36, 2026-06-04 재작성): EMA-TREND ML 게이트 ──────
+                # multi_trader.py:210~ scanner DC와 동형 패턴 (fail-CLOSED).
+                # 정책 우선순위:
+                #   1) ML_FILTER_ENABLED=0 → 통과 (ML 미도입 환경 — 기존 거동 보존)
+                #   2) ML_SHADOW_MODE=1 → 통과 (검증 운영, 차단 안 함)
+                #   3) is_active=False + LIVE → 차단 (fail-CLOSED)
+                #   4) is_active=True + 추론 예외 → 차단 (score=0.0 강제)
+                #   5) is_active=True + 정상 → score ≥ threshold 평가
+                try:
+                    _ml_flt = _get_ml_filter()
+                    _ml_score = 1.0
+                    _ml_exception = False
+                    if _ml_flt.is_active:
+                        try:
+                            _ml_score = _ml_flt.score(
+                                "BTC/KRW", None, pd.Timestamp.now(tz="UTC")
+                            )
+                        except Exception as _e:
+                            print(
+                                f"  [EMA-TREND ML 점수 실패] BTC/KRW: {_e} — fail-CLOSED",
+                                flush=True,
+                            )
+                            _ml_score = 0.0
+                            _ml_exception = True
+                        _ml_pass = _ml_flt.passes(_ml_score) and not _ml_exception
+                    else:
+                        # B8 fail-closed: 모델 미로드/비활성
+                        import os as _os
+                        if _os.getenv("ML_FILTER_ENABLED", "0") != "1":
+                            _ml_pass = True   # ML 미도입 환경
+                        elif _os.getenv("ML_SHADOW_MODE", "1") == "1":
+                            _ml_pass = True   # shadow 운영
+                        else:
+                            _ml_pass = False  # LIVE인데 로드 실패 → 차단
+                            print(
+                                f"  [EMA-TREND ML 차단] BTC/KRW — 모델 로드 실패 "
+                                f"(fail-CLOSED): {_ml_flt.status}",
+                                flush=True,
+                            )
+                    # shadow 로그 (signal_type="EMA_TREND_breakout" — cto #3)
+                    _ml_shadow.log_decision(
+                        symbol="BTC/KRW",
+                        signal_ts=pd.Timestamp.now(tz="UTC"),
+                        signal_type="EMA_TREND_breakout",
+                        score=_ml_score,
+                        threshold=_ml_flt.threshold,
+                        will_buy=_ml_pass,
+                        ml_active=_ml_flt.is_active,
+                    )
+                except Exception as _ml_outer_e:
+                    # 게이트 자체 예외 → fail-CLOSED (안전)
+                    print(
+                        f"  [EMA-TREND ML 게이트 예외] {_ml_outer_e} — fail-CLOSED",
+                        flush=True,
+                    )
+                    _ml_pass = False
+                    _ml_score = 0.0
+
+                if not _ml_pass:
+                    print(
+                        f"  [EMA-TREND ML 차단] BTC/KRW score={_ml_score:.3f} "
+                        f"— 매수 생략",
+                        flush=True,
+                    )
+                    # 상태는 진입 신호 단계까지 기록되었으므로 포지션 미진입으로 되돌림
+                    self._ema_trend_position = None
+                    self._save_ema_trend_state()
+                    return
+
                 try:
                     balance = get_balance()
                     avail = balance.get("krw", 0)
@@ -1710,6 +1822,12 @@ class RealtimeMonitor:
         closed = self.state.get("closed_trades", [])
         strategy_start = self.state.get("strategy_start", "2026-03-29")
         current_trades = [t for t in closed if t.get("exit_date", "") >= strategy_start]
+        # ── 연패 카운트 floor (lessons #38, 2026-06-07) ──
+        # check_consec_loss(periodic_analysis)와 동일 로직 — consec_loss_floor_date
+        # 이후(>) 거래만 연패 산정. cooldown 근본 해제 시 재설정 함정 차단.
+        floor = self.state.get("consec_loss_floor_date")
+        if floor:
+            current_trades = [t for t in current_trades if t.get("exit_date", "") > floor]
         consec = 0
         for t in reversed(current_trades):
             if t["return_pct"] <= 0:
@@ -1879,21 +1997,45 @@ class RealtimeMonitor:
                 )
                 record_block("atr_filter", symbol)
                 return
-        # ── ML 신호 필터 게이트 (fail-open, lessons #6) ─────
+        # ── ML 신호 필터 게이트 (lessons #36 B8: fail-CLOSED, 2026-06-04 재작성) ─────
         # 모든 사전 필터(서킷브레이커/F&G/EMA200/거래량/ATR) 통과 후 마지막 게이트.
-        # ML 비활성/모델부재/추론실패 시 score=1.0 → 항상 통과.
+        # multi_trader.py:210~ scanner DC와 동형 패턴.
         # 2026-05-08 P1-FIX: level["ohlcv"] 가드 제거 → score() 항상 호출.
         # inference.py가 ohlcv=None 시 ccxt 자동 fetch + 60s LRU 캐시 (P8-23-1).
-        # 이전엔 가드로 막혀 score=1.0 고정 → ML 실효 0이었음.
+        # B8 (lessons #36, 2026-06-04):
+        #   1) ML_FILTER_ENABLED=0 → 통과 (ML 미도입 환경)
+        #   2) ML_SHADOW_MODE=1 → 통과 (검증 운영, 차단 안 함)
+        #   3) is_active=False + LIVE → 차단 (fail-CLOSED)
+        #   4) is_active=True + 추론 예외 → 차단 (score=0.0 강제, 이전엔 1.0)
+        #   5) is_active=True + 정상 → score ≥ threshold 평가
         _ml_flt = _get_ml_filter()
         _ml_score = 1.0
+        _ml_exception = False
         if _ml_flt.is_active:
             _ohlcv = level.get("ohlcv")  # 주입되면 사용, 아니면 inference.py가 자동 fetch
             try:
                 _ml_score = _ml_flt.score(symbol, _ohlcv, pd.Timestamp.now(tz="UTC"))
             except Exception as _e:
-                print(f"  [{symbol}] ML 점수 실패: {_e} — fail-open", flush=True)
-        _ml_pass = _ml_flt.passes(_ml_score)
+                print(f"  [{symbol}] ML 점수 실패: {_e} — fail-CLOSED", flush=True)
+                _ml_score = 0.0
+                _ml_exception = True
+            _ml_pass = _ml_flt.passes(_ml_score) and not _ml_exception
+        else:
+            # B8 fail-CLOSED: 모델 미로드/비활성 시 환경변수 기반 분기
+            import os as _os
+            if _os.getenv("ML_FILTER_ENABLED", "0") != "1":
+                _ml_pass = True   # ML 미도입 환경 — 기존 거동 보존
+            elif _os.getenv("ML_SHADOW_MODE", "1") == "1":
+                _ml_pass = True   # shadow 운영 — 차단 안 함
+            else:
+                _ml_pass = False  # LIVE인데 로드 실패 → 차단 (fail-CLOSED)
+                from services.common.log_throttle import throttled_print
+                throttled_print(
+                    f"ml_failclosed_{symbol}",
+                    f"  [{symbol}] ML 차단 — 모델 로드 실패 (fail-CLOSED): "
+                    f"{_ml_flt.status}",
+                    interval_sec=60,
+                )
         _ml_shadow.log_decision(
             symbol=symbol, signal_ts=pd.Timestamp.now(tz="UTC"),
             signal_type="DC_breakout_realtime", score=_ml_score,

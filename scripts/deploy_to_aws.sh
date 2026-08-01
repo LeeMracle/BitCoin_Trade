@@ -109,7 +109,9 @@ LOG_FILES=(/var/log/btc_trader.log /var/log/btc_report.log /var/log/watchdog_che
 sudo touch "${LOG_FILES[@]}"
 sudo chown ubuntu:ubuntu "${LOG_FILES[@]}"
 
-CRON_LIVE="5 0 * * * cd $PROJECT_DIR && $PROJECT_DIR/.venv/bin/python scripts/daily_live.py >> /var/log/btc_trader.log 2>&1"
+# lessons #33 (2026-06-02): CRON_LIVE 제거 — systemd btc-trader.service가 daily_live.py --realtime을
+# 항상 가동하므로 cron 별도 호출 시 매일 새 인스턴스 생성 → 좀비 누적 (실측 8개). systemd 단독 가동 원칙.
+# CRON_LIVE="5 0 * * * cd $PROJECT_DIR && $PROJECT_DIR/.venv/bin/python scripts/daily_live.py >> /var/log/btc_trader.log 2>&1"
 # plan 20260502: 09:10 KST CRON_REPORT 제거 — 18:00 KST 마감 종합 단일화
 # 18:00 KST (= 09:00 UTC) 일일 마감 종합 보고 (헬스체크 9개 항목 포함)
 CRON_REPORT_18="0 9 * * * cd $PROJECT_DIR && PYTHONUTF8=1 $PROJECT_DIR/.venv/bin/python scripts/daily_report.py >> /var/log/btc_report.log 2>&1"
@@ -151,7 +153,7 @@ CRON_ML_WEEKLY="0 19 * * 0 cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_D
     | grep -v "hourly_digest.py" \
     | grep -v "ml_outcome_match.py" \
     | grep -v "ml_weekly_review.py"; \
-    echo "$CRON_LIVE"; \
+    : "echo $CRON_LIVE (lessons #33 — systemd 단독, cron 등록 금지)"; \
     echo "$CRON_REPORT_18"; \
     echo "$CRON_WATCHDOG"; \
     echo "$CRON_LOGVOL"; \
@@ -168,6 +170,20 @@ chmod +x "$PROJECT_DIR/scripts/watchdog_check.sh" "$PROJECT_DIR/scripts/log_volu
 echo "crontab 등록 완료:"
 crontab -l | grep -E "(btc_(trader|report)|watchdog_check|log_volume_check|jarvis_executor|vb_recheck_trigger|regime_check|critical_healthcheck)"
 CRON_SCRIPT
+
+echo ""
+echo "[사후 실측 검증] 서버 crontab BitCoin_Trade 라인 카운트..."
+# lessons #36 (2026-08-01): Stock_Trade deploy_aws.sh가 crontab을 파일 원자 갱신 방식으로
+# 통째 덮어써서 BitCoin_Trade cron 8개 전면 소실 사고 → 로컬 정적 검사 통과에도 서버 미반영 가능.
+# 배포 성공 = 서버 반영 확인까지. baseline < 8 이면 exit 1로 배포 실패 처리.
+# 변수명은 CRON_xxx 패턴 회피 (pre_deploy_check.check_cron_var_echo_consistency 오탐 방지)
+BTC_REMOTE_LINES=$($SSH_CMD "crontab -l 2>/dev/null | grep -c BitCoin_Trade" || echo "0")
+if [ "$BTC_REMOTE_LINES" -lt 8 ]; then
+    echo "[FAIL] 서버 crontab BitCoin_Trade 라인 $BTC_REMOTE_LINES (< 8 baseline) — lessons #36 회귀"
+    echo "       다중 프로젝트(Stock_Trade) crontab 덮어쓰기 의심. 즉시 조치 필요."
+    exit 1
+fi
+echo "[OK] 서버 crontab BitCoin_Trade 라인 $BTC_REMOTE_LINES (>= 8 baseline)"
 
 echo ""
 echo "=== 배포 완료! ==="

@@ -56,6 +56,68 @@ def check_strategy_consistency() -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════
+# 검증 1b: MIN_VOLUME_KRW 범위 + CLAUDE.md 동기화 (ADR 20260607-1, lessons #4)
+# ═══════════════════════════════════════════════════════════════════
+
+# 허용 범위: 2억(완화 하한) ~ 20억(보수 상한). 범위 밖이면 오타/단위 사고로 간주.
+MIN_VOLUME_KRW_FLOOR = 200_000_000
+MIN_VOLUME_KRW_CEIL = 2_000_000_000
+
+
+def check_min_volume_krw_range() -> None:
+    """MIN_VOLUME_KRW 값이 합리 범위 내인지 + CLAUDE.md 종목풀 언급과 동기화되었는지 검증.
+
+    ADR 20260607-1: 3억 → 5억 환원. 이후 config↔CLAUDE.md 종목풀 표기 drift 차단 (lessons #4).
+    """
+    config_file = PROJECT_ROOT / "services" / "execution" / "config.py"
+    claude_file = PROJECT_ROOT / "CLAUDE.md"
+
+    if not config_file.exists():
+        errors.append("[종목필터] config.py 파일 없음")
+        return
+
+    config_content = config_file.read_text(encoding="utf-8")
+    # 주석/할당의 우변 첫 숫자(언더스코어 포함) 추출
+    mv_match = re.search(
+        r"^MIN_VOLUME_KRW\s*=\s*([\d_]+)", config_content, re.MULTILINE
+    )
+    if not mv_match:
+        errors.append("[종목필터] config.py에서 MIN_VOLUME_KRW 할당을 찾을 수 없음")
+        return
+
+    try:
+        mv = int(mv_match.group(1).replace("_", ""))
+    except ValueError:
+        errors.append(f"[종목필터] MIN_VOLUME_KRW 값 파싱 실패: {mv_match.group(1)}")
+        return
+
+    if not (MIN_VOLUME_KRW_FLOOR <= mv <= MIN_VOLUME_KRW_CEIL):
+        errors.append(
+            f"[종목필터] MIN_VOLUME_KRW={mv:,} 가 허용 범위 밖 "
+            f"({MIN_VOLUME_KRW_FLOOR:,} ~ {MIN_VOLUME_KRW_CEIL:,}) — "
+            f"단위/오타 의심 (예: 0 누락/초과)"
+        )
+
+    # CLAUDE.md 종목풀 언급과 단위(억) 동기화 검증 (lessons #4)
+    if claude_file.exists():
+        claude_content = claude_file.read_text(encoding="utf-8")
+        mv_eok = mv // 100_000_000  # 억 단위
+        # MIN_VOLUME_KRW 가 언급된 줄(들)에서 "N억" 표기를 모두 수집.
+        # (한 줄에 "3억 → 5억" 처럼 여러 표기가 있을 수 있어 줄 단위로 findall)
+        eok_mentions = []
+        for line in claude_content.splitlines():
+            if "MIN_VOLUME_KRW" in line:
+                eok_mentions.extend(re.findall(r"(\d+)\s*억", line))
+        if eok_mentions:
+            # CLAUDE.md에 현재 config 억수가 한 번도 등장하지 않으면 drift 경고
+            if str(mv_eok) not in eok_mentions:
+                warnings.append(
+                    f"[종목필터] config MIN_VOLUME_KRW={mv_eok}억 vs "
+                    f"CLAUDE.md 표기 {eok_mentions}억 — 종목풀 표기 drift 확인 필요 (lessons #4)"
+                )
+
+
+# ═══════════════════════════════════════════════════════════════════
 # 검증 2: 필수 설정 파일 존재
 # ═══════════════════════════════════════════════════════════════════
 
@@ -1101,6 +1163,52 @@ def check_deploy_tooling() -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════
+# 검증: SSH 표준 키 경로 존재 + 표준 문서 존재 (lessons #35)
+# ref: docs/lessons/20260603_1_ssh_key_path_subagent_drift.md
+# expert/operator subagent에서 SSH 키 경로 추측 → Permission denied 차단
+# ═══════════════════════════════════════════════════════════════════
+
+def check_ssh_canonical_key() -> None:
+    """canonical SSH 키 경로 존재 + 표준 문서 등재 + deploy 스크립트 일치 검증."""
+    import os
+
+    # 1. canonical 키 경로 (deploy_to_aws.sh와 동일 — $HOME/Downloads/upbit-trading-key-seoul.pem)
+    home = os.path.expanduser("~")
+    canonical_key = Path(home) / "Downloads" / "upbit-trading-key-seoul.pem"
+    if not canonical_key.exists():
+        # 로컬 PC 외(subagent/CI) 환경에서는 키 부재가 정상일 수 있음 — warning만
+        warnings.append(
+            f"[SSH] canonical 키 파일 없음: {canonical_key} "
+            "— 로컬 배포 환경에서는 필수. subagent라면 docs/ssh_access.md 참조"
+        )
+    else:
+        # 권한 체크 (Linux/Mac: 0400/0600, Windows: ACL은 OS가 관리)
+        if os.name != "nt":
+            mode = canonical_key.stat().st_mode & 0o777
+            if mode not in (0o400, 0o600):
+                warnings.append(
+                    f"[SSH] 키 권한 {oct(mode)} — 권장 0400 또는 0600 "
+                    "(Linux/Mac에서 0644 등 group/other 읽기 가능 시 ssh가 거부)"
+                )
+
+    # 2. 표준 문서 존재 확인 (subagent가 추측 없이 따를 수 있도록)
+    ssh_doc = PROJECT_ROOT / "docs" / "ssh_access.md"
+    if not ssh_doc.exists():
+        errors.append(
+            "[SSH] docs/ssh_access.md 없음 — subagent/operator가 키 경로/사용자명 추측 차단 불가 (lessons #35)"
+        )
+
+    # 3. deploy_to_aws.sh의 PEM_KEY 변수가 canonical 경로와 동일한지
+    d_path = PROJECT_ROOT / "scripts" / "deploy_to_aws.sh"
+    if d_path.exists():
+        dtxt = d_path.read_text(encoding="utf-8")
+        if "upbit-trading-key-seoul.pem" not in dtxt:
+            errors.append(
+                "[SSH] deploy_to_aws.sh가 canonical PEM 파일명을 참조하지 않음 — 표준 분기"
+            )
+
+
+# ═══════════════════════════════════════════════════════════════════
 # 메인
 # ═══════════════════════════════════════════════════════════════════
 
@@ -1372,10 +1480,55 @@ def check_zombie_bot_processes() -> None:
         errors.append(
             f"[좀비] daily_live.py --realtime {len(realtime)}개 (1개여야 함, lessons #27)"
         )
-    if non_realtime:
-        warnings.append(
-            f"[좀비] daily_live.py (no --realtime) {len(non_realtime)}개 — 누적 좀비 의심 (lessons #27)"
+    # lessons #33 (2026-06-02): non_realtime 좀비 ≥ 3 시 ERROR 승격.
+    # cron 재등록(5 0 * * *)으로 매일 1개씩 누적된 사고 (8개 발견).
+    if len(non_realtime) >= 3:
+        errors.append(
+            f"[좀비] daily_live.py (no --realtime) {len(non_realtime)}개 — "
+            "누적 좀비 ERROR 임계 초과 (lessons #33, cron 재등록 회귀 의심)"
         )
+    elif non_realtime:
+        warnings.append(
+            f"[좀비] daily_live.py (no --realtime) {len(non_realtime)}개 — 누적 좀비 의심 (lessons #27/#33)"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 검증: deploy_to_aws.sh에 daily_live.py (no --realtime) cron 등록 차단
+# ref: docs/lessons/20260602_1_cron_zombie_relapse_no_realtime.md (lessons #33)
+# ═══════════════════════════════════════════════════════════════════
+
+def check_deploy_no_daily_live_cron() -> None:
+    """deploy_to_aws.sh가 daily_live.py (no --realtime)를 cron으로 등록하면 ERROR.
+
+    배경: 2026-06-02 lessons #33 — crontab에 `5 0 * * * .../daily_live.py >>`
+    라인이 있어 매일 새 인스턴스 생성, 일부가 종료 안 되어 좀비 8개 누적.
+    systemd btc-trader.service가 --realtime을 항상 가동하므로 cron 호출은 금지.
+    """
+    deploy = PROJECT_ROOT / "scripts" / "deploy_to_aws.sh"
+    if not deploy.exists():
+        return
+    content = deploy.read_text(encoding="utf-8")
+    # cron 표현식과 daily_live.py가 같은 라인에 있고 --realtime이 없으면 ERROR
+    # 단, 주석(#) 또는 no-op 라인(:로 시작 — sh의 echo 비활성 패턴)은 제외
+    cron_re = re.compile(r"\d+\s+\d+(?:\s+\S+){3}.*daily_live\.py")
+    for line in content.splitlines():
+        stripped = line.lstrip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        # `: "echo $CRON_LIVE ..."` 같은 no-op 무시
+        if stripped.startswith(":"):
+            continue
+        if "daily_live.py" not in line:
+            continue
+        if "--realtime" in line:
+            continue
+        if cron_re.search(line):
+            errors.append(
+                "[lessons #33] deploy_to_aws.sh에 daily_live.py (no --realtime) cron 등록 라인 잔존 — "
+                "좀비 누적 위험 (systemd 단독 가동만 허용)"
+            )
+            return
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -1525,12 +1678,313 @@ def check_btc_cron_count_baseline() -> None:
         )
 
 
+# ═══════════════════════════════════════════════════════════════════
+# 검증: 모든 매수 경로에 ML 게이트 라인 인접 hook (lessons #36)
+# ═══════════════════════════════════════════════════════════════════
+
+def check_all_buy_paths_ml_gate() -> None:
+    """buy_market_coin( 호출 전 100 라인 이내에 ML 게이트 호출이 있어야 함.
+
+    배경 (lessons #36, 2026-06-03):
+        파일 단위 hook 검증(check_ml_filter_integrity)은 한 파일에 N개 매수 분기가
+        있을 때 일부 누락을 놓침 — 실제로 EMA-TREND(realtime_monitor.py:1223)는
+        같은 파일 내 DC 경로(1956)에 ML hook이 있다는 이유로 검증 통과했지만
+        EMA-TREND 자체에는 hook 부재. 진입 함수 단위 라인 인접성 검증 필수.
+
+    검증: services/execution/*.py 의 buy_market_coin( 호출 모두 찾아서
+        호출 라인의 직전 100 라인 내에 _get_ml_filter() 또는 get_filter() 호출
+        그리고 _ml_pass 분기가 있어야 함.
+
+    ───────────────────────────────────────────────────────────────
+    B9 분리 배포 임시 가드 (2026-06-03):
+        본 룰은 B7/B8 묶음(realtime_monitor.py ML hook + fail-closed)을 강제하는데,
+        cto P3 review에서 B7/B8 FAIL 판정으로 재작성 필요. B9(5연패 watchdog 회피)는
+        독립 시급 사안(cooldown_until 만료 6/4 12:04 KST 전 배포)이라 단독 분리 배포.
+        환경변수 B7B8_REVIEWED=1 시에만 ERROR. 미설정/0 시 WARNING으로 격하.
+        B7/B8 재작성 + cto 재승인 후 B7B8_REVIEWED=1 영구 적용 + 본 가드 제거.
+    ───────────────────────────────────────────────────────────────
+    """
+    import os as _os
+    b7b8_reviewed = _os.getenv("B7B8_REVIEWED", "0") == "1"
+    targets = [
+        PROJECT_ROOT / "services" / "execution" / "multi_trader.py",
+        PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py",
+    ]
+    LOOKBACK = 100
+    for p in targets:
+        if not p.exists():
+            continue
+        lines = p.read_text(encoding="utf-8").splitlines()
+        for i, line in enumerate(lines):
+            # buy_market_coin 호출 (정의 def buy_market_coin 제외)
+            if "buy_market_coin(" not in line:
+                continue
+            stripped = line.lstrip()
+            if stripped.startswith("def ") or stripped.startswith("from ") \
+                    or stripped.startswith("import "):
+                continue
+            # 직전 LOOKBACK 라인 윈도우
+            window = "\n".join(lines[max(0, i - LOOKBACK):i])
+            has_filter_call = ("_get_ml_filter()" in window) or ("get_filter()" in window)
+            has_pass_branch = ("_ml_pass" in window) or ("ml_pass" in window)
+            if not (has_filter_call and has_pass_branch):
+                rel = p.relative_to(PROJECT_ROOT).as_posix()
+                msg = (
+                    f"[ML-gate-path] {rel}:{i+1} buy_market_coin 호출 직전 {LOOKBACK}라인 내 "
+                    f"ML 게이트 hook 누락 (filter_call={has_filter_call}, "
+                    f"pass_branch={has_pass_branch}) — lessons #36 (B7/B8) 위배"
+                )
+                if b7b8_reviewed:
+                    errors.append(msg)
+                else:
+                    warnings.append(
+                        msg + " [B7B8_REVIEWED=0 임시 격하 — B9 분리 배포]"
+                    )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 검증: ML 게이트 fail-closed 정책 (lessons #36 B8)
+# ═══════════════════════════════════════════════════════════════════
+
+def check_ml_failopen_policy() -> None:
+    """ML 게이트가 fail-closed 분기를 갖춰야 함.
+
+    배경 (lessons #36, 2026-06-03):
+        inference.py의 passes()는 is_active=False일 때 무조건 True 반환(fail-open).
+        매수 경로(multi_trader.py / realtime_monitor.py)에서는 LIVE 모드(ML_FILTER_ENABLED=1
+        AND ML_SHADOW_MODE=0)일 때 모델 로드 실패 시 차단해야 함.
+
+    검증:
+        1) inference.py에 ML_SHADOW_MODE/ML_FILTER_ENABLED 분기 존재
+        2) 매수 경로 파일에 fail-CLOSED 또는 fail_closed 또는 _ml_pass = False 분기 존재
+           (is_active=False 경로에서)
+
+    ───────────────────────────────────────────────────────────────
+    B9 분리 배포 임시 가드 (2026-06-03):
+        본 룰은 B8(realtime_monitor.py fail-closed)를 강제하는데 cto FAIL.
+        B7B8_REVIEWED=1 시에만 ERROR. 미설정/0 시 WARNING으로 격하.
+        B7/B8 재작성 + cto 재승인 후 B7B8_REVIEWED=1 영구 적용 + 본 가드 제거.
+    ───────────────────────────────────────────────────────────────
+    """
+    import os as _os
+    b7b8_reviewed = _os.getenv("B7B8_REVIEWED", "0") == "1"
+    inf = PROJECT_ROOT / "services" / "ml" / "inference.py"
+    if inf.exists():
+        txt = inf.read_text(encoding="utf-8")
+        if "ML_SHADOW_MODE" not in txt:
+            msg = (
+                "[ML-failclosed] services/ml/inference.py에 ML_SHADOW_MODE 분기 부재 "
+                "— shadow/LIVE 구분 불가 (lessons #36 B8)"
+            )
+            if b7b8_reviewed:
+                errors.append(msg)
+            else:
+                warnings.append(msg + " [B7B8_REVIEWED=0 임시 격하]")
+
+    for rel in ("services/execution/multi_trader.py", "services/execution/realtime_monitor.py"):
+        p = PROJECT_ROOT / rel
+        if not p.exists():
+            continue
+        txt = p.read_text(encoding="utf-8")
+        # fail-CLOSED 또는 _ml_pass = False 패턴이 있어야 함
+        has_failclosed = (
+            "fail-CLOSED" in txt or "fail-closed" in txt or "fail_closed" in txt
+            or "_ml_pass = False" in txt
+        )
+        # LIVE 분기 (ML_FILTER_ENABLED 환경변수 직접 체크 — passes() 위임만으론 부족)
+        has_live_gate = "ML_FILTER_ENABLED" in txt and "ML_SHADOW_MODE" in txt
+        if not (has_failclosed and has_live_gate):
+            msg = (
+                f"[ML-failclosed] {rel} fail-CLOSED 분기 부재 "
+                f"(failclosed_marker={has_failclosed}, live_gate={has_live_gate}) "
+                f"— lessons #36 B8 위배 (모델 로드 실패 시 매수 차단 필요)"
+            )
+            if b7b8_reviewed:
+                errors.append(msg)
+            else:
+                warnings.append(msg + " [B7B8_REVIEWED=0 임시 격하 — B9 분리 배포]")
+
+
+def check_consec_loss_no_running_false() -> None:
+    """5연패 분기에서 self.running=False 사용 금지 (lessons #37 B9).
+
+    배경 (2026-06-02 사고):
+        realtime_monitor._send_periodic_report()의 5연패 분기가 self.running=False를
+        실행하는데, systemd Restart=always + WatchdogSec=5min 환경에서 sd_notify
+        STOPPING=1 누락 → watchdog timeout → SIGABRT(6) → 자동 재시작으로 안전장치 무력화.
+
+    조치:
+        5연패 분기는 cooldown_until + consec_loss_alerted_until 강제 갱신으로 표현하고
+        process는 유지해야 함. self.running=False는 connectivity_errors 분기 등 별도 경로만.
+    """
+    rm = PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py"
+    if not rm.exists():
+        warnings.append("[5연패-B9] realtime_monitor.py 파일 없음")
+        return
+    lines = rm.read_text(encoding="utf-8").splitlines()
+    # 5연패 분기 탐색: "if consec >= 5:" 를 시작으로 다음 빈 줄 또는 "return" 까지 블록
+    start = None
+    for i, ln in enumerate(lines):
+        if re.search(r"if\s+consec\s*>=\s*5\s*:", ln):
+            start = i
+            break
+    if start is None:
+        warnings.append("[5연패-B9] 5연패 분기(`if consec >= 5:`)를 찾을 수 없음")
+        return
+    # 분기 끝: 다음 'return' 까지 또는 함수 종료(들여쓰기 감소)까지
+    base_indent = len(lines[start]) - len(lines[start].lstrip())
+    end = start + 1
+    while end < len(lines):
+        ln = lines[end]
+        if ln.strip() == "":
+            end += 1
+            continue
+        ind = len(ln) - len(ln.lstrip())
+        if ind <= base_indent and end > start + 1:
+            break
+        if "return" in ln and ind > base_indent:
+            end += 1
+            break
+        end += 1
+    # 주석/문자열 라인 제외 — 실제 코드 라인만 검사
+    violations: list[int] = []
+    for j in range(start, end):
+        ln = lines[j]
+        # 주석 라인 (들여쓰기 + #로 시작) 제외
+        if ln.lstrip().startswith("#"):
+            continue
+        # 인라인 주석 분리
+        code_part = ln.split("#", 1)[0]
+        if re.search(r"self\.running\s*=\s*False", code_part):
+            violations.append(j + 1)
+    if violations:
+        errors.append(
+            f"[5연패-B9] realtime_monitor.py 5연패 분기에 self.running=False 발견 "
+            f"(lines {violations}) — lessons #37 위배. "
+            f"systemd watchdog SIGABRT 회귀 위험. cooldown_until + alerted_until 갱신으로 대체 필요."
+        )
+
+
+def check_consec_loss_cooldown_invariant() -> None:
+    """5연패 silence(alerted_until) ↔ 매수 차단(cooldown_until) invariant 강제.
+
+    배경 (lessons #30, #37):
+        consec_loss_alerted_until만 설정하고 cooldown_until은 안 만지면, 봇 재시작 후 부활 시
+        silence는 살아있고 매수 차단은 풀린 위험 윈도우 발생. 두 플래그는 항상 함께 갱신되어야 함.
+
+    검증:
+        realtime_monitor.py 내 consec_loss_alerted_until 설정 라인 인근(±30줄)에 cooldown_until
+        설정(max(...,cooldown_target) 또는 self.state["cooldown_until"] = ...) 동시 존재 필수.
+    """
+    rm = PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py"
+    if not rm.exists():
+        return
+    lines = rm.read_text(encoding="utf-8").splitlines()
+    set_pat = re.compile(r"consec_loss_alerted_until.*=")
+    cd_pat = re.compile(r"cooldown_until.*=|cooldown_target")
+    violations: list[int] = []
+    for i, ln in enumerate(lines):
+        if not set_pat.search(ln):
+            continue
+        # 단순 읽기(get/dict access)는 제외 — 좌측 값 할당만
+        if re.search(r"self\.state\[\"consec_loss_alerted_until\"\]\s*=", ln) or re.search(
+            r"\bconsec_loss_alerted_until\s*=", ln
+        ):
+            # 인근 ±30줄에 cooldown_until 갱신 있는지
+            lo = max(0, i - 30)
+            hi = min(len(lines), i + 31)
+            window = "\n".join(lines[lo:hi])
+            if not cd_pat.search(window):
+                violations.append(i + 1)
+    if violations:
+        errors.append(
+            f"[5연패-invariant] realtime_monitor.py에서 consec_loss_alerted_until 갱신 시 "
+            f"인근 30줄에 cooldown_until 동시 갱신 없음 (lines {violations}) — lessons #30/#37 위배"
+        )
+
+
+def check_consec_loss_floor_consistency() -> None:
+    """연패 산정 함수 2곳의 consec_loss_floor_date 필터 일관성 강제 (lessons #38).
+
+    배경 (lessons #38, 2026-06-07):
+        연패(consec)는 별도 카운터가 아니라 closed_trades를 매 cycle 재계산. 따라서
+        cooldown_until만 리셋해도 다음 cycle에 consec>=5로 72h 재설정되는 함정이 있음.
+        근본 해제는 consec_loss_floor_date 필드로 옛 거래를 연패 산정에서 제외하는 방식.
+
+    검증:
+        연패를 산정하는 두 함수 — periodic_analysis.check_consec_loss /
+        realtime_monitor._get_consec_loss — 가 **둘 다** consec_loss_floor_date를 참조해야
+        함. 한쪽만 floor를 적용하면 산정 불일치로 cooldown이 사일런트 부활(경로 B) 가능.
+    """
+    pa = PROJECT_ROOT / "services" / "reporting" / "periodic_analysis.py"
+    rm = PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py"
+    missing: list[str] = []
+    if pa.exists():
+        txt = pa.read_text(encoding="utf-8")
+        # check_consec_loss 함수 본문에 floor 참조 존재
+        m = re.search(r"def check_consec_loss\(.*?\n(.*?)(?=\ndef |\Z)", txt, re.S)
+        if not (m and "consec_loss_floor_date" in m.group(1)):
+            missing.append("periodic_analysis.check_consec_loss")
+    if rm.exists():
+        txt = rm.read_text(encoding="utf-8")
+        m = re.search(r"def _get_consec_loss\(.*?\n(.*?)(?=\n    def |\Z)", txt, re.S)
+        if not (m and "consec_loss_floor_date" in m.group(1)):
+            missing.append("realtime_monitor._get_consec_loss")
+    if missing:
+        errors.append(
+            f"[연패-floor] consec_loss_floor_date 필터 누락: {missing} — "
+            f"두 연패 산정 함수 모두 floor를 적용해야 cooldown 근본 해제가 사일런트 부활 안 함 (lessons #38)"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 검증: deploy_to_aws.sh 사후 SSH 실측 검증 라인 존재 (lessons #36)
+# ═══════════════════════════════════════════════════════════════════
+
+def check_deploy_post_check_remote_cron() -> None:
+    """deploy_to_aws.sh에 사후 SSH 실측 검증(BitCoin_Trade cron ≥ 8) 라인이 있는지.
+
+    배경 (lessons #36, 2026-08-01):
+        Stock_Trade deploy_aws.sh가 crontab을 파일 원자 갱신 방식으로 통째 덮어써서
+        BitCoin_Trade cron 8개 전면 소실. 로컬 정적 검사(check_btc_cron_count_baseline)는
+        PASS였음 — 스크립트 소스는 정상. 배포 성공 = 서버 반영 확인까지.
+        deploy_to_aws.sh 마지막에 ssh "crontab -l | grep -c BitCoin_Trade" 실측 게이트 필수.
+    """
+    d_path = PROJECT_ROOT / "scripts" / "deploy_to_aws.sh"
+    if not d_path.exists():
+        return
+    txt = d_path.read_text(encoding="utf-8")
+    # 사후 실측 라인: 한 줄 안에 'crontab -l' + 'grep -c BitCoin_Trade' 동시 포함되어야 함
+    # (전체 파일 존재만으로는 주석·PROJECT_DIR 등에 문자열이 흩어져 있어 방어 불가)
+    line_matched = False
+    for raw_line in txt.splitlines():
+        # 주석 라인은 실측 라인이 아님
+        if raw_line.lstrip().startswith("#"):
+            continue
+        if "crontab -l" in raw_line and "grep -c BitCoin_Trade" in raw_line:
+            line_matched = True
+            break
+    # 사후 게이트 exit 1 분기도 함께 존재하는지 확인 (검증만 하고 exit 안 하면 무의미)
+    has_exit_guard = re.search(
+        r'if\s+\[\s+"\$[A-Z_]+"\s+-lt\s+8\s+\];\s+then[\s\S]{0,300}?exit\s+1',
+        txt,
+    ) is not None
+    if not (line_matched and has_exit_guard):
+        errors.append(
+            "[lessons #36] deploy_to_aws.sh에 사후 SSH 실측 검증 게이트 부재 — "
+            f"실측라인={line_matched}, exit1가드={has_exit_guard}. "
+            "'ssh ... crontab -l | grep -c BitCoin_Trade' + baseline<8 시 exit 1 게이트 필수 "
+            "(로컬 정적 검사만으로는 다중 프로젝트 crontab 덮어쓰기 방어 불가, 2026-08-01 소실 재발)"
+        )
+
+
 def main() -> None:
     print("=" * 50)
     print("배포 전 검증 (pre-deploy check)")
     print("=" * 50)
 
     check_strategy_consistency()
+    check_min_volume_krw_range()
     check_config_files()
     check_env_keys()
     check_server_paths()
@@ -1562,6 +2016,7 @@ def main() -> None:
     check_lint_history_script()
     check_vb_recheck_trigger()
     check_deploy_tooling()
+    check_ssh_canonical_key()
     check_healthcheck_module()
     check_critical_healthcheck_cron()
     check_hourly_digest_cron()
@@ -1570,9 +2025,16 @@ def main() -> None:
     check_ml_filter_integrity()
     check_system_memory()
     check_zombie_bot_processes()
+    check_deploy_no_daily_live_cron()
     check_entry_qty_invariant()
     check_state_qty_mirror_in_fix()
     check_btc_cron_count_baseline()
+    check_all_buy_paths_ml_gate()
+    check_ml_failopen_policy()
+    check_consec_loss_no_running_false()
+    check_consec_loss_cooldown_invariant()
+    check_consec_loss_floor_consistency()
+    check_deploy_post_check_remote_cron()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")

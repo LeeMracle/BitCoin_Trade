@@ -30,8 +30,17 @@ def check_consec_loss(state: dict,
     current = [t for t in closed if t.get("exit_date", "") >= strategy_start]
     n = len(current)
     wins = sum(1 for t in current if t.get("return_pct", 0) > 0)
+    # ── 연패 카운트 floor (lessons #38, 2026-06-07) ──
+    # 누적 통계(n/wins)는 strategy_start 기준 유지하되, 연패(consec) 산정만
+    # consec_loss_floor_date 이후(>) 거래로 한정. 옛 원인(저유동성 알트 등)
+    # 제거 후 cooldown을 근본 해제할 때 사용 — cooldown_until만 리셋하면
+    # 매 cycle closed_trades 재계산으로 재설정되는 함정 차단.
+    floor = state.get("consec_loss_floor_date")
+    consec_pool = current
+    if floor:
+        consec_pool = [t for t in current if t.get("exit_date", "") > floor]
     consec = 0
-    for t in reversed(current):
+    for t in reversed(consec_pool):
         if t.get("return_pct", 0) <= 0:
             consec += 1
         else:

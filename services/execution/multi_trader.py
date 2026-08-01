@@ -29,9 +29,10 @@ from services.execution.upbit_client import get_balance, buy_market, sell_market
 from services.execution.config import STRATEGY, MAX_POSITIONS, MIN_ORDER_KRW
 from services.alerting.notifier import send, notify_error
 
-# ── ML 신호 필터 (Phase 3 보강, fail-open) ──────────────────
+# ── ML 신호 필터 (lessons #36 B8: fail-CLOSED) ──────────────────
 # ML_FILTER_ENABLED=0(기본) 시 비활성 — 기존 매수 동작 100% 보존.
-# 모델 부재/로드 실패 시에도 자동 fail-open (lessons #21 역케이스).
+# LIVE 모드(ENABLED=1 + SHADOW=0)에서 모델 로드 실패 시 매수 차단 (fail-CLOSED, lessons #36 B8).
+# realtime_monitor.py(DC + EMA-TREND)와 동형 정책.
 import pandas as _pd  # noqa: E402  (ML hook용 timestamp)
 from services.ml.inference import get_filter as _get_ml_filter  # noqa: E402
 from services.ml import shadow as _ml_shadow  # noqa: E402
@@ -207,17 +208,37 @@ async def run(dry_run: bool = False):
                 print(f"    가격: {sig['price']:,.0f}  Donchian상단: {sig['donchian_upper']:,.0f}")
                 print(f"    트레일링스탑: {sig['trail_stop']:,.0f}  금액: {order_amount:,.0f} KRW")
 
-                # ── ML 신호 필터 게이트 (fail-open) ─────────────────
+                # ── ML 신호 필터 게이트 (lessons #36: fail-CLOSED) ──────
                 # 2026-05-08 P1-FIX: ohlcv 가드 제거 → inference.py가 자동 fetch (P8-23-1)
+                # B8 (lessons #36, 2026-06-03):
+                #   - 모델 로드 실패(is_active=False) + LIVE 모드 → 매수 차단(fail-CLOSED)
+                #   - ML_FILTER_ENABLED=0(의도적 비활성) 또는 SHADOW_MODE=1(검증) 시 통과
+                #   - 추론 예외 시 score=0.0으로 강제 차단 (이전엔 1.0 → fail-open)
                 _ml_flt = _get_ml_filter()
                 _ml_score = 1.0
+                _ml_exception = False
                 if _ml_flt.is_active:
                     _ohlcv = sig.get("ohlcv")  # 주입되면 사용, 아니면 자동 fetch
                     try:
                         _ml_score = _ml_flt.score(symbol, _ohlcv, _pd.Timestamp.now(tz="UTC"))
                     except Exception as _e:
-                        print(f"  [ML 점수 실패] {symbol}: {_e} — fail-open")
-                _ml_pass = _ml_flt.passes(_ml_score)
+                        print(f"  [ML 점수 실패] {symbol}: {_e} — fail-CLOSED")
+                        _ml_score = 0.0
+                        _ml_exception = True
+                    _ml_pass = _ml_flt.passes(_ml_score) and not _ml_exception
+                else:
+                    # B8 fail-closed: 모델 미로드/비활성
+                    import os as _os
+                    if _os.getenv("ML_FILTER_ENABLED", "0") != "1":
+                        _ml_pass = True  # ML 미도입 환경 — 기존 거동 보존
+                    elif _os.getenv("ML_SHADOW_MODE", "1") == "1":
+                        _ml_pass = True  # shadow 운영
+                    else:
+                        _ml_pass = False  # LIVE인데 로드 실패 → 차단
+                        print(
+                            f"  [ML 차단] {symbol} — 모델 로드 실패 (fail-CLOSED): "
+                            f"{_ml_flt.status}"
+                        )
                 _ml_shadow.log_decision(
                     symbol=symbol, signal_ts=_pd.Timestamp.now(tz="UTC"),
                     signal_type="DC_breakout", score=_ml_score,
