@@ -124,11 +124,12 @@ CRON_LOGVOL="10 0 * * * /home/ubuntu/BitCoin_Trade/scripts/log_volume_check.sh"
 # CRON_JARVIS="0 0 * * * cd $PROJECT_DIR && PYTHONUTF8=1 $PROJECT_DIR/.venv/bin/python scripts/jarvis_executor.py >> /var/log/jarvis_executor.log 2>&1"
 # VB 재검증 트리거: 매일 09:15 KST (= UTC 00:15) — BTC EMA200 7일 연속 충족 시 재집계 보고서 생성
 CRON_VB_RECHECK="15 0 * * * cd $PROJECT_DIR && PYTHONUTF8=1 $PROJECT_DIR/.venv/bin/python scripts/vb_recheck_trigger.py --notify >> /var/log/vb_recheck_trigger.log 2>&1"
-# P5-04: 일 1회 KST 09:30 레짐 자동 판정 (2026-05-05 매시→일1회 축소, 알림 제거)
+# P5-04: 일 1회 KST 09:30 레짐 자동 판정 (2026-05-05 매시→일1회 축소)
 # 사유: BTC EMA200은 일봉 지표 — 시간단위 갱신 불필요. 자원 24배 절감.
 # regime_state.json은 healthcheck/hourly_digest에서 참조하므로 cron 자체는 유지.
 # healthcheck 임계도 2h → 26h 동시 조정 (services/healthcheck/runner.py)
-CRON_REGIME="30 0 * * * cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_DIR $PROJECT_DIR/.venv/bin/python scripts/regime_check.py >> /var/log/regime_check.log 2>&1"
+# lessons #37 (20260801_2): --notify 필수. 미부여 시 BULL 전환 발생해도 텔레그램 침묵.
+CRON_REGIME="30 0 * * * cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_DIR $PROJECT_DIR/.venv/bin/python scripts/regime_check.py --notify >> /var/log/regime_check.log 2>&1"
 # plan 20260502 P0: 매시 5분 critical 헬스체크 (인증·jarvis cron) — FAIL 시만 즉시 알람, 30분 디바운스
 # 배경: 2026-05-01 23:00 KST 인증실패 8h 무감지 사고 재발 방지 (lessons #20)
 CRON_CRITICAL="5 * * * * cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_DIR $PROJECT_DIR/.venv/bin/python scripts/critical_healthcheck.py >> /var/log/critical_healthcheck.log 2>&1"

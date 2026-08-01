@@ -1978,6 +1978,44 @@ def check_deploy_post_check_remote_cron() -> None:
         )
 
 
+def check_regime_notify_flag() -> None:
+    """CRON_REGIME(scripts/regime_check.py 등록 라인)에 --notify 플래그가 있는지.
+
+    배경 (lessons #37, 2026-08-01):
+        scripts/regime_check.py는 --notify가 없으면 should_notify=True여도
+        텔레그램 발송을 안 함(regime_check.py:81 `if notify and should_notify(...)`).
+        deploy_to_aws.sh의 CRON_REGIME에 --notify 미부여 상태로 방치되어
+        BULL 전환(관망 종료 시점)이 발생해도 사용자가 실시간 인지 불가.
+        cron 명령어 인자 누락은 대표적인 silent fail (lessons #31 계열).
+
+    검증:
+        deploy_to_aws.sh의 CRON_REGIME= 라인 (주석 제외)에서
+        'regime_check.py'와 '--notify'가 같은 라인에 모두 존재해야 한다.
+    """
+    d_path = PROJECT_ROOT / "scripts" / "deploy_to_aws.sh"
+    if not d_path.exists():
+        return
+    txt = d_path.read_text(encoding="utf-8")
+    line_matched = False
+    for raw_line in txt.splitlines():
+        stripped = raw_line.lstrip()
+        # 주석 라인 제외 (변수 정의 라인만 검사)
+        if stripped.startswith("#"):
+            continue
+        if "CRON_REGIME=" not in raw_line:
+            continue
+        if "regime_check.py" in raw_line and "--notify" in raw_line:
+            line_matched = True
+            break
+    if not line_matched:
+        errors.append(
+            "[lessons #37] deploy_to_aws.sh의 CRON_REGIME 라인에 --notify 플래그 부재 — "
+            "regime_check.py:81은 notify=False 시 텔레그램 발송 안 함(should_notify 무의미). "
+            "CRON_REGIME=\"... scripts/regime_check.py --notify >> ...\" 형태로 부여 필수 "
+            "(BULL 전환 알림 누락 silent fail 방지)"
+        )
+
+
 def main() -> None:
     print("=" * 50)
     print("배포 전 검증 (pre-deploy check)")
@@ -2035,6 +2073,7 @@ def main() -> None:
     check_consec_loss_cooldown_invariant()
     check_consec_loss_floor_consistency()
     check_deploy_post_check_remote_cron()
+    check_regime_notify_flag()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")
