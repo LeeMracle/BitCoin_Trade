@@ -302,15 +302,24 @@ def _build_briefing() -> str:
 
 
 async def _send_briefing() -> bool:
+    """아침 브리핑 텔레그램 발송.
+
+    lessons #39 (20260802_1) — send_message는 이제 status 200 여부를 반영한 bool을
+    반환하며 Markdown 400은 자동 plain fallback. 여기서는 반환값을 신뢰해
+    성공/실패 로그와 exit code를 명확히 남긴다 (cron 로그 진단 근거).
+    """
     msg = _build_briefing()
     print("─" * 60)
     print(msg)
     print("─" * 60)
     try:
         from services.execution.telegram_bot import send_message  # noqa: WPS433
-        await send_message(msg)
-        print("[아침 브리핑] 텔레그램 발송 성공")
-        return True
+        ok = await send_message(msg)
+        if ok:
+            print("[아침 브리핑] 텔레그램 발송 성공")
+            return True
+        print("[아침 브리핑] 텔레그램 발송 실패 — send_message가 False 반환 (상세는 [telegram] 로그 참조)")
+        return False
     except Exception as e:
         print(f"[아침 브리핑] 텔레그램 발송 실패: {type(e).__name__} ({e})")
         return False
@@ -332,7 +341,10 @@ async def main() -> None:
             print(f"[콘솔 체크 오류] {type(e).__name__}: {e}")
 
     if args.notify:
-        await _send_briefing()
+        ok = await _send_briefing()
+        # lessons #39 — 발송 실패 시 non-zero exit → cron 실행 자체는 성공했다는 착각 차단
+        if not ok:
+            sys.exit(1)
 
 
 if __name__ == "__main__":

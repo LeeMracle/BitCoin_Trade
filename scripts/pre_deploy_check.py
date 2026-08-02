@@ -2092,6 +2092,70 @@ def check_morning_briefing_registered() -> None:
         )
 
 
+def check_telegram_send_status_verified() -> None:
+    """services/execution/telegram_bot.py::send_message 가 응답 status를 확인하는지 검증.
+
+    배경 (lessons #39, 2026-08-02):
+        아침 브리핑(daily_check.py --notify)이 09:32 KST 자동 발화되었고 로그도
+        "텔레그램 발송 성공"으로 남았으나 실제로는 텔레그램에 도착 안 함.
+        RCA: 브리핑 텍스트에 systemd 필드(`MainPID`, `ActiveEnterTimestamp` 등)의
+        밑줄이 포함되어 legacy Markdown 파서가 짝이 안 맞아 HTTP 400 Bad Request 반환.
+        그런데 기존 send_message는 응답 status를 확인하지 않고 예외도 던지지 않아
+        상위 호출자가 무조건 "성공"으로 오판 (silent fail).
+
+    검증규칙:
+        1) send_message 함수가 `-> bool` 반환 타입 시그니처를 가진다
+        2) send_message 함수 본문에 `resp.status` 참조 존재
+        3) 400 fallback 로직 존재 (parse_mode 제거한 payload가 함수 안에 존재)
+    """
+    p = PROJECT_ROOT / "services" / "execution" / "telegram_bot.py"
+    if not p.exists():
+        return
+    txt = p.read_text(encoding="utf-8")
+
+    # 함수 정의부 슬라이스 (다음 def 또는 class 전까지)
+    m = re.search(
+        r"^async def send_message\([^)]*\)[^:\n]*:\s*\n(?P<body>.*?)(?=^(?:async def|def|class )\s|\Z)",
+        txt,
+        re.MULTILINE | re.DOTALL,
+    )
+    if not m:
+        errors.append(
+            "[lessons #39] telegram_bot.py::send_message 함수를 찾지 못함 — 시그니처 확인 필요"
+        )
+        return
+
+    # 1) 반환 타입 시그니처
+    sig_line = txt[m.start(): m.start() + txt[m.start():].find("\n")]
+    if "-> bool" not in sig_line:
+        errors.append(
+            "[lessons #39] send_message 반환 타입이 `-> bool` 아님 — "
+            "status 성공/실패를 반환값으로 명시하지 않으면 상위 호출자가 silent fail 재발"
+        )
+
+    body = m.group("body")
+
+    # 2) resp.status 확인
+    if "resp.status" not in body and ".status ==" not in body:
+        errors.append(
+            "[lessons #39] send_message 본문에 HTTP status 확인 로직 부재 — "
+            "Markdown parse 400 등 status 400/4xx가 예외로 잡히지 않아 silent fail 위험 (오늘 09:32 KST 재현)"
+        )
+
+    # 3) parse_mode 제거 fallback 존재 (payload 두 개 이상 정의)
+    #    간단 heuristic: 함수 안에 chat_id 두 번 이상 언급되며 parse_mode 제거된 payload 리터럴 존재
+    has_fallback = (
+        body.count("chat_id") >= 2
+        and re.search(r"\{\"chat_id\"\s*:\s*chat_id\s*,\s*\"text\"\s*:\s*text\s*\}", body)
+    )
+    if not has_fallback:
+        warnings.append(
+            "[lessons #39] send_message에 parse_mode 제거 fallback 미확인 — "
+            "Markdown 400 시 자동 재시도 없으면 브리핑/알람 도착 실패 반복 가능 "
+            "(권장: parse_mode 없는 payload로 재전송)"
+        )
+
+
 def main() -> None:
     print("=" * 50)
     print("배포 전 검증 (pre-deploy check)")
@@ -2151,6 +2215,7 @@ def main() -> None:
     check_deploy_post_check_remote_cron()
     check_regime_notify_flag()
     check_morning_briefing_registered()
+    check_telegram_send_status_verified()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")

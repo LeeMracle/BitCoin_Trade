@@ -38,19 +38,59 @@ def _chat_id():
     return os.environ.get("TELEGRAM_CHAT_ID", "")
 
 
-async def send_message(text: str):
+async def send_message(text: str) -> bool:
+    """텔레그램 메시지 발송.
+
+    반환: True=발송 성공, False=발송 실패(status!=200 또는 예외 또는 env 미설정).
+
+    lessons #39 (20260802_1) — Markdown parse 400 silent fail:
+        기존 구현은 HTTP 응답 status를 확인하지 않아 Markdown parse 400 실패도
+        예외가 발생하지 않으므로 상위 호출자는 "발송 성공"으로 오판했다.
+        아침 브리핑 텍스트에 systemd 필드(`MainPID`, `ActiveEnter_Timestamp`) 등
+        밑줄이 포함되면 legacy Markdown 파서가 짝이 안 맞아 400 반환.
+        해결: (1) status 체크, (2) 400이면 parse_mode 제거 후 자동 재시도,
+        (3) 최종 실패 시 stdout ERROR 로그로 cron 로그에 남기고 False 반환.
+    """
     token = _token()
     chat_id = _chat_id()
     if not token or not chat_id:
-        return
+        print("[telegram] TELEGRAM_BOT_TOKEN/CHAT_ID 미설정 — 발송 스킵", flush=True)
+        return False
     url = f"{TELEGRAM_API.format(token=token)}/sendMessage"
-    payload = {"chat_id": chat_id, "text": text, "parse_mode": "Markdown"}
+    payloads = [
+        {"chat_id": chat_id, "text": text, "parse_mode": "Markdown"},
+        # Markdown 400 fallback — parse_mode 제거 (raw text)
+        {"chat_id": chat_id, "text": text},
+    ]
+    last_err = None
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=10)):
-                pass
-    except Exception:
-        pass
+            for idx, payload in enumerate(payloads):
+                try:
+                    async with session.post(
+                        url,
+                        json=payload,
+                        timeout=aiohttp.ClientTimeout(total=10),
+                    ) as resp:
+                        if resp.status == 200:
+                            if idx > 0:
+                                print(
+                                    "[telegram] Markdown 400 → plain fallback 성공",
+                                    flush=True,
+                                )
+                            return True
+                        body = (await resp.text())[:300]
+                        last_err = f"status={resp.status} body={body}"
+                        # 400은 fallback으로 재시도, 그 외 status(401/403/429/5xx)는 즉시 중단
+                        if resp.status != 400:
+                            break
+                except Exception as e:  # noqa: BLE001
+                    last_err = f"{type(e).__name__}: {e}"
+                    break
+    except Exception as e:  # noqa: BLE001
+        last_err = f"{type(e).__name__}: {e}"
+    print(f"[telegram] 발송 실패 — {last_err}", flush=True)
+    return False
 
 
 class TelegramCommandHandler:
