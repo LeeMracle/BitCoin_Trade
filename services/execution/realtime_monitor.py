@@ -585,6 +585,22 @@ class RealtimeMonitor:
                       f" | BTC>{ema_label}={self._btc_above_ema}", flush=True)
                 if fg_blocked:
                     record_block("fg_gate_daily", None)
+
+                # ── 거래 가능일 카운트 (ADR 20260823-1) ──
+                # 레짐 게이트가 열려 있던 날만 센다. 달력 일수로 검증 진척을 재면
+                # 착시가 생긴다 — 2026년은 Q1/Q2 레짐 통과율 0%, 최근 180일 1.1%로
+                # 전략이 애초에 거래할 수 없었는데 "검증 146일차"로 표시됐다.
+                # 하루 1회만 증가 (_refresh_levels는 일 1회지만 재시작 시 재실행됨).
+                _today = now.strftime("%Y-%m-%d")
+                _base = self.state.get("strategy_start") or ""
+                # 기준일 이전 날짜는 세지 않는다 — 리셋 직후 하루 과다 계상 방지
+                if self._btc_above_ema and _today >= _base:
+                    if self.state.get("regime_open_last_date") != _today:
+                        self.state["regime_open_last_date"] = _today
+                        self.state["regime_open_days"] = int(
+                            self.state.get("regime_open_days") or 0
+                        ) + 1
+                        save_state(self.state)
             except Exception as e:
                 print(f"  [v2] 필터 조회 실패: {e} — 기본값 유지", flush=True)
 
@@ -1911,7 +1927,11 @@ class RealtimeMonitor:
     def _get_consec_loss(self) -> int:
         """현재 전략 시작일 이후 거래에서 연속 손실 횟수를 반환한다."""
         closed = self.state.get("closed_trades", [])
-        strategy_start = self.state.get("strategy_start", "2026-03-29")
+        # 기본값 자체정의 금지 (교훈 #19) — periodic_analysis가 단일 진실 원천.
+        # 여기에 "2026-03-29"를 하드코딩해두면 기준선을 옮길 때 이 경로만 옛 값을
+        # 써서 연패 산정이 갈린다 (lessons #38이 지적한 경로 A/B 불일치).
+        from services.reporting.periodic_analysis import _DEFAULT_STRATEGY_START
+        strategy_start = self.state.get("strategy_start", _DEFAULT_STRATEGY_START)
         current_trades = [t for t in closed if t.get("exit_date", "") >= strategy_start]
         # ── 연패 카운트 floor (lessons #38, 2026-06-07) ──
         # check_consec_loss(periodic_analysis)와 동일 로직 — consec_loss_floor_date

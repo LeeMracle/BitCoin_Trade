@@ -2535,6 +2535,100 @@ def check_cron_watchdog_outside_cron() -> None:
             )
 
 
+# ═══════════════════════════════════════════════════════════════════
+# 검증 N+6: 검증 기준선/목표치 정합 (ADR 20260823-1, P1)
+# ref: docs/decisions/20260823_1_validation_baseline_reset.md
+# ═══════════════════════════════════════════════════════════════════
+
+def check_validation_baseline() -> None:
+    """검증 기준선과 판정 로직이 ADR 20260823-1 설계를 유지하는지 검증.
+
+    배경:
+        2026-08-22 이전 성과 통계는 (1) 실행 버그 4건(lessons #40~#43)과
+        (2) 전략 파라미터 반복 변경으로 신뢰 불가 → 기준선을 2026-08-23으로 리셋.
+        동시에 목표치를 현재 config 백테스트 실측(승률 59.9%/평균 +1.50%)에서
+        재도출하고, 판정을 **달력 기반 → 표본 수 기반**으로 바꿨다.
+
+        달력 기반 판정이 위험한 이유: 레짐 게이트(BTC>EMA200)가 닫히면 시간만
+        흐르고 거래는 안 쌓인다. 실제로 2026 Q1/Q2 통과율 0%, 최근 180일 1.1%였다.
+        "7일 지났으니 판정"은 표본 0건에도 결론을 내린다.
+
+    검증규칙:
+        1) _DEFAULT_STRATEGY_START 가 옛 기준선(2026-03-29)으로 되돌아가지 않았는지
+        2) 목표치가 옛 값(35% / 0.5%)으로 되돌아가지 않았는지
+        3) 판정이 days_elapsed 가 아닌 표본 수(n) 기준인지
+        4) 연패 산정 경로가 기본값을 자체정의하지 않는지 (교훈 #19)
+    """
+    pa = PROJECT_ROOT / "services" / "reporting" / "periodic_analysis.py"
+    if not pa.exists():
+        errors.append("[ADR 20260823-1] periodic_analysis.py 없음 — 검증 기준선 확인 불가")
+        return
+    txt = pa.read_text(encoding="utf-8")
+
+    m = re.search(r'^_DEFAULT_STRATEGY_START\s*=\s*"(\d{4}-\d{2}-\d{2})"', txt, re.MULTILINE)
+    if not m:
+        errors.append("[ADR 20260823-1] _DEFAULT_STRATEGY_START 정의를 찾지 못함")
+    elif m.group(1) < "2026-08-23":
+        errors.append(
+            f"[ADR 20260823-1] _DEFAULT_STRATEGY_START={m.group(1)} — 2026-08-23 이전으로 회귀. "
+            f"버그 시절(lessons #40~#43) + 파라미터 반복변경 구간이 성과 통계에 다시 섞인다"
+        )
+
+    for name, old, lo in (("_BACKTEST_TARGET_WINRATE", 35, 40), ("_BACKTEST_TARGET_AVG_RET", 0.5, 0.6)):
+        mm = re.search(rf"^{name}\s*=\s*([\d.]+)", txt, re.MULTILINE)
+        if not mm:
+            errors.append(f"[ADR 20260823-1] {name} 정의 없음")
+            continue
+        val = float(mm.group(1))
+        if val < lo:
+            errors.append(
+                f"[ADR 20260823-1] {name}={val} — TP 도입 이전 잔재값({old}) 수준으로 회귀. "
+                f"현재 config 실측(승률 59.9%/평균 +1.50%)과 어긋나 PASS/FAIL 판정이 무의미해진다"
+            )
+
+    # 판정이 표본 수 기준인지 (달력 기반 회귀 차단)
+    ms = re.search(
+        r"^(?P<ind>[ \t]*)def build_strategy_summary\([^)]*\)[^:\n]*:[ \t]*\n"
+        r"(?P<body>.*?)(?=^(?P=ind)(?:async )?def |\Z)",
+        txt, re.MULTILINE | re.DOTALL,
+    )
+    if not ms:
+        errors.append("[ADR 20260823-1] build_strategy_summary 정의를 찾지 못함 — 검증규칙 갱신 필요")
+    else:
+        body = ms.group("body")
+        if "_VERDICT_MIN_TRADES" not in body:
+            errors.append(
+                "[ADR 20260823-1] 판정이 표본 수(_VERDICT_MIN_TRADES) 기준이 아님 — "
+                "달력 기반 판정은 레짐 차단 구간(2026 Q1/Q2 통과율 0%)에서 "
+                "표본 0건에도 결론을 낸다"
+            )
+        if re.search(r"days_elapsed\s*>=\s*\d+\s*and\s*n\s*>=", body):
+            errors.append(
+                "[ADR 20260823-1] `days_elapsed >= N and n >= M` 형태의 달력 기반 판정 잔존"
+            )
+        if "regime_open_days" not in body:
+            warnings.append(
+                "[ADR 20260823-1] 성과 요약에 거래가능일(regime_open_days) 미표시 — "
+                "달력 일수만 보면 검증 진척에 착시가 생긴다"
+            )
+
+    # 연패 산정 경로의 기본값 자체정의 금지 (교훈 #19)
+    rm = PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py"
+    if rm.exists():
+        rt = rm.read_text(encoding="utf-8")
+        mg = re.search(
+            r"^(?P<ind>[ \t]+)def _get_consec_loss\([^)]*\)[^:\n]*:[ \t]*\n"
+            r"(?P<body>.*?)(?=^(?P=ind)(?:async )?def |\Z)",
+            rt, re.MULTILINE | re.DOTALL,
+        )
+        if mg and re.search(r'strategy_start\s*=\s*self\.state\.get\([^,]+,\s*"\d{4}-', mg.group("body")):
+            errors.append(
+                "[교훈 #19] _get_consec_loss가 strategy_start 기본값을 자체 정의 — "
+                "periodic_analysis._DEFAULT_STRATEGY_START를 import 해야 함. "
+                "자체정의 시 기준선 이동이 이 경로에만 미반영되어 연패 산정이 갈린다 (lessons #38)"
+            )
+
+
 def main() -> None:
     print("=" * 50)
     print("배포 전 검증 (pre-deploy check)")
@@ -2600,6 +2694,7 @@ def main() -> None:
     check_positions_subscribed()
     check_exec_price_settled()
     check_cron_watchdog_outside_cron()
+    check_validation_baseline()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")
