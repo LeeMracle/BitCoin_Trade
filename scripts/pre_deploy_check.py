@@ -2319,6 +2319,82 @@ def check_positions_subscribed() -> None:
         )
 
 
+# ═══════════════════════════════════════════════════════════════════
+# 검증 N+4: 주문 체결가가 재조회로 확정되는지 (신호가 기록 금지)
+# ref: docs/lessons/20260822_4_exec_price_not_settled.md
+# ═══════════════════════════════════════════════════════════════════
+
+def check_exec_price_settled() -> None:
+    """시장가 주문 헬퍼가 fetch_order 재조회로 확정 체결가를 얻는지 검증.
+
+    배경 (lessons/20260822_4, 2026-08-22):
+        업비트 create_market_*_order 응답에는 체결 정보가 없다
+        (average/filled/cost = None, status='wait'). buy/sell_market_coin이
+        그 응답을 그대로 반환해 호출자가 신호가로 폴백 → **체결가 대신 신호가 기록**.
+        실측 OP/KRW: 상태파일 155.0/815.7157 vs 실제 157.0/805.3244.
+        매수는 entry_price·entry_qty·하드손절선을, 매도는 exit_price·return_pct·
+        실현손익·closed_trades를 오염시켜 성과 통계 전체가 틀어진다.
+
+    검증규칙:
+        1) buy_market_coin / sell_market_coin 이 체결 확정 경로를 거친다
+        2) settle_order 가 status 가 아닌 filled > 0 으로 성공 판정
+           (업비트 시장가 매수는 잔여 KRW 환불로 canceled 종료 — 정상 체결)
+        3) 재시도 상수는 config.py 정의 (lessons #19 자체정의 금지)
+    """
+    mt = PROJECT_ROOT / "services" / "execution" / "multi_trader.py"
+    uc = PROJECT_ROOT / "services" / "execution" / "upbit_client.py"
+    if not mt.exists() or not uc.exists():
+        errors.append("[lessons #43] multi_trader.py / upbit_client.py 없음 — 체결가 검증 불가")
+        return
+
+    mt_txt, uc_txt = mt.read_text(encoding="utf-8"), uc.read_text(encoding="utf-8")
+
+    # 1) 두 헬퍼가 체결 확정 경로를 거치는지
+    for fn in ("buy_market_coin", "sell_market_coin"):
+        m = re.search(rf"^def {fn}\([^)]*\)[^:]*:\s*\n(?P<body>(?:[ \t]+.*\n|[ \t]*\n)+)",
+                      mt_txt, re.MULTILINE)
+        if not m:
+            errors.append(f"[lessons #43] {fn} 정의를 찾지 못함 — 검증규칙 갱신 필요")
+            continue
+        body = m.group("body")
+        if "settle" not in body and "_settled_result" not in body:
+            errors.append(
+                f"[lessons #43] {fn}이 주문 생성 응답을 재조회 없이 반환 — "
+                f"업비트 create 응답은 average/filled/cost가 모두 None이므로 "
+                f"호출자가 신호가로 폴백해 체결가 대신 신호가가 기록된다"
+            )
+
+    # 2) settle_order 의 성공 판정이 filled 기반인지
+    m = re.search(r"^def settle_order\([^)]*\)[^:]*:\s*\n(?P<body>(?:[ \t]+.*\n|[ \t]*\n)+)",
+                  uc_txt, re.MULTILINE)
+    if not m:
+        errors.append("[lessons #43] upbit_client.settle_order 정의 없음 — 체결 확정 경로 부재")
+    else:
+        body = m.group("body")
+        if 'get("filled")' not in body and "get('filled')" not in body:
+            errors.append(
+                "[lessons #43] settle_order가 filled 기반으로 체결을 판정하지 않음 — "
+                "업비트 시장가 매수는 잔여 KRW 환불로 status='canceled' 종료되므로 "
+                "status로 성공을 판정하면 정상 체결을 실패로 오판한다"
+            )
+
+    # 3) 상수 자체정의 금지 (lessons #19)
+    cfg = PROJECT_ROOT / "services" / "execution" / "config.py"
+    if cfg.exists():
+        cfg_txt = cfg.read_text(encoding="utf-8")
+        for const in ("ORDER_SETTLE_RETRIES", "ORDER_SETTLE_DELAY_SEC"):
+            if const in uc_txt and not re.search(rf"^{const}\s*=", cfg_txt, re.MULTILINE):
+                errors.append(
+                    f"[lessons #43] config.py에 {const} 정의 없음 — "
+                    f"upbit_client.py import가 ImportError로 봇 기동 실패"
+                )
+            if re.search(rf"^{const}\s*=", uc_txt, re.MULTILINE):
+                errors.append(
+                    f"[lessons #19] {const}가 upbit_client.py에 자체 정의됨 — "
+                    f"config.py 단일 진실 원천에서 import 해야 함"
+                )
+
+
 def main() -> None:
     print("=" * 50)
     print("배포 전 검증 (pre-deploy check)")
@@ -2382,6 +2458,7 @@ def main() -> None:
     check_vol_filter_completed_bar()
     check_trail_stop_persisted()
     check_positions_subscribed()
+    check_exec_price_settled()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")

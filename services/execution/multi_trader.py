@@ -335,13 +335,30 @@ async def run(dry_run: bool = False):
     print(f"\n  보유: {len(positions)}종목, 완료거래: {len(closed)}회, 승률: {win_rate:.0f}%")
 
 
+def _settled_result(exchange, order: dict, symbol: str) -> dict:
+    """주문 생성 응답 → fetch_order 재조회로 확정 체결가/수량 산출 (lessons/20260822_4).
+
+    업비트는 create 응답에 체결 정보를 주지 않으므로(average/filled/cost = None),
+    재조회 없이는 호출자가 신호가로 폴백해 **체결가 대신 신호가**를 기록하게 된다.
+    price는 None을 반환할 수 있고(확정 실패), 그 경우 호출자의 기존 폴백이 동작한다.
+    """
+    from services.execution.upbit_client import settle_order, order_exec_price
+    settled = settle_order(exchange, order, symbol)
+    return {
+        "id": settled.get("id") or order.get("id"),
+        "price": order_exec_price(settled),
+        "amount": settled.get("filled") or settled.get("amount"),
+        "cost": settled.get("cost"),
+        "status": settled.get("status"),
+    }
+
+
 def sell_market_coin(symbol: str, amount: float) -> dict:
     """특정 코인 시장가 매도."""
     from services.execution.upbit_client import _create_exchange
     exchange = _create_exchange()
     order = exchange.create_market_sell_order(symbol, amount)
-    return {"id": order.get("id"), "price": order.get("average") or order.get("price"),
-            "amount": order.get("amount"), "status": order.get("status")}
+    return _settled_result(exchange, order, symbol)
 
 
 def buy_market_coin(symbol: str, amount_krw: float) -> dict:
@@ -349,8 +366,7 @@ def buy_market_coin(symbol: str, amount_krw: float) -> dict:
     from services.execution.upbit_client import _create_exchange
     exchange = _create_exchange()
     order = exchange.create_market_buy_order(symbol, None, params={"cost": amount_krw})
-    return {"id": order.get("id"), "price": order.get("average") or order.get("price"),
-            "amount": order.get("amount"), "status": order.get("status")}
+    return _settled_result(exchange, order, symbol)
 
 
 def show_status():

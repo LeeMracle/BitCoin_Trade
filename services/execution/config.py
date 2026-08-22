@@ -86,6 +86,13 @@ VOL_FILTER_MULTIPLIER = 1.5  # ADR 20260516-2: 1.0→1.5 (가짜 거래량 돌�
 # 진입가 기준으로 되돌아감. 틱마다 쓰면 I/O 과다이므로 throttle 간격을 둔다.
 TRAIL_PERSIST_INTERVAL_SEC = 30
 
+# 주문 체결 확정 재조회 (lessons/20260822_4)
+# 업비트 create_market_*_order 응답에는 체결 정보가 없어(average/filled/cost = None)
+# fetch_order로 재조회해야 실제 체결가를 얻는다. 시장가는 즉시 체결되나
+# 조회 시점에 아직 반영 전일 수 있어 짧게 재시도한다.
+ORDER_SETTLE_RETRIES = 3
+ORDER_SETTLE_DELAY_SEC = 0.4
+
 # ═══════════════════════════════════════════════════════
 # 일일 손실 한도 (decision 20260504-1, plan 20260504_2 AC10-14)
 # ═══════════════════════════════════════════════════════

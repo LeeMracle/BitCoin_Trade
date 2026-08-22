@@ -26,6 +26,7 @@ import ccxt
 from dotenv import load_dotenv
 
 from services.common.log_throttle import throttled_print
+from services.execution.config import ORDER_SETTLE_RETRIES, ORDER_SETTLE_DELAY_SEC
 
 _env_path = Path(__file__).resolve().parents[1] / ".env"
 load_dotenv(_env_path)
@@ -241,6 +242,86 @@ def get_balance() -> dict:
     }
     _save_last_known_balance(result)
     return result
+
+
+# ════════════════════════════════════════════════════════════
+# 주문 체결 확정 (lessons/20260822_4)
+# ════════════════════════════════════════════════════════════
+
+def settle_order(exchange, order: dict, symbol: str) -> dict:
+    """주문 생성 응답을 fetch_order로 재조회해 확정 체결가/수량을 얻는다.
+
+    업비트 create_market_*_order 응답에는 체결 정보가 없다
+    (average/filled/cost 전부 None, status='wait'). 그대로 쓰면 호출자가
+    신호가(price)로 폴백해 **체결가 대신 신호가가 기록**된다.
+
+    또한 업비트 시장가 **매수**는 잔여 KRW가 최소 단위 미만이면 환불되며
+    주문이 `canceled` 상태로 종료된다 — 체결 실패가 아니므로 status로
+    성공을 판정하면 안 되고, `filled > 0` 으로 판정해야 한다.
+    (이 특성 때문에 fetch_closed_orders에는 매수 주문이 아예 잡히지 않는다.)
+
+    Args:
+        exchange: ccxt 거래소 인스턴스
+        order:    create_market_*_order 반환값
+        symbol:   'OP/KRW' 형식
+
+    Returns:
+        체결 확정 dict. 재조회 실패 시 원본 order를 그대로 반환한다
+        (매매 자체를 막지 않기 위한 fail-open — 호출자의 기존 폴백이 동작).
+    """
+    oid = (order or {}).get("id")
+    if not oid:
+        return order or {}
+
+    for attempt in range(ORDER_SETTLE_RETRIES):
+        try:
+            d = _retry_on_429(exchange.fetch_order, oid, symbol)
+            if float(d.get("filled") or 0) > 0:
+                return d
+        except Exception as e:
+            throttled_print(
+                f"settle_order_{symbol}",
+                f"  [경고] {symbol} 주문 재조회 실패 ({attempt + 1}/{ORDER_SETTLE_RETRIES}): {e}",
+                interval_sec=60,
+            )
+        if attempt < ORDER_SETTLE_RETRIES - 1:
+            time.sleep(ORDER_SETTLE_DELAY_SEC)
+
+    throttled_print(
+        f"settle_unfilled_{symbol}",
+        f"  [경고] {symbol} 체결 확정 실패 — 신호가 폴백 사용 (체결가 기록 부정확 가능)",
+        interval_sec=60,
+    )
+    return order or {}
+
+
+def order_exec_price(settled: dict) -> float | None:
+    """확정 주문에서 평균 체결가를 산출. 없으면 None (호출자가 폴백).
+
+    신뢰도 순: average > cost/filled > price.
+    업비트는 average가 채워지지 않는 경로가 있어 cost/filled 산식이 실질 1순위가 된다.
+    """
+    d = settled or {}
+    avg = d.get("average")
+    if avg:
+        try:
+            if float(avg) > 0:
+                return float(avg)
+        except (TypeError, ValueError):
+            pass
+    try:
+        cost, filled = float(d.get("cost") or 0), float(d.get("filled") or 0)
+        if cost > 0 and filled > 0:
+            return cost / filled
+    except (TypeError, ValueError):
+        pass
+    try:
+        p = float(d.get("price") or 0)
+        if p > 0:
+            return p
+    except (TypeError, ValueError):
+        pass
+    return None
 
 
 # ════════════════════════════════════════════════════════════

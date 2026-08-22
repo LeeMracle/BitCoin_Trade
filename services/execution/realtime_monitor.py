@@ -1778,7 +1778,10 @@ class RealtimeMonitor:
                     sell_qty = round(cur_free, 8)
                 # 시장가 매도 (lessons #3: retry 없음)
                 order = sell_market_coin(symbol, sell_qty)
+                # lessons/20260822_4: 확정 평균 체결가. None이면 신호가 폴백
                 exec_price = float(order.get("price") or price)
+                if not order.get("price"):
+                    print(f"  [경고] {symbol} TP 체결가 확정 실패 — 신호가 기록", flush=True)
                 pl_krw = (exec_price - entry) * sell_qty
                 # state 갱신
                 sold_levels.add(idx)
@@ -2123,7 +2126,11 @@ class RealtimeMonitor:
         else:
             try:
                 order = buy_market_coin(symbol, order_amount)
+                # lessons/20260822_4: order["price"]는 fetch_order 재조회로 확정한
+                # 평균 체결가. None이면 확정 실패 → 신호가 폴백(기록 부정확 가능)
                 exec_price = order.get("price") or price
+                if not order.get("price"):
+                    print(f"  [경고] {symbol} 체결가 확정 실패 — 신호가 {price:,.4f} 기록", flush=True)
                 print(f"  매수 체결: {exec_price:,.0f}")
             except Exception as e:
                 self._set_cooldown(symbol)
@@ -2167,15 +2174,34 @@ class RealtimeMonitor:
         if entry_qty <= 0:
             print(f"  [경고] {symbol} entry_qty 결정 불가 — order_amount/exec_price 모두 0", flush=True)
             entry_qty = 1e-9  # placeholder, 추후 fix_state_balance_mismatch.py로 보정
+        # 손절선 재계산 (lessons/20260822_4) — 위에서 신호가(price) 기준으로 잡은
+        # trail_stop은 슬리피지만큼 어긋난다. 하드 손절 캡은 "진입가 대비 -10%"가
+        # 정책이므로 확정 체결가(exec_price) 기준으로 다시 계산해야 한다.
+        if not IS_DAYTRADING and exec_price > 0:
+            _atr_stop = exec_price - level["atr"] * ATR_MULTIPLIER
+            _hard_floor = exec_price * (1 - HARD_STOP_LOSS_PCT)
+            trail_stop = max(_atr_stop, _hard_floor)
+
+        # 실제 체결 대금 우선 (lessons/20260822_4) — 요청액(order_amount)은 업비트
+        # 시장가 매수에서 잔여 KRW가 환불되어 실제 체결 대금과 다르다. TP 잔량 회계는
+        # 실제 대금 기준이어야 부분 매도 수량이 어긋나지 않는다.
+        entry_amount_krw = order_amount
+        try:
+            _cost = float(order.get("cost") or 0) if not DRY_RUN else 0.0
+            if _cost > 0:
+                entry_amount_krw = _cost
+        except (TypeError, ValueError):
+            pass
+
         positions[symbol] = {
             "entry_date": today,
             "entry_price": exec_price,
             "highest": exec_price,
             "trail_stop": trail_stop,
             "order_amount": order_amount,
-            "entry_amount_krw": order_amount,    # 불변 (TP 잔량 회계 기준)
-            "entry_qty": entry_qty,              # 불변 (부분 매도 수량 산정 기준)
-            "tp_sold_levels": [],                # 단계별 매도 추적
+            "entry_amount_krw": entry_amount_krw,  # 불변 (TP 잔량 회계 기준, 실제 체결 대금)
+            "entry_qty": entry_qty,                # 불변 (부분 매도 수량 산정 기준)
+            "tp_sold_levels": [],                  # 단계별 매도 추적
         }
         self.state["positions"] = positions
         save_state(self.state)
@@ -2234,7 +2260,10 @@ class RealtimeMonitor:
                     return
 
                 order = sell_market_coin(symbol, coin_amount)
+                # lessons/20260822_4: 확정 평균 체결가. None이면 신호가 폴백
                 exec_price = order.get("price") or price
+                if not order.get("price"):
+                    print(f"  [경고] {symbol} 매도 체결가 확정 실패 — 신호가 기록", flush=True)
                 print(f"  매도 체결: {exec_price:,.0f}")
             except Exception as e:
                 self._set_cooldown(symbol)
