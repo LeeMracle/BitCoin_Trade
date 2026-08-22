@@ -94,6 +94,20 @@ ORDER_SETTLE_RETRIES = 3
 ORDER_SETTLE_DELAY_SEC = 0.4
 
 # ═══════════════════════════════════════════════════════
+# cron 정합 감시 (lessons #36-08 재발 방지)
+# ═══════════════════════════════════════════════════════
+# 같은 서버의 Stock_Trade deploy_aws.sh가 `crontab config/crontab.txt`로
+# crontab을 통째 덮어써 BitCoin_Trade cron 9개가 전면 소실되는 사고가 반복됐다
+# (2026-08-01 최초 기록 → 08-03 재발, 19일간 무알람).
+#
+# 기존 감시(daily_check.py::_section_cron)는 **자기 자신이 cron**이라
+# crontab이 지워지면 감시기도 같이 죽어 침묵한다. 그래서 crontab과 무관하게
+# systemd로 상시 가동되는 봇 본체에서도 검사한다.
+CRON_INTEGRITY_CHECK_ENABLED = True
+CRON_BASELINE_LINES = 9          # BitCoin_Trade crontab 최소 라인 수
+CRON_ALERT_INTERVAL_SEC = 21600  # 동일 경보 재발송 간격 (6시간)
+
+# ═══════════════════════════════════════════════════════
 # 일일 손실 한도 (decision 20260504-1, plan 20260504_2 AC10-14)
 # ═══════════════════════════════════════════════════════
 # 24h 누적 실현손익이 기준자본 × N% 손실 도달 시 신규 매수 차단

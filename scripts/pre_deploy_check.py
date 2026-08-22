@@ -2395,6 +2395,68 @@ def check_exec_price_settled() -> None:
                 )
 
 
+# ═══════════════════════════════════════════════════════════════════
+# 검증 N+5: cron 소실 감시가 cron 밖(systemd)에도 존재하는지
+# ref: docs/lessons/20260822_5_cron_wipe_detector_in_cron.md
+# ═══════════════════════════════════════════════════════════════════
+
+def check_cron_watchdog_outside_cron() -> None:
+    """crontab 소실 감시가 봇 본체(systemd)에도 있는지 검증.
+
+    배경 (lessons/20260822_5, 2026-08-22):
+        lessons #36-08 대응으로 daily_check.py::_section_cron 이 crontab 라인
+        카운트를 검사하도록 했으나, **그 검사기 자체가 cron 작업**이었다.
+        2026-08-03 Stock_Trade 배포가 crontab을 통째 덮어써 BATA cron 9개가
+        소실되자 감시기도 함께 죽어 19일간 경보가 한 건도 없었다.
+        감시기는 감시 대상과 같은 실패 지점을 공유하면 안 된다.
+
+    검증규칙:
+        realtime_monitor.py(systemd 상시 가동)에 crontab 카운트 검사 +
+        baseline 미달 시 경보 경로가 존재
+    """
+    p = PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py"
+    if not p.exists():
+        errors.append("[lessons #44] realtime_monitor.py 없음 — cron 감시 검증 불가")
+        return
+    txt = p.read_text(encoding="utf-8")
+
+    m = re.search(
+        r"^\s+async def _check_cron_integrity\([^)]*\)[^:]*:\s*\n(?P<body>(?:[ \t]+.*\n|[ \t]*\n)+)",
+        txt, re.MULTILINE,
+    )
+    if not m:
+        errors.append(
+            "[lessons #44] realtime_monitor에 _check_cron_integrity() 없음 — "
+            "cron 소실 감시가 cron(daily_check.py) 안에만 있으면 crontab이 지워질 때 "
+            "감시기도 같이 죽어 침묵한다 (2026-08-03~22 19일 무알람 재발 위험)"
+        )
+        return
+
+    body = m.group("body")
+    if "crontab" not in body:
+        errors.append("[lessons #44] _check_cron_integrity가 crontab을 조회하지 않음")
+    if "send_critical" not in body:
+        errors.append(
+            "[lessons #44] _check_cron_integrity에 경보 발송(send_critical) 없음 — "
+            "감지만 하고 알리지 않으면 silent fail"
+        )
+
+    # 실제 호출되는지 (정의만 하고 미호출이면 사문화)
+    if not re.search(r"await self\._check_cron_integrity\(\)", txt):
+        errors.append(
+            "[lessons #44] _check_cron_integrity()가 정의만 되고 호출되지 않음 — "
+            "주기 실행 경로에 연결 필요"
+        )
+
+    # 상수 자체정의 금지 (lessons #19)
+    cfg = PROJECT_ROOT / "services" / "execution" / "config.py"
+    if cfg.exists():
+        cfg_txt = cfg.read_text(encoding="utf-8")
+        for const in ("CRON_BASELINE_LINES", "CRON_ALERT_INTERVAL_SEC"):
+            if not re.search(rf"^{const}\s*=", cfg_txt, re.MULTILINE):
+                errors.append(f"[lessons #44] config.py에 {const} 정의 없음 — ImportError로 봇 기동 실패")
+
+
 def main() -> None:
     print("=" * 50)
     print("배포 전 검증 (pre-deploy check)")
@@ -2459,6 +2521,7 @@ def main() -> None:
     check_trail_stop_persisted()
     check_positions_subscribed()
     check_exec_price_settled()
+    check_cron_watchdog_outside_cron()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")
