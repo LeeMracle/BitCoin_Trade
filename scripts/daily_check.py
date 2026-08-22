@@ -234,24 +234,45 @@ def _section_account() -> list[str]:
 
 
 def _section_cron() -> list[str]:
-    """cron 정합 섹션 — BitCoin_Trade 라인 카운트 (lessons #36)."""
-    out: list[str] = ["⏰ cron 정합"]
+    """스케줄러 정합 섹션 — BATA systemd timer 카운트 (lessons #36-08 / #44).
+
+    2026-08-22: crontab → systemd timer 전면 이전.
+    타 프로젝트(Stock_Trade)가 crontab을 통째 덮어써도 timer는 영향받지 않는다.
+    이 섹션은 참고용이며, 실제 소실 감시는 봇 본체
+    (realtime_monitor._check_scheduler_integrity)가 담당한다 — 감시기를
+    감시 대상(스케줄러) 안에 두면 함께 죽기 때문(#44).
+    """
+    out: list[str] = ["⏰ 스케줄러 정합"]
     is_server = os.path.exists("/home/ubuntu/BitCoin_Trade")
     if not is_server:
-        out.append("  - (로컬 실행 — crontab SKIP)")
+        out.append("  - (로컬 실행 — systemd SKIP)")
         return out
     try:
-        cron_txt = subprocess.check_output(["crontab", "-l"], timeout=5).decode()
-        lines = [ln for ln in cron_txt.splitlines() if "BitCoin_Trade" in ln and not ln.lstrip().startswith("#")]
-        n = len(lines)
-        # baseline 9 (기존 8 + daily_check briefing 신설)
+        txt = subprocess.check_output(
+            ["systemctl", "list-timers", "--all", "--no-legend", "--no-pager"], timeout=10
+        ).decode()
+        units = {
+            tok for ln in txt.splitlines() for tok in ln.split()
+            if tok.startswith("bata-") and tok.endswith(".timer")
+        }
+        n = len(units)
         status = "OK" if n >= 9 else "⚠ 누락 의심"
-        out.append(f"  - BitCoin_Trade 라인: {n}개 (baseline 9+) — {status}")
-        # daily_check briefing 등록 확인
-        has_briefing = any("daily_check.py" in ln for ln in lines)
-        out.append(f"  - 아침 브리핑(daily_check.py): {'등록됨' if has_briefing else '⚠ 미등록'}")
+        out.append(f"  - BATA systemd timer: {n}개 (baseline 9+) — {status}")
+        has_briefing = "bata-daily-briefing.timer" in units
+        out.append(f"  - 아침 브리핑(bata-daily-briefing): {'등록됨' if has_briefing else '⚠ 미등록'}")
+        # 이전 잔재 확인 — crontab에 BATA 라인이 남아 있으면 중복 실행 위험
+        try:
+            cron_txt = subprocess.check_output(["crontab", "-l"], timeout=5).decode()
+            leftover = [
+                ln for ln in cron_txt.splitlines()
+                if "BitCoin_Trade" in ln and not ln.lstrip().startswith("#")
+            ]
+            if leftover:
+                out.append(f"  - ⚠ crontab 잔재 {len(leftover)}줄 — timer와 중복 실행 위험")
+        except Exception:
+            pass
     except Exception as e:
-        out.append(f"  - crontab 조회 실패: {type(e).__name__}")
+        out.append(f"  - systemd timer 조회 실패: {type(e).__name__}")
     return out
 
 

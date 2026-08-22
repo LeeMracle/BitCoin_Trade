@@ -34,7 +34,8 @@ from services.execution.config import (
     TP_LEVELS, TP_ENABLED,
     VOL_FILTER_ENABLED, VOL_FILTER_MULTIPLIER,
     TRAIL_PERSIST_INTERVAL_SEC,
-    CRON_INTEGRITY_CHECK_ENABLED, CRON_BASELINE_LINES, CRON_ALERT_INTERVAL_SEC,
+    SCHEDULER_INTEGRITY_CHECK_ENABLED, SCHEDULER_UNIT_PREFIX,
+    SCHEDULER_BASELINE_UNITS, SCHEDULER_ALERT_INTERVAL_SEC,
     DAILY_LOSS_LIMIT_ENABLED, DAILY_LOSS_LIMIT_PCT, DAILY_LOSS_BASE_KRW,
     MAX_POSITIONS, POSITION_RATIO, MIN_VOLUME_KRW,
     MIN_ORDER_KRW, DRY_RUN, EXCLUDE_SYMBOLS, MIN_LISTING_DAYS,
@@ -142,7 +143,7 @@ class RealtimeMonitor:
         self._last_heartbeat: float = 0.0  # heartbeat touch 마지막 시각 (monotonic)
         self._last_msg_ts: float = 0.0    # 웹소켓 마지막 메시지 수신 시각 (monotonic, P7-07)
         self._trail_persist_ts: float = 0.0  # 트레일스탑 상승분 디스크 저장 throttle (monotonic)
-        self._cron_alert_ts: float = 0.0     # cron 소실 경보 재발송 throttle (epoch)
+        self._sched_alert_ts: float = 0.0    # 스케줄러 소실 경보 재발송 throttle (epoch)
         # 신호 발화 dedupe (lessons #1) — {symbol: {"bar_id": int, "ts": float}}
         # _execute_buy 진입 시 같은 15분봉 ID 또는 60s 내 재시도면 skip.
         # 폭주 차단: ORDER/KRW 한 종목 30h에 16,484회 → 봉당 1회 + 60s = 30h/15m = 120회 내외.
@@ -484,62 +485,60 @@ class RealtimeMonitor:
             except Exception as e:
                 print(f"  [청산] {symbol} 실패: {e}", flush=True)
 
-    async def _check_cron_integrity(self):
-        """BitCoin_Trade crontab 라인 수가 baseline 미만이면 critical 경보.
+    async def _check_scheduler_integrity(self):
+        """BATA systemd timer 수가 baseline 미만이면 critical 경보.
 
-        lessons #36-08 (2026-08-01 최초, 08-03 재발):
-            같은 서버의 Stock_Trade deploy_aws.sh가 `crontab config/crontab.txt`로
-            crontab을 통째 덮어써 BATA cron 9개가 전면 소실된다.
+        lessons #36-08 / #44:
+            스케줄 작업 9개는 원래 crontab에 있었으나, 같은 서버의 Stock_Trade
+            deploy_aws.sh가 `crontab config/crontab.txt`로 crontab을 통째 덮어써
+            전면 소실되는 사고가 반복됐다 (08-01 기록 → 08-03 재발 → 19일 무알람).
+            2026-08-22 근본 해결로 9개를 **systemd timer로 이전**했다.
 
-        기존 감시(daily_check.py::_section_cron)는 **자기 자신이 cron 작업**이라
-        crontab이 지워지면 감시기도 함께 죽어 침묵한다 — 실제로 19일간
-        아침 브리핑·헬스체크·워치독이 전부 정지했는데 경보가 한 건도 없었다.
-        이 검사는 crontab과 무관한 systemd 프로세스(봇 본체)에서 돌므로
-        crontab이 통째로 날아가도 살아남는다.
+        감시 주체가 봇 본체(systemd 상시 가동)인 이유:
+            이전 감시(daily_check.py::_section_cron)는 자기 자신이 cron 작업이라
+            crontab이 지워지면 감시기도 함께 죽어 침묵했다. 감시기는 감시 대상과
+            같은 실패 지점을 공유하면 안 된다 (#44 핵심 교훈).
         """
-        if not CRON_INTEGRITY_CHECK_ENABLED:
+        if not SCHEDULER_INTEGRITY_CHECK_ENABLED:
             return
-        # 서버가 아니면(로컬 개발) 검사 대상 아님
         if not Path("/home/ubuntu/BitCoin_Trade").exists():
             return
 
         _now = _time.time()
-        if _now - self._cron_alert_ts < CRON_ALERT_INTERVAL_SEC:
+        if _now - self._sched_alert_ts < SCHEDULER_ALERT_INTERVAL_SEC:
             return
 
         try:
             proc = await asyncio.create_subprocess_exec(
-                "crontab", "-l",
+                "systemctl", "list-timers", "--all", "--no-legend", "--no-pager",
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
             )
-            out, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
-            lines = [
-                ln for ln in out.decode("utf-8", "replace").splitlines()
-                if "BitCoin_Trade" in ln and not ln.lstrip().startswith("#")
-            ]
+            out, _ = await asyncio.wait_for(proc.communicate(), timeout=15)
+            units = {
+                tok for ln in out.decode("utf-8", "replace").splitlines()
+                for tok in ln.split()
+                if tok.startswith(SCHEDULER_UNIT_PREFIX) and tok.endswith(".timer")
+            }
         except Exception as e:
-            print(f"  [cron정합] crontab 조회 실패 (무시): {type(e).__name__}", flush=True)
+            print(f"  [스케줄러정합] timer 조회 실패 (무시): {type(e).__name__}", flush=True)
             return
 
-        n = len(lines)
-        if n >= CRON_BASELINE_LINES:
+        n = len(units)
+        if n >= SCHEDULER_BASELINE_UNITS:
             return
 
-        # baseline 미달 — critical 경보 (6h 간격으로만 재발송)
-        self._cron_alert_ts = _now
-        has_briefing = any("daily_check.py" in ln for ln in lines)
-        print(f"  [cron정합] ⚠ BitCoin_Trade cron {n}개 (baseline {CRON_BASELINE_LINES}) — 경보 발송", flush=True)
+        self._sched_alert_ts = _now
+        print(f"  [스케줄러정합] ⚠ BATA timer {n}개 (baseline {SCHEDULER_BASELINE_UNITS}) — 경보 발송", flush=True)
         try:
             from services.alerting.notifier import send_critical
             await send_critical(
-                f"[BATA] cron 소실 감지 — {n}/{CRON_BASELINE_LINES}개\n"
-                f"아침 브리핑: {'등록됨' if has_briefing else '미등록'}\n"
-                f"원인 추정: 타 프로젝트(Stock_Trade) deploy가 crontab 전체 덮어씀\n"
-                f"복구: bash scripts/restore_cron.sh --apply\n"
-                f"ref: lessons #36-08"
+                f"[BATA] 스케줄러 소실 감지 — timer {n}/{SCHEDULER_BASELINE_UNITS}개\n"
+                f"영향: 워치독·헬스체크·아침브리핑·리포트 정지 가능\n"
+                f"복구: bash scripts/install_timers.sh --apply\n"
+                f"ref: lessons #36-08 / #44"
             )
         except Exception as e:
-            print(f"  [cron정합] 경보 발송 실패: {e}", flush=True)
+            print(f"  [스케줄러정합] 경보 발송 실패: {e}", flush=True)
 
     async def _refresh_levels(self):
         # plan 20260504_2 AC14: 09:00 KST 자동 reset (cron 추가 없이 _refresh_levels 시점)
@@ -555,7 +554,7 @@ class RealtimeMonitor:
         await self._check_circuit_breaker_periodic()
 
         # ── cron 정합 체크 (lessons #36-08 재발 방지) ──
-        await self._check_cron_integrity()
+        await self._check_scheduler_integrity()
 
         now = datetime.now(tz=timezone.utc)
         refresh_key = now.strftime("%Y-%m-%d") if not IS_DAYTRADING else now.strftime("%Y-%m-%d-%H")

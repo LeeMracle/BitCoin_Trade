@@ -109,88 +109,45 @@ LOG_FILES=(/var/log/btc_trader.log /var/log/btc_report.log /var/log/watchdog_che
 sudo touch "${LOG_FILES[@]}"
 sudo chown ubuntu:ubuntu "${LOG_FILES[@]}"
 
-# lessons #33 (2026-06-02): CRON_LIVE 제거 — systemd btc-trader.service가 daily_live.py --realtime을
-# 항상 가동하므로 cron 별도 호출 시 매일 새 인스턴스 생성 → 좀비 누적 (실측 8개). systemd 단독 가동 원칙.
-# CRON_LIVE="5 0 * * * cd $PROJECT_DIR && $PROJECT_DIR/.venv/bin/python scripts/daily_live.py >> /var/log/btc_trader.log 2>&1"
-# plan 20260502: 09:10 KST CRON_REPORT 제거 — 18:00 KST 마감 종합 단일화
-# 18:00 KST (= 09:00 UTC) 일일 마감 종합 보고 (헬스체크 9개 항목 포함)
-CRON_REPORT_18="0 9 * * * cd $PROJECT_DIR && PYTHONUTF8=1 $PROJECT_DIR/.venv/bin/python scripts/daily_report.py >> /var/log/btc_report.log 2>&1"
-# P7-04: 매 1분 watchdog 체크 (heartbeat 10분 미갱신 시 경보 + systemctl restart)
-CRON_WATCHDOG="* * * * * /home/ubuntu/BitCoin_Trade/scripts/watchdog_check.sh"
-# P7-08: 매일 00:10 UTC (09:10 KST) 로그 볼륨 감시 (정상 시 침묵, 이상 시만 즉시 발송 — plan 20260502)
-CRON_LOGVOL="10 0 * * * /home/ubuntu/BitCoin_Trade/scripts/log_volume_check.sh"
-# P4-14c: jarvis_executor — 2026-05-05 STOP (BTC 분할매도 전략 5-4 사용자 수동 매도 완료, 비활성)
-# 활성화 시 아래 라인의 # 제거 + echo 라인의 # 제거로 복귀 (jarvis_strategies.json 활성 전략 등록 후)
-# CRON_JARVIS="0 0 * * * cd $PROJECT_DIR && PYTHONUTF8=1 $PROJECT_DIR/.venv/bin/python scripts/jarvis_executor.py >> /var/log/jarvis_executor.log 2>&1"
-# VB 재검증 트리거: 매일 09:15 KST (= UTC 00:15) — BTC EMA200 7일 연속 충족 시 재집계 보고서 생성
-CRON_VB_RECHECK="15 0 * * * cd $PROJECT_DIR && PYTHONUTF8=1 $PROJECT_DIR/.venv/bin/python scripts/vb_recheck_trigger.py --notify >> /var/log/vb_recheck_trigger.log 2>&1"
-# P5-04: 일 1회 KST 09:30 레짐 자동 판정 (2026-05-05 매시→일1회 축소)
-# 사유: BTC EMA200은 일봉 지표 — 시간단위 갱신 불필요. 자원 24배 절감.
-# regime_state.json은 healthcheck/hourly_digest에서 참조하므로 cron 자체는 유지.
-# healthcheck 임계도 2h → 26h 동시 조정 (services/healthcheck/runner.py)
-# lessons #37 (20260801_2): --notify 필수. 미부여 시 BULL 전환 발생해도 텔레그램 침묵.
-CRON_REGIME="30 0 * * * cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_DIR $PROJECT_DIR/.venv/bin/python scripts/regime_check.py --notify >> /var/log/regime_check.log 2>&1"
-# lessons #38 (20260801_3): 아침 브리핑 채널 부재 사고 → 09:32 KST 통합 브리핑 신설
-# regime_check(09:30) 완료 2분 후 실행하여 regime_state.json 신선한 값 읽기 (BEAR 지속 상태에서도 매일 침묵 방지)
-CRON_DAILY_BRIEFING="32 0 * * * cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_DIR $PROJECT_DIR/.venv/bin/python scripts/daily_check.py --notify --skip-console >> /var/log/btc_report.log 2>&1"
-# plan 20260502 P0: 매시 5분 critical 헬스체크 (인증·jarvis cron) — FAIL 시만 즉시 알람, 30분 디바운스
-# 배경: 2026-05-01 23:00 KST 인증실패 8h 무감지 사고 재발 방지 (lessons #20)
-CRON_CRITICAL="5 * * * * cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_DIR $PROJECT_DIR/.venv/bin/python scripts/critical_healthcheck.py >> /var/log/critical_healthcheck.log 2>&1"
-# plan 20260503_4 P4-2: 매시 30분 hourly_digest — 2026-05-04 사용자 요청으로 비활성화 (cron 등록 안 함)
-# CRON_DIGEST="30 * * * * cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_DIR $PROJECT_DIR/.venv/bin/python scripts/hourly_digest.py >> /var/log/hourly_digest.log 2>&1"
-# plan 20260504_3 P1: ML outcome 매칭 — 매일 KST 03:00 (UTC 18:00) 어제 결정의 24h 도달 여부 기록
-CRON_ML_OUTCOME="0 18 * * * cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_DIR $PROJECT_DIR/.venv/bin/python scripts/ml_outcome_match.py --days 3 >> /var/log/ml_outcome.log 2>&1"
-# ADR 20260505-2: ML LIVE 주간 자동 평가 — 매주 일 19:00 UTC (월 04:00 KST)
-# threshold 강화/롤백 판정 근거 텔레그램 보고
-CRON_ML_WEEKLY="0 19 * * 0 cd $PROJECT_DIR && PYTHONUTF8=1 PYTHONPATH=$PROJECT_DIR $PROJECT_DIR/.venv/bin/python scripts/ml_weekly_review.py >> /var/log/ml_weekly_review.log 2>&1"
+# ── 스케줄 작업 정의는 scripts/install_timers.sh 로 이관 (2026-08-22, lessons #44) ──
+# 이전에는 여기서 CRON_* 변수 9개를 정의하고 crontab에 등록했으나,
+# 같은 서버의 Stock_Trade deploy_aws.sh 가 `crontab config/crontab.txt` 로 crontab을
+# 통째 교체해 BATA cron이 반복 소실됐다 (08-01 기록 → 08-03 재발 → 19일 무알람).
+# 스케줄 정의의 단일 진실 원천은 이제 install_timers.sh 의 JOBS 테이블이다.
+# (변수만 여기 남겨두면 "고쳤는데 반영 안 됨" 부류의 사문화 설정이 되므로 제거)
+#
+# 유지 원칙 (lessons #33): daily_live.py --realtime 은 systemd btc-trader.service 단독 가동.
+#                          스케줄러에 절대 등록 금지 (좀비 누적).
 
-# 기존 등록 제거 후 추가
-(crontab -l 2>/dev/null \
-    | grep -v "daily_live.py" \
-    | grep -v "daily_report.py" \
-    | grep -v "watchdog_check.sh" \
-    | grep -v "log_volume_check.sh" \
-    | grep -v "jarvis_executor.py" \
-    | grep -v "vb_recheck_trigger.py" \
-    | grep -v "regime_check.py" \
-    | grep -v "daily_check.py" \
-    | grep -v "critical_healthcheck.py" \
-    | grep -v "hourly_digest.py" \
-    | grep -v "ml_outcome_match.py" \
-    | grep -v "ml_weekly_review.py"; \
-    : "echo $CRON_LIVE (lessons #33 — systemd 단독, cron 등록 금지)"; \
-    echo "$CRON_REPORT_18"; \
-    echo "$CRON_WATCHDOG"; \
-    echo "$CRON_LOGVOL"; \
-    : "echo $CRON_JARVIS (STOP — 2026-05-05, 활성화 시 :까지 제거)"; \
-    echo "$CRON_VB_RECHECK"; \
-    echo "$CRON_REGIME"; \
-    echo "$CRON_DAILY_BRIEFING"; \
-    echo "$CRON_CRITICAL"; \
-    echo "$CRON_ML_OUTCOME"; \
-    echo "$CRON_ML_WEEKLY") | crontab -
+# ── 스케줄 작업: systemd timer 설치 (lessons #44) ────────────────────
+# 2026-08-22: crontab → systemd timer 전면 이전.
+# 사유: 같은 서버의 Stock_Trade deploy_aws.sh 가 `crontab config/crontab.txt` 로
+#       crontab을 통째 교체해 BATA cron 9개가 반복 소실됨(08-01 기록 → 08-03 재발,
+#       19일 무알람). timer는 crontab과 무관하므로 구조적으로 분리된다.
+# 위 CRON_* 변수는 이전 이력 참고용으로만 남겨둔다 (등록에 사용하지 않음).
+bash "$PROJECT_DIR/scripts/install_timers.sh" --apply
 
-# watchdog/log_volume 스크립트 실행권한 부여
-chmod +x "$PROJECT_DIR/scripts/watchdog_check.sh" "$PROJECT_DIR/scripts/log_volume_check.sh" 2>/dev/null
-
-echo "crontab 등록 완료:"
-crontab -l | grep -E "(btc_(trader|report)|watchdog_check|log_volume_check|jarvis_executor|vb_recheck_trigger|regime_check|daily_check|critical_healthcheck)"
 CRON_SCRIPT
 
 echo ""
-echo "[사후 실측 검증] 서버 crontab BitCoin_Trade 라인 카운트..."
-# lessons #36 (2026-08-01): Stock_Trade deploy_aws.sh가 crontab을 파일 원자 갱신 방식으로
-# 통째 덮어써서 BitCoin_Trade cron 8개 전면 소실 사고 → 로컬 정적 검사 통과에도 서버 미반영 가능.
-# 배포 성공 = 서버 반영 확인까지. baseline < 8 이면 exit 1로 배포 실패 처리.
+echo "[사후 실측 검증] 서버 BATA systemd timer 카운트..."
+# lessons #36-08 / #44: 배포 성공 = 서버 반영 실측 확인까지.
+# 2026-08-22 crontab → systemd timer 이전으로 검증 대상도 timer로 전환.
 # 변수명은 CRON_xxx 패턴 회피 (pre_deploy_check.check_cron_var_echo_consistency 오탐 방지)
-BTC_REMOTE_LINES=$($SSH_CMD "crontab -l 2>/dev/null | grep -c BitCoin_Trade" || echo "0")
-# lessons #38 (20260801_3): 아침 브리핑 신설로 baseline 8 → 9 상향
-if [ "$BTC_REMOTE_LINES" -lt 9 ]; then
-    echo "[FAIL] 서버 crontab BitCoin_Trade 라인 $BTC_REMOTE_LINES (< 9 baseline) — lessons #36/#38 회귀"
-    echo "       다중 프로젝트(Stock_Trade) crontab 덮어쓰기 또는 daily_check 미등록 의심. 즉시 조치 필요."
+BTC_REMOTE_TIMERS=$($SSH_CMD "systemctl list-timers --all --no-legend 2>/dev/null | grep -c 'bata-'" || echo "0")
+if [ "$BTC_REMOTE_TIMERS" -lt 9 ]; then
+    echo "[FAIL] 서버 BATA systemd timer $BTC_REMOTE_TIMERS개 (< 9 baseline) — lessons #44 회귀"
+    echo "       복구: ssh 접속 후 bash scripts/install_timers.sh --apply"
     exit 1
 fi
-echo "[OK] 서버 crontab BitCoin_Trade 라인 $BTC_REMOTE_LINES (>= 9 baseline)"
+echo "[OK] 서버 BATA systemd timer $BTC_REMOTE_TIMERS개 (>= 9 baseline)"
+
+# crontab 잔재 확인 — timer와 중복 실행되면 알림 2회 발송 등 부작용
+BTC_LEFTOVER=$($SSH_CMD "crontab -l 2>/dev/null | grep -c BitCoin_Trade" || echo "0")
+if [ "$BTC_LEFTOVER" -ne 0 ]; then
+    echo "[WARN] crontab에 BitCoin_Trade 잔재 $BTC_LEFTOVER줄 — timer와 중복 실행 위험"
+    echo "       정리: crontab -l | grep -v BitCoin_Trade | crontab -"
+fi
 
 echo ""
 echo "=== 배포 완료! ==="

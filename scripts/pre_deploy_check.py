@@ -594,6 +594,22 @@ def check_service_watchdog_sec() -> None:
         )
 
 
+def _schedule_source_text() -> str:
+    """스케줄 정의의 단일 진실 원천 텍스트.
+
+    2026-08-22 (lessons #44): 스케줄 9개가 crontab → systemd timer로 이전되면서
+    정의 위치가 deploy_to_aws.sh 의 CRON_* 변수 → install_timers.sh 의 JOBS 테이블로
+    옮겨졌다. 스케줄 내용을 검사하는 룰들은 양쪽을 함께 봐야 이전 전/후 모두에서
+    유효하다 (한쪽만 보면 이전 직후 전부 오탐/미탐).
+    """
+    parts = []
+    for rel in ("scripts/install_timers.sh", "scripts/deploy_to_aws.sh"):
+        f = PROJECT_ROOT / rel
+        if f.exists():
+            parts.append(f.read_text(encoding="utf-8"))
+    return "\n".join(parts)
+
+
 def check_cron_var_echo_consistency() -> None:
     """deploy_to_aws.sh의 활성 CRON_xxx 변수 정의와 echo 등록의 1:1 일관성 검증.
 
@@ -661,13 +677,17 @@ def check_deploy_cron_registered() -> None:
     if not d_path.exists():
         return
     txt = d_path.read_text(encoding="utf-8")
-    if "watchdog_check.sh" not in txt:
-        warnings.append(
-            "[P7-04] deploy_to_aws.sh에 watchdog_check.sh cron 등록 로직 없음"
+    # 2026-08-22 (lessons #44): 스케줄 등록이 crontab → systemd timer로 이전.
+    # 등록 여부는 install_timers.sh JOBS 테이블에서 확인한다.
+    sched = _schedule_source_text()
+    if "watchdog_check.sh" not in sched:
+        errors.append(
+            "[P7-04] 스케줄 정의에 watchdog_check.sh 등록 없음 — "
+            "봇 멈춤 자동 감지·재시작 소실 (lessons #44)"
         )
-    if "log_volume_check.sh" not in txt:
+    if "log_volume_check.sh" not in sched:
         warnings.append(
-            "[P7-08] deploy_to_aws.sh에 log_volume_check.sh cron 등록 로직 없음"
+            "[P7-08] 스케줄 정의에 log_volume_check.sh 등록 없음"
         )
     # R-log-1: /var/log/*.log 초기화 스니펫 존재 (cron의 silent fail 방지)
     # 배열/직접 두 형태 모두 허용: LOG_FILES=(/var/log/...) 또는 sudo touch /var/log/*.log
@@ -1126,10 +1146,11 @@ def check_vb_recheck_trigger() -> None:
     if not vb_path.exists():
         errors.append("[VB-재집계] scripts/vb_recheck_trigger.py 없음 — cron 사일런트 실패")
     d_path = PROJECT_ROOT / "scripts" / "deploy_to_aws.sh"
-    if d_path.exists():
-        dtxt = d_path.read_text(encoding="utf-8")
-        if "vb_recheck_trigger.py" not in dtxt:
-            errors.append("[VB-재집계] deploy_to_aws.sh에 vb_recheck_trigger cron 등록 없음")
+    if "vb_recheck_trigger.py" not in _schedule_source_text():
+        errors.append(
+            "[VB-재집계] 스케줄 정의(install_timers.sh/deploy_to_aws.sh)에 "
+            "vb_recheck_trigger 등록 없음"
+        )
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -1241,11 +1262,11 @@ def check_critical_healthcheck_cron() -> None:
     if not deploy.exists():
         warnings.append("[critical] deploy_to_aws.sh 없음")
         return
-    content = deploy.read_text(encoding="utf-8")
+    content = _schedule_source_text()
     if "critical_healthcheck.py" not in content:
         errors.append(
-            "[critical] deploy_to_aws.sh에 critical_healthcheck.py cron 미등록 "
-            "(plan 20260502 P0 #5)"
+            "[critical] 스케줄 정의(install_timers.sh/deploy_to_aws.sh)에 "
+            "critical_healthcheck.py 미등록 (plan 20260502 P0 #5)"
         )
     # 09:10 KST = "10 0 * * * ..." daily_report 패턴이 잔존하면 안 됨
     if re.search(r'CRON_REPORT="10\s+0\s+\*', content):
@@ -1283,10 +1304,13 @@ def check_hourly_digest_cron() -> None:
     deploy = PROJECT_ROOT / "scripts" / "deploy_to_aws.sh"
     if not deploy.exists():
         return
-    content = deploy.read_text(encoding="utf-8")
-    if "hourly_digest.py" not in content:
-        errors.append(
-            "[digest] deploy_to_aws.sh에 hourly_digest.py cron 미등록 (plan 20260503_4 P4-2)"
+    content = _schedule_source_text()
+    # hourly_digest 는 2026-05-05 비활성(주석) 상태 — 스케줄 소스 어딘가에
+    # 언급만 있으면 통과시킨다(활성 등록 강제 아님). timer 이전 후에도 동일.
+    if "hourly_digest" not in content:
+        warnings.append(
+            "[digest] 스케줄 정의에 hourly_digest 언급 없음 — "
+            "비활성 상태 기록이 사라지면 재활성화 경로를 잃는다 (plan 20260503_4 P4-2)"
         )
     digest = PROJECT_ROOT / "scripts" / "hourly_digest.py"
     if not digest.exists():
@@ -1656,26 +1680,47 @@ def check_btc_cron_count_baseline() -> None:
     Baseline (2026-05-24 기준): CRON_LIVE/REPORT_18/WATCHDOG/LOGVOL/VB_RECHECK/REGIME/
     CRITICAL/ML_OUTCOME/ML_WEEKLY = 9개 (CRON_DIGEST/JARVIS는 비활성 주석).
     """
-    d_path = PROJECT_ROOT / "scripts" / "deploy_to_aws.sh"
-    if not d_path.exists():
-        return
-    txt = d_path.read_text(encoding="utf-8")
-    # 활성(주석 아닌) CRON_xxx 변수 카운트
-    active = set()
-    for raw in txt.splitlines():
-        stripped = raw.lstrip()
-        if stripped.startswith("#"):
-            continue
-        m = re.match(r'^(CRON_[A-Z0-9_]+)\s*=', stripped)
-        if m:
-            active.add(m.group(1))
-    BASELINE = 9  # lessons #38 (2026-08-01): 아침 브리핑 신설로 8→9 상향, 서버 실측 게이트와 통일
-    if len(active) < BASELINE:
+    # 2026-08-22 (lessons #44): crontab → systemd timer 이전.
+    # 스케줄 정의의 단일 진실 원천이 install_timers.sh 의 JOBS 테이블이 되었으므로
+    # baseline 카운트 대상도 CRON_xxx 변수 → JOBS 엔트리로 전환한다.
+    i_path = PROJECT_ROOT / "scripts" / "install_timers.sh"
+    if not i_path.exists():
         errors.append(
-            f"[cron-baseline] deploy_to_aws.sh 활성 CRON_xxx 변수 {len(active)}개 "
-            f"(baseline {BASELINE}+ 필요) — 핵심 BitCoin cron 누락 의심 "
-            f"(lessons #24/#31 강화, 2026-05-24): {sorted(active)}"
+            "[sched-baseline] scripts/install_timers.sh 없음 — "
+            "스케줄 정의 원천 부재 (lessons #44)"
         )
+        return
+    itxt = i_path.read_text(encoding="utf-8")
+    # JOBS 배열 엔트리: "name|OnCalendar|Persistent|설명|커맨드" 형태 (주석 제외)
+    jobs = set()
+    in_jobs = False
+    for raw in itxt.splitlines():
+        stripped = raw.strip()
+        if stripped.startswith("JOBS=("):
+            in_jobs = True
+            continue
+        if in_jobs:
+            if stripped == ")":
+                break
+            if stripped.startswith("#") or not stripped:
+                continue
+            m = re.match(r'^"([a-z0-9-]+)\|', stripped)
+            if m:
+                jobs.add(m.group(1))
+    BASELINE = 9  # lessons #38/#44: 아침 브리핑 포함 9개. 서버 실측 게이트와 통일
+    if len(jobs) < BASELINE:
+        errors.append(
+            f"[sched-baseline] install_timers.sh JOBS 엔트리 {len(jobs)}개 "
+            f"(baseline {BASELINE}+ 필요) — 스케줄 작업 누락 의심 "
+            f"(lessons #24/#31/#44): {sorted(jobs)}"
+        )
+    # 필수 작업 존재 확인 — 이름이 바뀌어도 누락은 잡는다
+    for required in ("watchdog", "critical-healthcheck", "daily-briefing"):
+        if required not in jobs:
+            errors.append(
+                f"[sched-baseline] install_timers.sh JOBS에 '{required}' 없음 — "
+                f"핵심 감시/보고 채널 소실 (lessons #44)"
+            )
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -1993,24 +2038,18 @@ def check_regime_notify_flag() -> None:
         deploy_to_aws.sh의 CRON_REGIME= 라인 (주석 제외)에서
         'regime_check.py'와 '--notify'가 같은 라인에 모두 존재해야 한다.
     """
-    d_path = PROJECT_ROOT / "scripts" / "deploy_to_aws.sh"
-    if not d_path.exists():
-        return
-    txt = d_path.read_text(encoding="utf-8")
+    # 2026-08-22 (lessons #44): 스케줄 정의가 install_timers.sh JOBS 테이블로 이전.
+    # 검사 대상도 함께 이동 — 정의 위치가 바뀌면 룰이 조용히 무력화된다.
     line_matched = False
-    for raw_line in txt.splitlines():
-        stripped = raw_line.lstrip()
-        # 주석 라인 제외 (변수 정의 라인만 검사)
-        if stripped.startswith("#"):
-            continue
-        if "CRON_REGIME=" not in raw_line:
+    for raw_line in _schedule_source_text().splitlines():
+        if raw_line.lstrip().startswith("#"):
             continue
         if "regime_check.py" in raw_line and "--notify" in raw_line:
             line_matched = True
             break
     if not line_matched:
         errors.append(
-            "[lessons #37] deploy_to_aws.sh의 CRON_REGIME 라인에 --notify 플래그 부재 — "
+            "[lessons #37] 스케줄 정의(install_timers.sh/deploy_to_aws.sh)의 regime_check 라인에 --notify 부재 — "
             "regime_check.py:81은 notify=False 시 텔레그램 발송 안 함(should_notify 무의미). "
             "CRON_REGIME=\"... scripts/regime_check.py --notify >> ...\" 형태로 부여 필수 "
             "(BULL 전환 알림 누락 silent fail 방지)"
@@ -2034,62 +2073,80 @@ def check_morning_briefing_registered() -> None:
         5) grep -v "daily_check.py" 기존 정리 라인 존재
         6) 사후 실측 게이트 baseline ≥ 9
     """
-    d_path = PROJECT_ROOT / "scripts" / "deploy_to_aws.sh"
-    if not d_path.exists():
+    # 2026-08-22 (lessons #44): crontab → systemd timer 이전.
+    # 아침 브리핑 정의가 install_timers.sh JOBS 테이블로 옮겨졌으므로
+    # 검사 대상·형식을 timer 기준으로 전환한다.
+    i_path = PROJECT_ROOT / "scripts" / "install_timers.sh"
+    if not i_path.exists():
+        errors.append("[lessons #38/#44] scripts/install_timers.sh 없음 — 아침 브리핑 정의 원천 부재")
         return
-    txt = d_path.read_text(encoding="utf-8")
-    lines = txt.splitlines()
+    itxt = i_path.read_text(encoding="utf-8")
 
-    # 1~3) 변수 정의 라인 검사
-    var_ok = False
-    for raw_line in lines:
-        stripped = raw_line.lstrip()
+    # 1) JOBS 엔트리: daily-briefing | 00:32 UTC(=09:32 KST) | daily_check.py --notify
+    entry = None
+    for raw_line in itxt.splitlines():
+        stripped = raw_line.strip()
         if stripped.startswith("#"):
             continue
-        if "CRON_DAILY_BRIEFING=" not in raw_line:
-            continue
-        if (
-            "daily_check.py" in raw_line
-            and "--notify" in raw_line
-            and "32 0 * * *" in raw_line
-        ):
-            var_ok = True
+        if stripped.startswith('"daily-briefing|'):
+            entry = stripped
             break
-    if not var_ok:
+    if entry is None:
         errors.append(
-            "[lessons #38] deploy_to_aws.sh의 CRON_DAILY_BRIEFING 정의 부재 또는 형식 오류 — "
-            "'32 0 * * *' 시각 + daily_check.py + --notify 3요소 동시 필요 "
-            "(아침 브리핑 침묵 회귀 방지)"
+            "[lessons #38/#44] install_timers.sh JOBS에 'daily-briefing' 엔트리 부재 — "
+            "아침 브리핑 침묵 회귀 (2026-08-03~22 19일 무알람 재발)"
+        )
+    else:
+        missing = [
+            k for k, ok in (
+                ("00:32:00 (09:32 KST)", "00:32:00" in entry),
+                ("daily_check.py", "daily_check.py" in entry),
+                ("--notify", "--notify" in entry),
+            ) if not ok
+        ]
+        if missing:
+            errors.append(
+                f"[lessons #38/#44] daily-briefing 엔트리 형식 오류 — 누락: {missing}. "
+                f"시각 + daily_check.py + --notify 3요소 동시 필요"
+            )
+
+    # 2) 설치 스크립트가 enable --now 로 실제 가동시키는지
+    #    (unit 파일만 쓰고 enable 안 하면 영원히 안 돎 = lessons #32 동일 패턴)
+    if "enable --now" not in itxt:
+        errors.append(
+            "[lessons #38/#44] install_timers.sh에 `systemctl enable --now` 부재 — "
+            "unit 파일만 생성하고 활성화하지 않으면 서버 미반영 (lessons #32 동일 패턴)"
         )
 
-    # 4) echo 등록 라인
-    if 'echo "$CRON_DAILY_BRIEFING"' not in txt:
-        errors.append(
-            "[lessons #38] deploy_to_aws.sh에 `echo \"$CRON_DAILY_BRIEFING\"` 등록 라인 부재 — "
-            "변수만 정의하고 crontab 등록 파이프에 추가하지 않으면 서버 미반영 (lessons #32 동일 패턴)"
+    # 3) 배포 스크립트가 timer 설치를 호출하는지
+    d_path = PROJECT_ROOT / "scripts" / "deploy_to_aws.sh"
+    if d_path.exists():
+        dtxt = d_path.read_text(encoding="utf-8")
+        # 단순 문자열 포함으로는 부족하다 — 주석과 FAIL 안내 메시지에도
+        # install_timers.sh 가 등장하므로, **주석 아닌 실제 호출 라인**을 요구한다.
+        # 라인 '시작'이 bash/sh 여야 한다. 단순 포함으로 하면
+        # `echo "복구: ... bash scripts/install_timers.sh --apply"` 같은 안내문이
+        # 매칭돼 실제 호출이 없어도 통과한다 (2026-08-22 역방향 테스트에서 적발).
+        invoked = any(
+            re.match(r"\s*(bash|sh)\s+\S*install_timers\.sh", ln) and "--apply" in ln
+            for ln in dtxt.splitlines()
+            if not ln.lstrip().startswith("#")
         )
-
-    # 5) grep -v "daily_check.py" 정리 라인
-    if 'grep -v "daily_check.py"' not in txt:
-        errors.append(
-            "[lessons #38] deploy_to_aws.sh crontab 재작성 파이프에 "
-            "`| grep -v \"daily_check.py\"` 부재 — 기존 등록 중복 리스크"
+        if not invoked:
+            errors.append(
+                "[lessons #38/#44] deploy_to_aws.sh에 install_timers.sh 실행 라인 부재 — "
+                "주석·안내문에만 언급되고 실제 호출이 없으면 배포해도 스케줄이 서버에 반영되지 않는다"
+            )
+        # 4) 사후 실측 게이트 baseline >= 9 (timer 카운트 기준)
+        baseline_ok = any(
+            "BTC_REMOTE_TIMERS" in ln and ("-lt 9" in ln or '-lt "9"' in ln)
+            for ln in dtxt.splitlines()
         )
-
-    # 6) 사후 실측 게이트 baseline ≥ 9
-    baseline_ok = False
-    for raw_line in lines:
-        if 'BTC_REMOTE_LINES' not in raw_line:
-            continue
-        if '-lt 9' in raw_line or '-lt "9"' in raw_line:
-            baseline_ok = True
-            break
-    if not baseline_ok:
-        errors.append(
-            "[lessons #38] deploy_to_aws.sh 사후 실측 게이트 baseline이 9 미만 — "
-            "아침 브리핑 추가로 baseline 8→9 상향 필수 "
-            "(< 9 시 exit 1 조건이 daily_check 미등록을 잡지 못함)"
-        )
+        if not baseline_ok:
+            errors.append(
+                "[lessons #38/#44] deploy_to_aws.sh 사후 실측 게이트가 timer baseline 9 미만 — "
+                "배포 성공 = 서버 반영 실측 확인까지 (lessons #36-08)"
+            )
 
 
 def check_telegram_send_status_verified() -> None:
@@ -2351,8 +2408,11 @@ def check_exec_price_settled() -> None:
 
     # 1) 두 헬퍼가 체결 확정 경로를 거치는지
     for fn in ("buy_market_coin", "sell_market_coin"):
-        m = re.search(rf"^def {fn}\([^)]*\)[^:]*:\s*\n(?P<body>(?:[ \t]+.*\n|[ \t]*\n)+)",
-                      mt_txt, re.MULTILINE)
+        # 본문은 다음 최상위 def/class 직전까지 끊는다 — 경계를 두지 않으면
+        # 뒤따르는 함수까지 삼켜서 "이 함수엔 없는데 다음 함수에 있어" 통과하는
+        # 오탐이 생긴다 (2026-08-22 역방향 테스트에서 실제로 적발)
+        m = re.search(rf"^def {fn}\([^)]*\)[^:\n]*:\s*\n(?P<body>.*?)(?=^(?:async def|def|class )\s|\Z)",
+                      mt_txt, re.MULTILINE | re.DOTALL)
         if not m:
             errors.append(f"[lessons #43] {fn} 정의를 찾지 못함 — 검증규칙 갱신 필요")
             continue
@@ -2365,8 +2425,8 @@ def check_exec_price_settled() -> None:
             )
 
     # 2) settle_order 의 성공 판정이 filled 기반인지
-    m = re.search(r"^def settle_order\([^)]*\)[^:]*:\s*\n(?P<body>(?:[ \t]+.*\n|[ \t]*\n)+)",
-                  uc_txt, re.MULTILINE)
+    m = re.search(r"^def settle_order\([^)]*\)[^:\n]*:\s*\n(?P<body>.*?)(?=^(?:async def|def|class )\s|\Z)",
+                  uc_txt, re.MULTILINE | re.DOTALL)
     if not m:
         errors.append("[lessons #43] upbit_client.settle_order 정의 없음 — 체결 확정 경로 부재")
     else:
@@ -2401,60 +2461,78 @@ def check_exec_price_settled() -> None:
 # ═══════════════════════════════════════════════════════════════════
 
 def check_cron_watchdog_outside_cron() -> None:
-    """crontab 소실 감시가 봇 본체(systemd)에도 있는지 검증.
+    """스케줄러 소실 감시가 스케줄러 밖(봇 본체)에 있는지 검증.
 
     배경 (lessons/20260822_5, 2026-08-22):
-        lessons #36-08 대응으로 daily_check.py::_section_cron 이 crontab 라인
-        카운트를 검사하도록 했으나, **그 검사기 자체가 cron 작업**이었다.
-        2026-08-03 Stock_Trade 배포가 crontab을 통째 덮어써 BATA cron 9개가
-        소실되자 감시기도 함께 죽어 19일간 경보가 한 건도 없었다.
+        lessons #36-08 대응으로 daily_check.py::_section_cron 이 스케줄 정합을
+        검사하도록 했으나, **그 검사기 자체가 스케줄 작업**이었다. 08-03에
+        Stock_Trade 배포가 crontab을 통째 덮어써 BATA cron 9개가 소실되자
+        감시기도 함께 죽어 19일간 경보가 한 건도 없었다.
         감시기는 감시 대상과 같은 실패 지점을 공유하면 안 된다.
 
+        같은 날 근본 해결로 9개를 systemd timer로 이전(scripts/install_timers.sh).
+        감시 기준도 crontab 라인 → timer 유닛으로 전환.
+
     검증규칙:
-        realtime_monitor.py(systemd 상시 가동)에 crontab 카운트 검사 +
-        baseline 미달 시 경보 경로가 존재
+        1) realtime_monitor(systemd 상시 가동)에 _check_scheduler_integrity() 존재
+        2) 본문이 systemd timer를 조회하고 send_critical 경보 경로를 가진다
+        3) 정의만 하고 미호출이면 ERROR (사문화 방지)
+        4) 상수는 config.py 정의 (lessons #19)
+        5) install_timers.sh 존재 + baseline 사후검증 포함
     """
     p = PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py"
     if not p.exists():
-        errors.append("[lessons #44] realtime_monitor.py 없음 — cron 감시 검증 불가")
+        errors.append("[lessons #44] realtime_monitor.py 없음 — 스케줄러 감시 검증 불가")
         return
     txt = p.read_text(encoding="utf-8")
 
     m = re.search(
-        r"^\s+async def _check_cron_integrity\([^)]*\)[^:]*:\s*\n(?P<body>(?:[ \t]+.*\n|[ \t]*\n)+)",
-        txt, re.MULTILINE,
+        r"^(?P<ind>[ \t]+)async def _check_scheduler_integrity\([^)]*\)[^:\n]*:[ \t]*\n"
+        r"(?P<body>.*?)(?=^(?P=ind)(?:async )?def |\Z)",
+        txt, re.MULTILINE | re.DOTALL,
     )
     if not m:
         errors.append(
-            "[lessons #44] realtime_monitor에 _check_cron_integrity() 없음 — "
-            "cron 소실 감시가 cron(daily_check.py) 안에만 있으면 crontab이 지워질 때 "
+            "[lessons #44] realtime_monitor에 _check_scheduler_integrity() 없음 — "
+            "스케줄러 소실 감시가 스케줄러 안에만 있으면 스케줄러가 지워질 때 "
             "감시기도 같이 죽어 침묵한다 (2026-08-03~22 19일 무알람 재발 위험)"
         )
         return
 
     body = m.group("body")
-    if "crontab" not in body:
-        errors.append("[lessons #44] _check_cron_integrity가 crontab을 조회하지 않음")
+    if "list-timers" not in body:
+        errors.append(
+            "[lessons #44] _check_scheduler_integrity가 systemd timer를 조회하지 않음 — "
+            "crontab 기준으로 남아 있으면 timer 이전 후 오경보/무경보"
+        )
     if "send_critical" not in body:
         errors.append(
-            "[lessons #44] _check_cron_integrity에 경보 발송(send_critical) 없음 — "
+            "[lessons #44] _check_scheduler_integrity에 경보 발송(send_critical) 없음 — "
             "감지만 하고 알리지 않으면 silent fail"
         )
-
-    # 실제 호출되는지 (정의만 하고 미호출이면 사문화)
-    if not re.search(r"await self\._check_cron_integrity\(\)", txt):
+    if not re.search(r"await self\._check_scheduler_integrity\(\)", txt):
         errors.append(
-            "[lessons #44] _check_cron_integrity()가 정의만 되고 호출되지 않음 — "
+            "[lessons #44] _check_scheduler_integrity()가 정의만 되고 호출되지 않음 — "
             "주기 실행 경로에 연결 필요"
         )
 
-    # 상수 자체정의 금지 (lessons #19)
     cfg = PROJECT_ROOT / "services" / "execution" / "config.py"
     if cfg.exists():
         cfg_txt = cfg.read_text(encoding="utf-8")
-        for const in ("CRON_BASELINE_LINES", "CRON_ALERT_INTERVAL_SEC"):
+        for const in ("SCHEDULER_BASELINE_UNITS", "SCHEDULER_ALERT_INTERVAL_SEC", "SCHEDULER_UNIT_PREFIX"):
             if not re.search(rf"^{const}\s*=", cfg_txt, re.MULTILINE):
                 errors.append(f"[lessons #44] config.py에 {const} 정의 없음 — ImportError로 봇 기동 실패")
+
+    inst = PROJECT_ROOT / "scripts" / "install_timers.sh"
+    if not inst.exists():
+        errors.append("[lessons #44] scripts/install_timers.sh 없음 — timer 복구 경로 부재")
+    else:
+        itxt = inst.read_text(encoding="utf-8")
+        if "list-unit-files" not in itxt and "list-timers" not in itxt:
+            errors.append(
+                "[lessons #44] install_timers.sh에 사후 실측 검증 없음 — "
+                "설치 성공 = 서버 실측 확인까지 (lessons #36-08)"
+            )
 
 
 def main() -> None:

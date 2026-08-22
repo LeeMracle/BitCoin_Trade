@@ -3,6 +3,7 @@
 - **발생일**: 2026-08-03 소실 → 2026-08-22 발견 (19일 경과)
 - **심각도**: CRITICAL (자동 보고·알람·워치독 전면 정지)
 - **카테고리**: 감시 설계 / 단일 실패 지점
+- **상태**: 복구 완료 + 근본 해결(systemd timer 이전) 완료 — 2026-08-22
 
 ## 증상
 
@@ -98,12 +99,61 @@ async def _check_cron_integrity(self):
 
 버그 재현본에서 발화 확인.
 
+## 근본 해결 — systemd timer 전면 이전 (2026-08-22 완료)
+
+감시로 버티는 대신 **구조를 분리**했다. cron 9개를 systemd timer로 전량 이전
+(`scripts/install_timers.sh`). timer는 crontab과 무관하므로 타 프로젝트가
+crontab을 어떻게 다루든 영향받지 않는다.
+
+| 기존 cron (UTC) | systemd timer |
+|---|---|
+| `* * * * *` watchdog_check.sh | `bata-watchdog.timer` (minutely) |
+| `5 * * * *` critical_healthcheck.py | `bata-critical-healthcheck.timer` |
+| `10 0 * * *` log_volume_check.sh | `bata-log-volume.timer` |
+| `15 0 * * *` vb_recheck_trigger.py | `bata-vb-recheck.timer` |
+| `30 0 * * *` regime_check.py --notify | `bata-regime-check.timer` |
+| `32 0 * * *` daily_check.py --notify | `bata-daily-briefing.timer` |
+| `0 9 * * *` daily_report.py | `bata-daily-report.timer` |
+| `0 18 * * *` ml_outcome_match.py | `bata-ml-outcome.timer` |
+| `0 19 * * 0` ml_weekly_review.py | `bata-ml-weekly.timer` |
+
+설계 결정:
+- 스케줄 정의의 **단일 진실 원천**은 `install_timers.sh`의 `JOBS` 테이블.
+  `deploy_to_aws.sh`의 `CRON_*` 변수 9개는 **삭제**했다 — 남겨두면
+  "고쳤는데 반영 안 됨" 부류의 사문화 설정이 된다.
+- `Persistent`: 알림성 작업은 `false`(재부팅 시 과거 알림 몰아 발송 방지),
+  데이터/정비 작업은 `true`(누락 보정이 유의미).
+- 감시 기준도 crontab 라인 → timer 유닛으로 전환
+  (`_check_scheduler_integrity`, `daily_check._section_cron`, 배포 사후 게이트).
+
+### 실증
+
+**crontab을 0줄로 완전히 비운 뒤에도 timer 9개가 그대로 생존**했다.
+(Stock_Trade 배포 시뮬레이션 → `crontab -l` 0줄 / `bata-*` timer 9개 active·enabled)
+
+부수 확인:
+- crontab BATA 9→0, 타 프로젝트 95→95 (diff 무차이)
+- 단발 실행 9개 전부 `Result=success ExitCode=0`
+- 아침 브리핑 텔레그램 발송 성공 (lessons #39 plain fallback 정상 작동)
+
+### 이전 과정에서 적발한 검증 룰 결함 2건
+
+역방향 테스트(버그 재현본에 룰이 발화하는지)로만 드러난 것들이다.
+
+1. **본문 추출 정규식이 함수 경계를 넘어 캡처** — 대상 함수에서 경보 코드를
+   지워도 뒤따르는 메서드의 `send_critical`을 보고 통과시켰다. 3곳 수정.
+2. **`install_timers.sh` 호출 검사가 안내 문구에 매칭** —
+   `echo "복구: ... bash scripts/install_timers.sh --apply"` 때문에
+   실제 호출을 제거해도 통과했다. 라인 시작이 `bash`인 경우만 인정하도록 수정.
+
+둘 다 "룰을 추가했지만 아무것도 잡지 못하는" 상태였다. **통과 확인만으로는
+룰의 유효성을 알 수 없다**는 것이 이번 작업의 가장 큰 소득이다.
+
 ## 남은 한계
 
-봇 프로세스가 죽으면 이 감시도 죽는다. 다만 봇이 죽으면 매매 자체가 멈추므로
-증상이 즉시 드러나고, cron 소실처럼 **정상으로 보이면서 조용히 망가지는**
-상황은 아니다. 근본 해결은 9개 cron을 **systemd timer로 이전**해
-crontab 공유 구조에서 완전히 분리하는 것 — 별도 과제로 남긴다.
+봇 프로세스가 죽으면 `_check_scheduler_integrity`도 함께 멈춘다. 다만 봇이 죽으면
+매매 자체가 멈추므로 증상이 즉시 드러나고, `bata-watchdog.timer`가 매분 감지해
+재시작한다 — 워치독은 이제 봇과 독립된 systemd 경로에 있으므로 순환 의존이 없다.
 
 ## 교훈
 
@@ -118,4 +168,10 @@ crontab 공유 구조에서 완전히 분리하는 것 — 별도 과제로 남�
    `hotfix_deploy.sh` 같은 wrapper를 실제로 쓰는 습관이 필요하다.
 4. **공유 자원(crontab)은 소유권이 없으면 반드시 깨진다.** 3개 프로젝트가 같은
    crontab을 쓰는 한, 한 프로젝트의 "전체 교체"가 나머지를 지운다.
-   구조를 바꾸지 않으면 감시로 버티는 수밖에 없다.
+   감시로 버티는 것은 임시방편이고, **소유권이 분명한 자원으로 옮기는 것**이
+   해결이다 (systemd unit은 프로젝트별 파일 단위라 충돌하지 않는다).
+5. **검증 룰은 "통과"가 아니라 "실패를 잡는지"로 검증해야 한다.** 이번에 추가한
+   룰 중 2건이 버그 재현본에서 발화하지 않았다 — 정규식이 함수 경계를 넘어
+   캡처하거나, 안내 문구에 매칭돼 실제 회귀를 놓쳤다. 룰을 넣고 게이트가
+   초록불이면 안심하기 쉬운데, 그 초록불이 "검사가 아무것도 안 하고 있음"을
+   뜻할 수 있다. 역방향 테스트 없는 룰 추가는 안전감만 준다.
