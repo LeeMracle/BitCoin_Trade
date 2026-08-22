@@ -2156,6 +2156,126 @@ def check_telegram_send_status_verified() -> None:
         )
 
 
+# ═══════════════════════════════════════════════════════════════════
+# 검증 N+1: 거래량 필터가 미완성(진행 중) 봉을 참조하지 않는지
+# ref: docs/lessons/20260822_1_vol_filter_stale_snapshot.md
+# ═══════════════════════════════════════════════════════════════════
+
+def check_vol_filter_completed_bar() -> None:
+    """composite 거래량 필터가 iloc[-1](진행 중 봉) 대신 iloc[-2](완성봉)를 쓰는지 검증.
+
+    배경 (lessons/20260822_1, 2026-08-22):
+        refresh_levels()는 UTC 00:00 직후 하루 1회만 실행되는데, 거래량 필터가
+        df["volume"].iloc[-1] — 즉 방금 열린 오늘 일봉(누적 거래량 ≈ 0) — 을 읽어
+        self.levels에 24시간 캐시했다. 결과적으로 latest_vol < vol_sma*1.5가
+        전 종목·하루 종일 참이 되어 매수 신호 100%가 차단됨
+        (2026-08-22 차단 70,388건 / 매수 0건, 현금 111,017 KRW 유휴).
+
+    검증규칙:
+        1) composite 분기(else 블록)의 vol_sma/latest_vol이 iloc[-2]를 사용
+        2) 최소 봉 수 가드가 7 이상 (iloc[-2]에서 5봉 rolling 유효 조건)
+    """
+    p = PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py"
+    if not p.exists():
+        errors.append("[lessons #40] realtime_monitor.py 없음 — 거래량 필터 검증 불가")
+        return
+    txt = p.read_text(encoding="utf-8")
+
+    # composite 분기의 vol_sma / latest_vol 할당 추출
+    m = re.search(
+        r"vol_sma\s*=\s*float\(pd\.Series\(df\[\"volume\"\]\)\.rolling\(5\)\.mean\(\)\.iloc\[(-?\d+)\]\)"
+        r".*?latest_vol\s*=\s*float\(df\[\"volume\"\]\.iloc\[(-?\d+)\]\)",
+        txt,
+        re.DOTALL,
+    )
+    if not m:
+        errors.append(
+            "[lessons #40] composite 거래량 필터의 vol_sma/latest_vol 할당부를 찾지 못함 — "
+            "패턴 변경 시 이 검증규칙도 함께 갱신 필요"
+        )
+        return
+
+    sma_idx, vol_idx = m.group(1), m.group(2)
+    if sma_idx != "-2" or vol_idx != "-2":
+        errors.append(
+            f"[lessons #40] 거래량 필터가 미완성 봉 참조 — "
+            f"vol_sma=iloc[{sma_idx}], latest_vol=iloc[{vol_idx}] (둘 다 -2 이어야 함). "
+            f"refresh_levels()는 UTC 00:00 1회 실행이므로 iloc[-1]은 거래량 ≈ 0인 "
+            f"당일 봉이며, 24h 캐시되어 전 종목 매수가 차단된다"
+        )
+
+    # 최소 봉 수 가드 (iloc[-2] + rolling(5) → 최소 7봉)
+    g = re.search(r"if len\(df\) >= (\d+):\s*\n\s*try:\s*\n\s*vol_sma", txt)
+    if g and int(g.group(1)) < 7:
+        errors.append(
+            f"[lessons #40] 거래량 필터 최소 봉 수 가드가 {g.group(1)} — iloc[-2] 기준 7 이상 필요. "
+            f"부족하면 vol_sma가 NaN→0이 되어 `if vol_sma > 0` 가드에서 필터가 통째로 무력화됨"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 검증 N+2: 트레일링스탑 고점 갱신이 디스크에 영속화되는지
+# ref: docs/lessons/20260822_2_trail_stop_not_persisted.md
+# ═══════════════════════════════════════════════════════════════════
+
+def check_trail_stop_persisted() -> None:
+    """고점 갱신 블록이 save_state()로 트레일스탑 상승분을 저장하는지 검증.
+
+    배경 (lessons/20260822_2, 2026-08-22):
+        _on_ticker의 고점 갱신 블록이 pos["highest"]/pos["trail_stop"]을 메모리에서만
+        올리고 save_state()를 호출하지 않았다. 상태 파일이 진입 시각(00:04)에 멈춰 있어
+        JUP/SPK/TAIKO 3종목이 +6% 상승했음에도 디스크상 트레일스탑은 진입가 -10%.
+        이 상태에서 봇이 재시작되면 확보한 이익 보호가 전부 소멸한다 (교훈 #10 계열).
+
+    검증규칙:
+        1) 고점 갱신 블록(pos["highest"] = price 이후) 안에 save_state 호출 존재
+        2) throttle 상수는 config.py에서 import (lessons #19 자체정의 금지)
+    """
+    p = PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py"
+    if not p.exists():
+        errors.append("[lessons #41] realtime_monitor.py 없음 — 트레일스탑 영속화 검증 불가")
+        return
+    txt = p.read_text(encoding="utf-8")
+
+    # 고점 갱신 블록 슬라이스: `if price > pos["highest"]:` ~ 다음 최상위 문장까지
+    m = re.search(
+        r"^(?P<ind>[ \t]+)if price > pos\[\"highest\"\]:[ \t]*\n"
+        r"(?P<body>(?:(?P=ind)[ \t]+.*\n|[ \t]*\n)+)",
+        txt,
+        re.MULTILINE,
+    )
+    if not m:
+        errors.append(
+            "[lessons #41] 고점 갱신 블록(`if price > pos[\"highest\"]:`)을 찾지 못함 — "
+            "패턴 변경 시 이 검증규칙도 함께 갱신 필요"
+        )
+        return
+
+    body = m.group("body")
+    if "save_state" not in body:
+        errors.append(
+            "[lessons #41] 고점 갱신 블록에 save_state() 호출 없음 — "
+            "트레일스탑 상승분이 메모리에만 남아 재시작 시 진입가 기준으로 되돌아가고 "
+            "확보한 이익 보호가 소멸한다"
+        )
+
+    # throttle 상수 자체정의 금지 (lessons #19)
+    if "TRAIL_PERSIST_INTERVAL_SEC" in body:
+        if re.search(r"^TRAIL_PERSIST_INTERVAL_SEC\s*=", txt, re.MULTILINE):
+            errors.append(
+                "[lessons #19] TRAIL_PERSIST_INTERVAL_SEC가 realtime_monitor.py에 자체 정의됨 — "
+                "config.py 단일 진실 원천에서 import 해야 함"
+            )
+        cfg = PROJECT_ROOT / "services" / "execution" / "config.py"
+        if cfg.exists() and not re.search(
+            r"^TRAIL_PERSIST_INTERVAL_SEC\s*=", cfg.read_text(encoding="utf-8"), re.MULTILINE
+        ):
+            errors.append(
+                "[lessons #41] config.py에 TRAIL_PERSIST_INTERVAL_SEC 정의 없음 — "
+                "realtime_monitor.py import가 ImportError로 봇 기동 실패"
+            )
+
+
 def main() -> None:
     print("=" * 50)
     print("배포 전 검증 (pre-deploy check)")
@@ -2216,6 +2336,8 @@ def main() -> None:
     check_regime_notify_flag()
     check_morning_briefing_registered()
     check_telegram_send_status_verified()
+    check_vol_filter_completed_bar()
+    check_trail_stop_persisted()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")

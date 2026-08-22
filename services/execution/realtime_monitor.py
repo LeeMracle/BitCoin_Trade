@@ -33,6 +33,7 @@ from services.execution.config import (
     HARD_STOP_LOSS_PCT, MAX_ATR_PCT,
     TP_LEVELS, TP_ENABLED,
     VOL_FILTER_ENABLED, VOL_FILTER_MULTIPLIER,
+    TRAIL_PERSIST_INTERVAL_SEC,
     DAILY_LOSS_LIMIT_ENABLED, DAILY_LOSS_LIMIT_PCT, DAILY_LOSS_BASE_KRW,
     MAX_POSITIONS, POSITION_RATIO, MIN_VOLUME_KRW,
     MIN_ORDER_KRW, DRY_RUN, EXCLUDE_SYMBOLS, MIN_LISTING_DAYS,
@@ -139,6 +140,7 @@ class RealtimeMonitor:
         self._cb_log_ts: float = 0.0  # 서킷브레이커 로그 throttle (초)
         self._last_heartbeat: float = 0.0  # heartbeat touch 마지막 시각 (monotonic)
         self._last_msg_ts: float = 0.0    # 웹소켓 마지막 메시지 수신 시각 (monotonic, P7-07)
+        self._trail_persist_ts: float = 0.0  # 트레일스탑 상승분 디스크 저장 throttle (monotonic)
         # 신호 발화 dedupe (lessons #1) — {symbol: {"bar_id": int, "ts": float}}
         # _execute_buy 진입 시 같은 15분봉 ID 또는 60s 내 재시도면 skip.
         # 폭주 차단: ORDER/KRW 한 종목 30h에 16,484회 → 봉당 1회 + 60s = 30h/15m = 120회 내외.
@@ -582,10 +584,16 @@ class RealtimeMonitor:
                     level["vol_ok"] = latest_vol > vol_sma * _DT_VOL_THRESHOLD
                 else:
                     # composite/그 외 — 거래량 필터용 vol_sma 5일 평균 (cto M4, plan AC8)
-                    if len(df) >= 6:
+                    #
+                    # iloc[-2] = 직전 "완성된" 일봉. iloc[-1]은 금지 (lessons/20260822_1).
+                    # refresh_levels()는 UTC 00:00 직후 하루 1회만 실행되므로 iloc[-1]은
+                    # 방금 열린 오늘 일봉(누적 거래량 ≈ 0)이며, 그 값이 24시간 캐시되어
+                    # 전 종목이 하루 종일 차단된다. 백테스트(advanced.py)도 봉 마감 시점의
+                    # volume[i] vs vol_sma[i]를 비교하므로 완성봉 기준이 정합적이다.
+                    if len(df) >= 7:
                         try:
-                            vol_sma = float(pd.Series(df["volume"]).rolling(5).mean().iloc[-1])
-                            latest_vol = float(df["volume"].iloc[-1])
+                            vol_sma = float(pd.Series(df["volume"]).rolling(5).mean().iloc[-2])
+                            latest_vol = float(df["volume"].iloc[-2])
                             level["vol_sma"] = vol_sma
                             level["latest_vol"] = latest_vol
                         except Exception:
@@ -924,6 +932,15 @@ class RealtimeMonitor:
                 else:
                     new_stop = pos.get("trail_stop", hard_floor)
                 pos["trail_stop"] = max(new_stop, hard_floor)
+
+                # 상승분 영속화 (lessons/20260822_2) — 이 블록에 save_state가 없으면
+                # 고점/트레일스탑이 메모리에만 남아 재시작 시 진입가 기준으로 되돌아가고
+                # 그동안 확보한 이익 보호가 소멸한다. 틱마다 쓰지 않도록 30s throttle
+                # (최악의 경우 30s 분량의 ratchet만 유실).
+                _now_mono = _time.monotonic()
+                if _now_mono - self._trail_persist_ts >= TRAIL_PERSIST_INTERVAL_SEC:
+                    self._trail_persist_ts = _now_mono
+                    save_state(self.state)
 
             # daytrading: 고정 손절 + 시간 제한 확인
             if IS_DAYTRADING:
