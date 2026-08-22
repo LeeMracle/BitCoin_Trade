@@ -817,6 +817,16 @@ class RealtimeMonitor:
                             coin = sym.split("/")[0]
                             upbit_codes.append(f"KRW-{coin}")
 
+                        # 메인 전략 보유종목 반드시 구독 포함 (lessons/20260822_3)
+                        # _execute_buy가 재매수 방지로 self.levels에서 종목을 삭제하는데
+                        # 구독 목록이 self.levels에서 생성되므로, 매수 후 첫 재연결(약 10분 주기)
+                        # 부터 보유 종목 틱이 끊긴다 → _on_ticker 미실행 → 트레일링스탑·하드손절·
+                        # 부분익절이 전부 평가되지 않는 무방비 상태가 된다.
+                        for sym in self.state.get("positions", {}).keys():
+                            code = f"KRW-{sym.split('/')[0]}"
+                            if code not in upbit_codes:
+                                upbit_codes.append(code)
+
                         # vol_reversal DRY-RUN 보유종목도 구독에 추가
                         try:
                             if VR_STATE_FILE.exists():

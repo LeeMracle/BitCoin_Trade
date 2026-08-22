@@ -2276,6 +2276,49 @@ def check_trail_stop_persisted() -> None:
             )
 
 
+# ═══════════════════════════════════════════════════════════════════
+# 검증 N+3: 보유 종목이 웹소켓 구독에 반드시 포함되는지
+# ref: docs/lessons/20260822_3_positions_unsubscribed.md
+# ═══════════════════════════════════════════════════════════════════
+
+def check_positions_subscribed() -> None:
+    """웹소켓 구독 목록(upbit_codes)에 보유 종목이 명시적으로 추가되는지 검증.
+
+    배경 (lessons/20260822_3, 2026-08-22):
+        구독 목록은 self.levels.keys()로 생성되는데, _execute_buy가 재매수 방지로
+        `del self.levels[symbol]`을 수행한다. 웹소켓은 약 10분마다 재연결하며
+        그때마다 구독을 재구성하므로, 매수 후 첫 재연결부터 보유 종목 틱이 끊긴다.
+        → _on_ticker 미실행 → 트레일링스탑·하드손절·부분익절 전부 미평가.
+        실측: 구독 194 → 191개(보유 3종목만큼 감소), TP1 도달 03:30~04:00 UTC 대비
+        실제 체결 05:08(재시작 시점) — 1.2~1.6h 무방비.
+
+    검증규칙:
+        구독 목록 구성부에 self.state["positions"] 기반 코드 추가 루프 존재
+    """
+    p = PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py"
+    if not p.exists():
+        errors.append("[lessons #42] realtime_monitor.py 없음 — 구독 검증 불가")
+        return
+    txt = p.read_text(encoding="utf-8")
+
+    # upbit_codes 구성부 ~ ws.send_json 사이 슬라이스
+    m = re.search(r"upbit_codes\s*=\s*\[\](?P<body>.*?)await ws\.send_json", txt, re.DOTALL)
+    if not m:
+        errors.append(
+            "[lessons #42] 웹소켓 구독 목록(upbit_codes) 구성부를 찾지 못함 — "
+            "패턴 변경 시 이 검증규칙도 함께 갱신 필요"
+        )
+        return
+
+    body = m.group("body")
+    if not re.search(r"state(?:\.get\(|\[)[\"']positions[\"']", body):
+        errors.append(
+            "[lessons #42] 웹소켓 구독 구성부에 보유 종목(self.state[\"positions\"]) 추가 로직 없음 — "
+            "_execute_buy의 `del self.levels[symbol]` 때문에 매수 후 재연결 시 "
+            "보유 종목 틱이 끊겨 트레일링스탑·손절이 평가되지 않는다"
+        )
+
+
 def main() -> None:
     print("=" * 50)
     print("배포 전 검증 (pre-deploy check)")
@@ -2338,6 +2381,7 @@ def main() -> None:
     check_telegram_send_status_verified()
     check_vol_filter_completed_bar()
     check_trail_stop_persisted()
+    check_positions_subscribed()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")
