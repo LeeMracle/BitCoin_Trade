@@ -1,0 +1,293 @@
+{
+  "positions": {
+    "JUP/KRW": {
+      "entry_date": "2026-08-22 00:04",
+      "entry_price": 285.0000000066861,
+      "highest": 304.0,
+      "trail_stop": 256.5000000060175,
+      "order_amount": 49872.2686124761,
+      "entry_amount_krw": 49872.26861247,
+      "entry_qty": 174.99041618,
+      "tp_sold_levels": [
+        0
+      ],
+      "remaining_qty": 174.99041618
+    },
+    "SPK/KRW": {
+      "entry_date": "2026-08-22 00:04",
+      "entry_price": 24.200000000087233,
+      "highest": 32.4,
+      "trail_stop": 27.876249882263068,
+      "order_amount": 50489.749638512745,
+      "entry_amount_krw": 50489.74963851,
+      "entry_qty": 2086.35329084,
+      "tp_sold_levels": [
+        0,
+        1
+      ],
+      "remaining_qty": 0.0
+    },
+    "TAIKO/KRW": {
+      "entry_date": "2026-08-22 00:04",
+      "entry_price": 109.00000000129552,
+      "highest": 114.0,
+      "trail_stop": 98.10000000116597,
+      "order_amount": 51323.251255519506,
+      "entry_amount_krw": 51323.25125551,
+      "entry_qty": 470.8555161,
+      "tp_sold_levels": [
+        0
+      ],
+      "remaining_qty": 470.8555161
+    },
+    "OP/KRW": {
+      "entry_date": "2026-08-22 05:09",
+      "entry_price": 157.00000000103063,
+      "highest": 157.00000000103063,
+      "trail_stop": 141.30000000092758,
+      "order_amount": 126435.92789633998,
+      "entry_amount_krw": 126435.92789633,
+      "entry_qty": 805.3243815,
+      "tp_sold_levels": []
+    },
+    "POL/KRW": {
+      "entry_date": "2026-08-22 10:09",
+      "entry_price": 145.0,
+      "highest": 154.0,
+      "trail_stop": 130.5,
+      "order_amount": 55251.8667995405,
+      "entry_amount_krw": 55251.86679835,
+      "entry_qty": 381.04735723,
+      "tp_sold_levels": [
+        0
+      ],
+      "remaining_qty": 190.52367862
+    }
+  },
+  "closed_trades": [
+    {
+      "symbol": "KNC/KRW",
+      "entry_date": "2026-03-27 11:02",
+      "entry_price": 254.0,
+      "exit_date": "2026-03-28 03:50",
+      "exit_price": 228.0,
+      "return_pct": -10.24
+    },
+    {
+      "symbol": "AXS/KRW",
+      "entry_date": "2026-03-28 06:21",
+      "entry_price": 1761.0,
+      "exit_date": "2026-03-28 06:31",
+      "exit_price": 1773.0,
+      "return_pct": 0.68
+    },
+    {
+      "symbol": "WET/KRW",
+      "entry_date": "2026-03-28 03:50",
+      "entry_price": 162.0,
+      "exit_date": "2026-03-28 06:55",
+      "exit_price": 160.0,
+      "return_pct": -1.23
+    },
+    {
+      "symbol": "WET/KRW",
+      "entry_date": "2026-03-28 06:55",
+      "entry_price": 160.0,
+      "exit_date": "2026-03-28 10:23",
+      "exit_price": 157.0,
+      "return_pct": -1.88
+    },
+    {
+      "symbol": "AXS/KRW",
+      "entry_date": "2026-03-28 08:14",
+      "entry_price": 1771.0,
+      "exit_date": "2026-03-28 11:36",
+      "exit_price": 1763.0,
+      "return_pct": -0.45
+    },
+    {
+      "symbol": "RVN/KRW",
+      "entry_date": "2026-03-28 11:08",
+      "entry_price": 8.67,
+      "exit_date": "2026-03-28 12:55",
+      "exit_price": 8.55,
+      "return_pct": -1.38
+    },
+    {
+      "symbol": "RVN/KRW",
+      "entry_date": "2026-03-28 13:17",
+      "entry_price": 8.67,
+      "exit_date": "2026-03-28 23:09",
+      "exit_price": 8.53,
+      "return_pct": -1.61
+    },
+    {
+      "symbol": "AXS/KRW",
+      "entry_date": "2026-03-28 11:36",
+      "entry_price": 1763.0,
+      "exit_date": "2026-03-28 23:10",
+      "exit_price": 1750.0,
+      "return_pct": -0.74
+    },
+    {
+      "symbol": "BCH/KRW",
+      "entry_date": "2026-03-28 03:51",
+      "entry_price": 721500.0,
+      "exit_date": "2026-04-04 10:57",
+      "exit_price": 671500.0,
+      "return_pct": -6.93
+    },
+    {
+      "symbol": "ONT/KRW",
+      "entry_date": "2026-03-30 00:22",
+      "entry_price": 116.0,
+      "exit_date": "2026-04-05 12:39",
+      "exit_price": 137.0,
+      "return_pct": 18.1
+    },
+    {
+      "symbol": "ONG/KRW",
+      "entry_date": "2026-04-04 02:57",
+      "entry_price": 178.0,
+      "exit_date": "2026-04-06 23:08",
+      "exit_price": 126.0,
+      "return_pct": -29.21
+    },
+    {
+      "symbol": "CHZ/KRW",
+      "entry_date": "2026-03-30 04:38",
+      "entry_price": 63.8,
+      "exit_date": "2026-04-08 10:10",
+      "exit_price": 57.4,
+      "return_pct": -10.03
+    },
+    {
+      "symbol": "AXL/KRW",
+      "entry_date": "2026-05-03 07:25",
+      "entry_price": 121.0,
+      "exit_date": "2026-05-03 11:06",
+      "exit_price": 108.0,
+      "return_pct": -10.74
+    },
+    {
+      "symbol": "HIVE/KRW",
+      "entry_date": "2026-05-05 02:18",
+      "entry_price": 101.0,
+      "exit_date": "2026-05-05 13:55",
+      "exit_price": 120.0,
+      "return_pct": 18.81
+    },
+    {
+      "symbol": "ZIL/KRW",
+      "entry_date": "2026-05-05 13:55",
+      "entry_price": 8.15,
+      "exit_date": "2026-05-05 14:30",
+      "exit_price": 7.33,
+      "return_pct": -10.06
+    },
+    {
+      "symbol": "JTO/KRW",
+      "entry_date": "2026-05-03 22:15",
+      "entry_price": 584.0,
+      "exit_date": "2026-05-05 15:16",
+      "exit_price": 525.0,
+      "return_pct": -10.1
+    },
+    {
+      "symbol": "HIVE/KRW",
+      "entry_date": "2026-05-05 14:30",
+      "entry_price": 119.0,
+      "exit_date": "2026-05-05 23:37",
+      "exit_price": 107.0,
+      "return_pct": -10.08
+    },
+    {
+      "symbol": "SOL/KRW",
+      "entry_date": "2026-05-06 23:06",
+      "entry_price": 130600.0,
+      "exit_date": "2026-05-13 09:31",
+      "exit_price": 140000.0,
+      "return_pct": 7.2,
+      "exit_reason": "manual_slot_cleanup",
+      "tp_sold_levels": [
+        0,
+        1
+      ]
+    },
+    {
+      "symbol": "FLOCK/KRW",
+      "entry_date": "2026-05-10 13:14",
+      "entry_price": 112.0,
+      "exit_date": "2026-05-13 08:32",
+      "exit_price": 100.0,
+      "return_pct": -10.71
+    },
+    {
+      "symbol": "IN/KRW",
+      "entry_date": "2026-05-03 09:34",
+      "entry_price": 105.0,
+      "exit_date": "2026-05-13 14:51",
+      "exit_price": 94.4,
+      "return_pct": -10.1
+    },
+    {
+      "symbol": "ALT/KRW",
+      "entry_date": "2026-05-09 01:54",
+      "entry_price": 12.5,
+      "exit_date": "2026-05-13 14:52",
+      "exit_price": 11.2,
+      "return_pct": -10.4
+    },
+    {
+      "symbol": "HUNT/KRW",
+      "entry_date": "2026-05-05 05:21",
+      "entry_price": 162.0,
+      "exit_date": "2026-05-18 10:41",
+      "exit_price": 145.0,
+      "return_pct": -10.49
+    },
+    {
+      "symbol": "STEEM/KRW",
+      "entry_date": "2026-05-05 05:19",
+      "entry_price": 87.6,
+      "exit_date": "2026-05-22 00:03",
+      "exit_price": 80.3,
+      "return_pct": -8.33
+    },
+    {
+      "symbol": "SUN/KRW",
+      "entry_date": "2026-05-03 22:30",
+      "entry_price": 28.5,
+      "exit_date": "2026-06-06 00:05",
+      "exit_price": 26.5,
+      "return_pct": -7.02
+    },
+    {
+      "symbol": "SUI/KRW",
+      "entry_date": "2026-08-22 05:08",
+      "entry_price": 1260.0,
+      "exit_date": "2026-08-22 05:09",
+      "exit_price": 1133.0,
+      "return_pct": -10.08
+    },
+    {
+      "symbol": "XRP/KRW",
+      "entry_date": "2026-08-22 05:08",
+      "entry_price": 2240.0,
+      "exit_date": "2026-08-22 05:10",
+      "exit_price": 2015.0,
+      "return_pct": -10.04
+    }
+  ],
+  "last_updated": "2026-08-23 20:13:38 UTC",
+  "strategy_start": "2026-08-23",
+  "strategy_name": "composite DC20",
+  "vb_last_rotation_date": "2026-05-13",
+  "state_balance_fix_ts": "20260524_123552",
+  "consec_loss_alerted_until": 0,
+  "cooldown_until": 0,
+  "consec_loss_floor_date": "2026-08-23",
+  "regime_open_days": 2,
+  "baseline_reset_note": "ADR 20260823-1: lessons #40~#43 실행버그 + 파라미터 반복변경으로 2026-03-29 창 폐기. 이력은 closed_trades에 보존.",
+  "regime_open_last_date": "2026-08-23"
+}

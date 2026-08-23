@@ -145,7 +145,13 @@ async def run(dry_run: bool = False):
                 await notify_error(msg)
                 continue
 
-        ret_pct = (exec_price / pos["entry_price"] - 1) * 100 if exec_price > 0 else 0
+        # lessons #45: 마지막 체결가만 쓰면 부분 익절로 확보한 이익이 통계에서
+        # 사라진다. realtime_monitor 와 동일한 money-weighted 산식을 공유한다
+        # (교훈 #6 — 산식은 모든 매도 경로에 동일 적용).
+        from services.execution.position_pnl import position_return_pct, record_realized
+        if exec_price > 0 and not dry_run:
+            record_realized(pos, float(exec_price), float(coin_amount))
+        ret_pct = position_return_pct(pos, fallback_price=float(exec_price or 0))
         state["closed_trades"].append({
             "symbol": symbol,
             "entry_date": pos["entry_date"],
@@ -153,6 +159,7 @@ async def run(dry_run: bool = False):
             "exit_date": today,
             "exit_price": exec_price,
             "return_pct": round(ret_pct, 2),
+            "exit_reason": "daily_rotation",
         })
         del positions[symbol]
 

@@ -10,6 +10,7 @@ docs/lessons/ 의 검증규칙을 코드로 구현한다.
 """
 from __future__ import annotations
 
+import ast
 import re
 import sys
 from pathlib import Path
@@ -2535,6 +2536,128 @@ def check_cron_watchdog_outside_cron() -> None:
             )
 
 
+
+# ═══════════════════════════════════════════════════════════════════
+# 검증 N+7: 포지션 종료가 TP 루프 밖 단일 경로에 있는지 (유령 포지션)
+# ref: docs/lessons/20260824_1_ghost_position_tp_complete.md
+# ═══════════════════════════════════════════════════════════════════
+
+def check_position_close_outside_tp_loop() -> None:
+    """`_check_tp_levels`의 포지션 종료 경로가 TP 루프 **밖**에 있는지 AST로 검증.
+
+    배경 (lessons/20260824_1, 2026-08-24):
+        잔고 0 자동정리(lessons #28)가 `for idx, tp in enumerate(TP_LEVELS)` 루프
+        **안에** 있었다. 모든 TP 단계가 매도되면 루프가 전부 `continue`로 빠져나가
+        종료 코드에 **도달할 수 없게 된다**. 결과: 전량 청산된 포지션이 state에 남아
+        슬롯을 영구 점유하고 closed_trades에도 안 남는다 — 즉 **이긴 거래일수록
+        검증 표본에서 사라진다**(ADR 20260823-1의 30건 판정이 영원히 안 채워짐).
+        실측: SPK/KRW가 08-23 14:03 TP2 전량 매도 후 하루 넘게 유령 상태로 슬롯 점유.
+
+    검증규칙:
+        _check_tp_levels 본문에서 TP 루프(For)보다 **앞에** 있는 문장 중
+        종료 함수(_close_position / _close_if_liquidated) 호출이 존재할 것.
+
+    주의 (인수인계 §6): 문자열 포함 검사는 이 프로젝트에서 자기 주석에 3회 속았다.
+        그래서 정규식이 아니라 AST로 판정한다 — 주석·docstring은 AST에 없다.
+    """
+    p = PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py"
+    if not p.exists():
+        errors.append("[lessons #45] realtime_monitor.py 없음 — 종료 경로 검증 불가")
+        return
+
+    try:
+        tree = ast.parse(p.read_text(encoding="utf-8"))
+    except SyntaxError as e:
+        errors.append(f"[lessons #45] realtime_monitor.py 파싱 실패: {e}")
+        return
+
+    fn = None
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "_check_tp_levels":
+            fn = node
+            break
+    if fn is None:
+        errors.append(
+            "[lessons #45] _check_tp_levels 정의를 찾지 못함 — "
+            "함수명 변경 시 이 검증규칙도 함께 갱신 필요"
+        )
+        return
+
+    # TP 루프(For) 위치 찾기
+    loop_idx = None
+    for i, stmt in enumerate(fn.body):
+        if isinstance(stmt, (ast.For, ast.AsyncFor)):
+            loop_idx = i
+            break
+    if loop_idx is None:
+        errors.append("[lessons #45] _check_tp_levels에 TP 루프(for)가 없음 — 구조 변경 확인 필요")
+        return
+
+    closers = {"_close_position", "_close_if_liquidated"}
+
+    def calls_closer(stmts) -> bool:
+        for st in stmts:
+            for sub in ast.walk(st):
+                if isinstance(sub, ast.Call) and isinstance(sub.func, ast.Attribute):
+                    if sub.func.attr in closers:
+                        return True
+        return False
+
+    if not calls_closer(fn.body[:loop_idx]):
+        errors.append(
+            "[lessons #45] _check_tp_levels의 TP 루프보다 앞에 포지션 종료 호출"
+            f"({'/'.join(sorted(closers))})이 없음 — 모든 TP 단계 완료 시 루프가 전부 "
+            "continue로 빠져나가 종료가 도달 불가능해진다(유령 포지션·표본 누락)"
+        )
+
+    # 종료 확정이 "매도 체결 이후"에도 있는지 — 근본 경로.
+    #
+    # 주의: "루프 안에 종료 호출이 있는가"로 물으면 안 된다. 루프 안에는 잔고 0
+    # 자동정리(lessons #28)용 _close_position이 **따로** 있어서, 매도 직후 종료가
+    # 통째로 사라져도 그 호출에 매칭되어 통과해버린다. 실제로 이 룰의 초안이
+    # 역방향 테스트에서 그 케이스를 놓쳤다. 그래서 `sell_market_coin` 호출보다
+    # **뒤쪽 줄**에 있는 종료 호출을 요구한다(AST lineno 기준 — 주석 무관).
+    loop_node = fn.body[loop_idx]
+    sell_lines = [
+        sub.lineno
+        for sub in ast.walk(loop_node)
+        if isinstance(sub, ast.Call)
+        and getattr(sub.func, "id", getattr(sub.func, "attr", None)) == "sell_market_coin"
+    ]
+    close_lines = [
+        sub.lineno
+        for sub in ast.walk(loop_node)
+        if isinstance(sub, ast.Call)
+        and isinstance(sub.func, ast.Attribute)
+        and sub.func.attr in closers
+    ]
+    if not sell_lines:
+        errors.append(
+            "[lessons #45] TP 루프에서 sell_market_coin 호출을 찾지 못함 — "
+            "구조 변경 시 이 검증규칙도 함께 갱신 필요"
+        )
+    elif not any(cl > min(sell_lines) for cl in close_lines):
+        errors.append(
+            "[lessons #45] TP 매도 체결 이후 포지션 종료 확정 호출이 없음 — "
+            "마지막 단계 매도로 잔량이 0이 되어도 포지션이 남는다. "
+            "안전망(루프 앞 가드)만으로는 종료가 한 틱 이상 늦어진다"
+        )
+
+    # _execute_sell의 잔고 0 경로가 closed_trades 기록 없이 삭제하지 않는지
+    sell_fn = None
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "_execute_sell":
+            sell_fn = node
+            break
+    if sell_fn is not None:
+        for sub in ast.walk(sell_fn):
+            if isinstance(sub, ast.Delete):
+                errors.append(
+                    "[lessons #45] _execute_sell에 `del positions[...]` 직접 삭제가 남아 있음 — "
+                    "종료는 _close_position 단일 경로를 거쳐야 closed_trades에 기록된다"
+                )
+                break
+
 # ═══════════════════════════════════════════════════════════════════
 # 검증 N+6: 검증 기준선/목표치 정합 (ADR 20260823-1, P1)
 # ref: docs/decisions/20260823_1_validation_baseline_reset.md
@@ -2818,6 +2941,7 @@ def main() -> None:
     check_positions_subscribed()
     check_exec_price_settled()
     check_cron_watchdog_outside_cron()
+    check_position_close_outside_tp_loop()
     check_validation_baseline()
     check_position_weight_cap()
     check_stats_window_consistency()

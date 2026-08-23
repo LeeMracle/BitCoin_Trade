@@ -38,7 +38,8 @@ from services.execution.config import (
     SCHEDULER_BASELINE_UNITS, SCHEDULER_ALERT_INTERVAL_SEC,
     DAILY_LOSS_LIMIT_ENABLED, DAILY_LOSS_LIMIT_PCT, DAILY_LOSS_BASE_KRW,
     MAX_POSITIONS, POSITION_RATIO, MAX_POSITION_WEIGHT, MIN_VOLUME_KRW,
-    MIN_ORDER_KRW, DRY_RUN, EXCLUDE_SYMBOLS, MIN_LISTING_DAYS,
+    MIN_ORDER_KRW, POSITION_DUST_KRW,
+    DRY_RUN, EXCLUDE_SYMBOLS, MIN_LISTING_DAYS,
     NOTIFY_ON_BUY, NOTIFY_ON_SELL, NOTIFY_DAILY_REPORT, NOTIFY_NEAR_SIGNAL,
     VB_ENABLED, VB_DRY_RUN, VB_K_BULL, VB_K_NEUTRAL, VB_K_BEAR, VB_K_CRISIS,
     VB_SL_PCT, VB_SMA_PERIOD, VB_MAX_POSITIONS, VB_POSITION_RATIO,
@@ -67,6 +68,7 @@ from services.execution.circuit_breaker import (
     is_l2_triggered,
 )
 from services.execution.filter_stats import record_block
+from services.execution.position_pnl import position_return_pct, record_realized
 from services.execution.multi_trader import (
     load_state, save_state, append_log,
     buy_market_coin, sell_market_coin,
@@ -117,6 +119,7 @@ VR_TP = 0.03     # vol_reversal 익절 +3%
 VR_TRAIL = 0.015  # vol_reversal 트레일링 1.5%
 VR_SL = 0.02      # vol_reversal 손절 -2%
 VR_MAX_HOURS = 32  # vol_reversal 시간제한 32시간
+
 
 
 class RealtimeMonitor:
@@ -1781,6 +1784,67 @@ class RealtimeMonitor:
         """성공 시 연속 오류 카운트 초기화."""
         self.consecutive_errors = 0
 
+    # ── 포지션 종료 (부분매도와 분리된 단일 경로) ──────────────
+    def _record_realized(self, pos: dict, exec_price: float, qty: float) -> float:
+        return record_realized(pos, exec_price, qty)
+
+    def _position_return_pct(self, pos: dict, fallback_price: float = 0.0) -> float:
+        return position_return_pct(pos, fallback_price)
+
+    def _close_position(self, symbol: str, pos: dict, exit_price: float, reason: str) -> float:
+        """포지션 종료 확정 — closed_trades 기록 + positions 제거 + save_state.
+
+        lessons #45: 종료 처리가 TP 루프 **안에** 있어서, 모든 TP 단계가 완료되면
+        루프가 전부 `continue`로 빠져나가 도달 불가능해졌다(SPK 유령 포지션).
+        종료는 부분매도와 별개 관심사이므로 루프 밖 단일 경로로 분리한다.
+        exit_date는 `_execute_sell`과 동일하게 UTC — 기존 closed_trades 26건이
+        UTC이고 strategy_start 창 비교가 문자열 기반이라 혼용하면 경계에서 어긋난다.
+        """
+        ret_pct = self._position_return_pct(pos, fallback_price=exit_price)
+        self.state.setdefault("closed_trades", []).append({
+            "symbol": symbol,
+            "entry_date": pos.get("entry_date", ""),
+            "entry_price": pos.get("entry_price", 0),
+            "exit_date": datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M"),
+            "exit_price": exit_price,
+            "return_pct": round(ret_pct, 2),
+            "exit_reason": reason,
+        })
+        self.state.get("positions", {}).pop(symbol, None)
+        save_state(self.state)
+        self._orphan_seen_count.pop(symbol, None)
+        print(
+            f"  [청산] {symbol} 포지션 종료 ({reason}) return={ret_pct:+.2f}% — 슬롯 반환",
+            flush=True,
+        )
+        return ret_pct
+
+    async def _close_if_liquidated(self, symbol: str, price: float, pos: dict):
+        """TP 전 단계 매도 완료 포지션: 거래소 잔량이 dust면 종료를 확정한다.
+
+        전 단계 완료 = 정의상 전량 청산이지만, TP sell_ratio 합이 1.0 미만인
+        설정에서는 잔량이 남을 수 있으므로 실잔고로 확인한다(설정 변경 내성).
+        포지션이 제거되면 이 경로는 다시 실행되지 않으므로 API 비용은 1회성.
+        """
+        try:
+            coin = symbol.split("/")[0]
+            ex = _create_exchange()
+            bal = ex.fetch_balance()
+            cur_total = float((bal.get(coin) or {}).get("total", 0) or 0)
+        except Exception as e:
+            print(f"  [청산] {symbol} 잔고 조회 실패: {e} — 다음 틱 재평가", flush=True)
+            return
+        if cur_total * price >= POSITION_DUST_KRW:
+            from services.common.log_throttle import throttled_print
+            throttled_print(
+                f"tp_leftover_{symbol}",
+                f"  [청산] {symbol} TP 전 단계 완료했으나 잔량 "
+                f"{cur_total * price:,.0f} KRW 잔존 — 트레일링스탑 대기",
+                3600,
+            )
+            return
+        self._close_position(symbol, pos, price, "tp_complete")
+
     async def _check_tp_levels(self, symbol: str, price: float, pos: dict):
         """plan 20260504_2 AC2-AC4: 부분 익절 단계별 매도.
 
@@ -1793,8 +1857,17 @@ class RealtimeMonitor:
         entry = pos.get("entry_price", 0)
         if entry <= 0:
             return
-        ret_pct = (price / entry - 1.0)
         sold_levels = set(pos.get("tp_sold_levels", []))
+
+        # ── 전 단계 완료 포지션 종료 (lessons #45) ──
+        # 아래 루프는 완료 단계를 전부 `continue`로 건너뛰므로, 여기서 끊지 않으면
+        # 포지션이 영구히 남아 슬롯을 점유하고 closed_trades에도 기록되지 않는다.
+        # 즉 "이긴 거래일수록 표본에서 사라진다".
+        if sold_levels and len(sold_levels) >= len(TP_LEVELS):
+            await self._close_if_liquidated(symbol, price, pos)
+            return
+
+        ret_pct = (price / entry - 1.0)
 
         for idx, tp in enumerate(TP_LEVELS):
             if idx in sold_levels:
@@ -1818,27 +1891,8 @@ class RealtimeMonitor:
                             flush=True,
                         )
                         return
-                    # 3회 누적 — 자동 정리
-                    KST = timezone(timedelta(hours=9))
-                    ep = pos.get("entry_price", 0) or 0
-                    ret_pct = ((price - ep) / ep * 100.0) if ep > 0 else 0.0
-                    self.state.setdefault("closed_trades", []).append({
-                        "symbol": symbol,
-                        "entry_date": pos.get("entry_date", ""),
-                        "entry_price": ep,
-                        "exit_date": datetime.now(KST).strftime("%Y-%m-%d %H:%M"),
-                        "exit_price": price,
-                        "return_pct": round(ret_pct, 2),
-                        "exit_reason": "auto_cleanup_zero_balance",
-                    })
-                    self.state.get("positions", {}).pop(symbol, None)
-                    save_state(self.state)
-                    self._orphan_seen_count.pop(symbol, None)
-                    print(
-                        f"  [TP] {symbol} 잔고 없음 {cnt}회 — 자동 정리 (state.positions 제거, "
-                        f"return_pct={ret_pct:+.2f}%)",
-                        flush=True,
-                    )
+                    # 3회 누적 — 자동 정리 (lessons #45: 종료는 _close_position 단일 경로)
+                    self._close_position(symbol, pos, price, "auto_cleanup_zero_balance")
                     return
                 # 매도 수량: 매수 시점 entry_qty 기준 비율 (잔량 변동 무관 일관성)
                 # 단, 최초 진입 후 첫 TP에선 entry_qty 미저장 가능 → cur_total 기준
@@ -1860,6 +1914,8 @@ class RealtimeMonitor:
                 if not order.get("price"):
                     print(f"  [경고] {symbol} TP 체결가 확정 실패 — 신호가 기록", flush=True)
                 pl_krw = (exec_price - entry) * sell_qty
+                # 실현손익 누적 (lessons #45) — 종료 시 money-weighted 수익률 산정 근거
+                self._record_realized(pos, exec_price, sell_qty)
                 # state 갱신
                 sold_levels.add(idx)
                 pos["tp_sold_levels"] = sorted(sold_levels)
@@ -1868,7 +1924,13 @@ class RealtimeMonitor:
                     pos["entry_qty"] = entry_qty
                 # remaining_qty 재조회
                 bal_after = ex.fetch_balance()
-                pos["remaining_qty"] = float(bal_after.get(coin, {}).get("total", 0) or 0)
+                fetched_qty = float(bal_after.get(coin, {}).get("total", 0) or 0)
+                # 업비트 잔고 API는 체결 직후 정산 전 값을 돌려줄 수 있다(실측: JUP/TAIKO가
+                # 매도 후에도 매도 전 수량으로 기록됨). 매도분만큼 줄지 않았으면 계산값 사용.
+                expected_qty = max(cur_total - sell_qty, 0.0)
+                pos["remaining_qty"] = (
+                    fetched_qty if fetched_qty <= expected_qty + 1e-9 else expected_qty
+                )
                 save_state(self.state)
                 # 일일 손익 기록
                 from services.execution import daily_pl as _dpl
@@ -1887,6 +1949,11 @@ class RealtimeMonitor:
                     await send_report(msg, parse_mode=None)
                 except Exception:
                     pass
+                # 잔량이 dust면 이 매도로 포지션이 끝난 것 — 즉시 종료 확정 (lessons #45).
+                # 여기가 근본 경로다. 위쪽 _close_if_liquidated는 이미 갇힌 포지션용 안전망.
+                if pos["remaining_qty"] * exec_price < POSITION_DUST_KRW:
+                    self._close_position(symbol, pos, exec_price, f"tp{idx+1}_full_exit")
+                    return
                 # 같은 틱에서 다음 단계도 트리거 가능 — break 하지 않음
             except Exception as e:
                 print(f"  [TP] {symbol} 부분 매도 실패: {e} — state 미변경, 다음 틱 재평가", flush=True)
@@ -2320,7 +2387,7 @@ class RealtimeMonitor:
             return
 
         pos = positions[symbol]
-        today = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
+        coin_amount = 0.0  # DRY_RUN 분기에서도 아래 손익 산정이 참조한다
 
         print(f"\n  *** {symbol} 스탑 이탈! 가격: {price:,.0f}  스탑: {pos['trail_stop']:,.0f} ***")
 
@@ -2338,10 +2405,10 @@ class RealtimeMonitor:
                 free_amount = float(amounts.get("free", 0) or 0)
 
                 if total_amount <= 0:
+                    # lessons #45: 조용히 삭제하면 이미 끝난 거래가 closed_trades에
+                    # 남지 않아 검증 표본(ADR 20260823-1)이 영영 늘지 않는다.
                     print(f"  {symbol} 잔고 없음 (total=0)")
-                    del positions[symbol]
-                    self.state["positions"] = positions
-                    save_state(self.state)
+                    self._close_position(symbol, pos, price, "auto_cleanup_zero_balance")
                     return
 
                 # 매도 가능 수량: free 우선 (locked 제외), free=0이면 매도 불가 → 보존
@@ -2362,26 +2429,24 @@ class RealtimeMonitor:
                 return
 
         self._reset_errors()
-        ret_pct = (exec_price / pos["entry_price"] - 1) * 100
+        exec_price = float(exec_price)
+        sold_qty_full = float(coin_amount) if not DRY_RUN else float(pos.get("entry_qty") or 0)
 
         # 일일 손실 한도 — 실현 KRW 손익 누적 (plan 20260504_2 AC13)
         try:
             from services.execution import daily_pl as _dpl
-            sold_qty_full = float(coin_amount) if not DRY_RUN else float(pos.get("entry_qty") or 0)
             if sold_qty_full > 0:
-                pl_krw = (float(exec_price) - float(pos["entry_price"])) * sold_qty_full
-                _dpl.record_sell(symbol, pl_krw, float(exec_price), sold_qty_full)
+                pl_krw = (exec_price - float(pos["entry_price"])) * sold_qty_full
+                _dpl.record_sell(symbol, pl_krw, exec_price, sold_qty_full)
         except Exception as _e:
             print(f"  [일일손익] 기록 실패 (무시): {_e}", flush=True)
 
-        self.state.setdefault("closed_trades", []).append({
-            "symbol": symbol, "entry_date": pos["entry_date"],
-            "entry_price": pos["entry_price"], "exit_date": today,
-            "exit_price": exec_price, "return_pct": round(ret_pct, 2),
-        })
-        del positions[symbol]
-        self.state["positions"] = positions
-        save_state(self.state)
+        # lessons #45: 마지막 체결가만으로 return_pct를 쓰면 TP1에서 확보한 이익이
+        # 통계에서 사라진다(+5%에 절반 실현 후 +1%에 이탈 → +1%로 기록).
+        # 최종 매도분을 실현손익에 누적한 뒤 포지션 전체 수익률로 기록한다.
+        if sold_qty_full > 0:
+            self._record_realized(pos, exec_price, sold_qty_full)
+        ret_pct = self._close_position(symbol, pos, exec_price, "trail_stop")
 
         append_log({"action": "SELL", "symbol": symbol, "price": exec_price,
                      "return_pct": ret_pct, "trigger": "realtime"})
