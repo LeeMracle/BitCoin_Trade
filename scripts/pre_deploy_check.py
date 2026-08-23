@@ -2712,6 +2712,47 @@ def check_position_weight_cap() -> None:
         )
 
 
+# ═══════════════════════════════════════════════════════════════════
+# 검증 N+8: 성과 집계 경로 일관성 (ADR 20260823-1 / 교훈 #19·#38)
+# ═══════════════════════════════════════════════════════════════════
+
+def check_stats_window_consistency() -> None:
+    """성과를 집계하는 모든 경로가 strategy_start 창을 적용하는지 검증.
+
+    배경 (2026-08-23 18:00 보고에서 실제 발생):
+        daily_report.py 가 closed_trades 전체를 그대로 세는 바람에
+        같은 텔레그램 메시지 안에
+          "거래: 26회 | 승률 4/26 (15%) | 누적수익 -137.1%"   (옛 기준)
+          "검증 0일차 — 거래 0건 / 표본 축적 중 0/30건"        (새 기준)
+        이 동시에 표시됐다. ADR 20260823-1의 기준선 리셋이 절반만 적용된 상태.
+
+        교훈 #19(상수 자체정의) / #38(경로 A/B 불일치)과 같은 유형 —
+        집계 로직이 여러 곳에 흩어지면 기준을 바꿀 때 일부만 따라온다.
+
+    검증규칙:
+        closed_trades 를 집계하는 파일은 strategy_start 로 필터링해야 한다.
+    """
+    targets = ["scripts/daily_report.py", "services/reporting/periodic_analysis.py"]
+    for rel in targets:
+        f = PROJECT_ROOT / rel
+        if not f.exists():
+            continue
+        txt = f.read_text(encoding="utf-8")
+        if "closed_trades" not in txt:
+            continue
+        # 집계(len/sum/승률 계산)를 하는데 창 필터가 없으면 불일치 위험
+        aggregates = re.search(r"(len\(closed\)|sum\(1 for t in closed)", txt)
+        # 주석에 strategy_start 를 언급하기만 해도 통과하면 안 된다 — 실제 조회 형태를 요구.
+        # (2026-08-23 역방향 테스트에서 자기 주석이 검사를 통과시킨 사례, 동일 유형 3회째)
+        applied = bool(re.search(r"""get\(["']strategy_start["']|\[["']strategy_start["']\]""", txt))
+        if aggregates and not applied:
+            errors.append(
+                f"[ADR 20260823-1] {rel} 이 closed_trades 를 strategy_start 창 없이 집계 — "
+                f"기준선 리셋이 이 경로에만 미반영되어 보고서 안에서 숫자가 모순된다 "
+                f"(2026-08-23 실제 발생: 같은 메시지에 26회/15% 와 0건 동시 표시)"
+            )
+
+
 def main() -> None:
     print("=" * 50)
     print("배포 전 검증 (pre-deploy check)")
@@ -2779,6 +2820,7 @@ def main() -> None:
     check_cron_watchdog_outside_cron()
     check_validation_baseline()
     check_position_weight_cap()
+    check_stats_window_consistency()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")

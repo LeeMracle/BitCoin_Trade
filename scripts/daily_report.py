@@ -140,13 +140,24 @@ def _build_report() -> str:
             lines.append(f"  • {sym}")
             lines.append(f"    진입: {entry_p:,.0f} | 스탑: {stop_p:,.0f}")
 
-    if closed:
-        wins = sum(1 for t in closed if t.get("return_pct", 0) > 0)
-        total_ret = sum(t.get("return_pct", 0) for t in closed)
-        lines.append(f"  거래: {len(closed)}회 | 승률: {wins}/{len(closed)} ({wins*100//len(closed)}%)")
+    # 성과 집계는 검증 창(strategy_start) 기준 (ADR 20260823-1).
+    # 전체 closed_trades를 그대로 세면, 바로 아래 build_strategy_summary가
+    # 새 기준선으로 "0/30건"을 보고하는데 여기서는 "26회 승률 15%"가 나와
+    # 같은 메시지 안에서 숫자가 모순된다 (2026-08-23 18:00 보고에서 실제 발생).
+    # 교훈 #19/#38의 경로 A/B 불일치 — 집계 로직은 한 곳에서만 정의한다.
+    from services.reporting.periodic_analysis import _DEFAULT_STRATEGY_START
+    _start = multi.get("strategy_start", _DEFAULT_STRATEGY_START)
+    current = [t for t in closed if str(t.get("exit_date", "")) >= str(_start)]
+
+    if current:
+        wins = sum(1 for t in current if t.get("return_pct", 0) > 0)
+        total_ret = sum(t.get("return_pct", 0) for t in current)
+        lines.append(f"  거래: {len(current)}회 | 승률: {wins}/{len(current)} ({wins*100//len(current)}%)")
         lines.append(f"  누적수익: {total_ret:+.1f}%")
     else:
-        lines.append(f"  거래: 0회")
+        lines.append(f"  거래: 0회 (기준일 {_start} 이후)")
+    if len(closed) > len(current):
+        lines.append(f"  ⓘ 기준일 이전 {len(closed)-len(current)}건은 집계 제외 (ADR 20260823-1)")
 
     # ── plan 20260503 P1 (AC16): 정기 분석 함수 추출 ──
     # services/reporting/periodic_analysis.build_strategy_summary 사용 → lessons #19 분산 해소

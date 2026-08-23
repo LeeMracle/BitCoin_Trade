@@ -196,7 +196,21 @@ def check_daily_live(log_path: str = "/var/log/btc_trader.log") -> dict:
         for line in lines:
             if target_date in line:
                 return _result("daily_live", OK, f"{label} 라인 존재")
-        return _result("daily_live", WARN, f"{label} 라인 없음 (systemd 가동 가능성)")
+        # systemd btc-trader.service 가 daily_live.py --realtime 을 상시 가동하는 것이
+        # **정상 설계**다 (lessons #33/#34: cron 등록 시 매일 새 인스턴스 → 좀비 누적).
+        # 따라서 cron 로그에 오늘 라인이 없는 것은 이상이 아니다.
+        # 봇이 실제로 살아 있는지는 systemd 상태로 판정한다 — 그쪽이 진짜 지표다.
+        try:
+            alive = subprocess.run(
+                ["systemctl", "is-active", "btc-trader"],
+                capture_output=True, text=True, timeout=10,
+            ).stdout.strip() == "active"
+        except Exception:
+            alive = False
+        if alive:
+            return _result("daily_live", OK, "systemd 상시 가동 (cron 미등록이 정상)")
+        return _result("daily_live", FAIL,
+                       "cron 라인 없음 + systemd btc-trader 비활성 — 봇 정지 상태")
     except Exception as e:
         return _result("daily_live", WARN, f"{type(e).__name__}")
 
@@ -254,10 +268,16 @@ def check_regime_check(log_path: str = "/var/log/regime_check.log",
 
 def check_state_freshness() -> dict:
     """multi_trading_state.json + vb_state.json mtime."""
-    paths = {
-        "composite": ROOT / "workspace" / "multi_trading_state.json",
-        "vb": ROOT / "workspace" / "vb_state.json",
-    }
+    paths = {"composite": ROOT / "workspace" / "multi_trading_state.json"}
+    # VB는 2026-05-13 종료(lessons #29, VB_ENABLED=False). 비활성 전략의 state가
+    # 오래된 것은 이상이 아니라 당연한 결과다. 이런 항목을 매일 ⚠️로 띄우면
+    # 종합 판정이 상시 "주의"가 되어 진짜 경보를 가린다 (경보 피로).
+    try:
+        from services.execution.config import VB_ENABLED
+    except Exception:
+        VB_ENABLED = False
+    if VB_ENABLED:
+        paths["vb"] = ROOT / "workspace" / "vb_state.json"
     parts = []
     worst = OK
     for name, p in paths.items():
@@ -413,9 +433,22 @@ def check_digest_heartbeat(heartbeat_path: str = "/tmp/bata_hourly_digest_heartb
 
     매시 30분 cron이 죽었거나 침묵 로직 무한루프로 안 도는 경우 감지.
     """
+    # hourly_digest 는 2026-05-05 이후 비활성(스케줄 미등록). 등록돼 있지 않으면
+    # heartbeat 부재는 정상이므로 경고하지 않는다 — 위 (2)와 같은 경보 피로 방지.
+    try:
+        scheduled = subprocess.run(
+            ["systemctl", "list-timers", "--all", "--no-legend"],
+            capture_output=True, text=True, timeout=10,
+        ).stdout
+        registered = "digest" in scheduled
+    except Exception:
+        registered = False
+
     p = Path(heartbeat_path)
     if not p.exists():
-        return _result("digest heartbeat", WARN, "heartbeat 없음 (cron 미가동 또는 첫 실행 전)")
+        if not registered:
+            return _result("digest heartbeat", OK, "비활성 (스케줄 미등록이 정상)")
+        return _result("digest heartbeat", WARN, "등록됐으나 heartbeat 없음 — 미가동 의심")
     try:
         mtime = datetime.fromtimestamp(p.stat().st_mtime, tz=KST)
         age = datetime.now(tz=KST) - mtime
