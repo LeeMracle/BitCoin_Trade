@@ -2629,6 +2629,89 @@ def check_validation_baseline() -> None:
             )
 
 
+# ═══════════════════════════════════════════════════════════════════
+# 검증 N+7: 단일 종목 비중 상한 (ADR 20260823-2)
+# ═══════════════════════════════════════════════════════════════════
+
+def check_position_weight_cap() -> None:
+    """매수 금액 산정에 총자산 기준 비중 상한이 걸려 있는지 검증.
+
+    배경 (ADR 20260823-2, 2026-08-23):
+        order_amount = available * POSITION_RATIO / slots_empty 는
+        빈 슬롯이 1개면 가용 현금의 95% 전액을 한 종목에 넣는다.
+        실측: OP 진입액 126,436원 = 총자산의 47.3%, 나머지 4종목 각 10% 내외.
+        TP 부분익절·손절로 현금이 쌓인 직후 슬롯이 하나만 비면 항상 재발한다.
+
+    검증규칙:
+        1) config.py에 MAX_POSITION_WEIGHT 정의 (교훈 #19 — 자체정의 금지)
+        2) 값이 1/MAX_POSITIONS 를 크게 넘지 않을 것 (상한 의미 상실 방지)
+        3) _execute_buy 가 order_amount 에 상한을 실제로 적용
+        4) 상한 기준이 현금이 아니라 총자산(total_krw)일 것
+           — 현금 기준이면 보유분을 무시해 상한이 무의미해진다
+    """
+    cfg = PROJECT_ROOT / "services" / "execution" / "config.py"
+    rm = PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py"
+    if not cfg.exists() or not rm.exists():
+        errors.append("[ADR 20260823-2] config.py / realtime_monitor.py 없음")
+        return
+    ctxt, rtxt = cfg.read_text(encoding="utf-8"), rm.read_text(encoding="utf-8")
+
+    mw = re.search(r"^MAX_POSITION_WEIGHT\s*=\s*([\d.]+)", ctxt, re.MULTILINE)
+    if not mw:
+        errors.append(
+            "[ADR 20260823-2] config.py에 MAX_POSITION_WEIGHT 정의 없음 — "
+            "단일 종목 쏠림(실측 47.3%) 방어 부재"
+        )
+        return
+    weight = float(mw.group(1))
+    mp = re.search(r"^MAX_POSITIONS\s*=\s*(\d+)", ctxt, re.MULTILINE)
+    if mp:
+        even = 1.0 / int(mp.group(1))
+        if weight > even * 1.5:
+            errors.append(
+                f"[ADR 20260823-2] MAX_POSITION_WEIGHT={weight} 가 균등비중"
+                f"({even:.2f})의 1.5배 초과 — 상한이 사실상 무의미"
+            )
+
+    if re.search(r"^MAX_POSITION_WEIGHT\s*=", rtxt, re.MULTILINE):
+        errors.append("[교훈 #19] MAX_POSITION_WEIGHT가 realtime_monitor에 자체 정의됨")
+
+    m = re.search(
+        r"^(?P<ind>[ \t]+)async def _execute_buy\([^)]*\)[^:\n]*:[ \t]*\n"
+        r"(?P<body>.*?)(?=^(?P=ind)(?:async )?def |\Z)",
+        rtxt, re.MULTILINE | re.DOTALL,
+    )
+    if not m:
+        errors.append("[ADR 20260823-2] _execute_buy 정의를 찾지 못함 — 검증규칙 갱신 필요")
+        return
+    body = m.group("body")
+
+    # 상수명이 로그 문구에만 남아도 통과하지 않도록, order_amount 산정 ~ 최소주문
+    # 검사 사이 구간을 잘라 "실제로 적용됐는지"를 본다
+    # (2026-08-23 역방향 테스트에서 단순 포함 검사가 무력화를 놓친 것을 반영)
+    seg = re.search(
+        r"order_amount\s*=\s*available\s*\*\s*POSITION_RATIO(?P<mid>.*?)"
+        r"if\s+order_amount\s*<\s*MIN_ORDER_KRW",
+        body, re.DOTALL,
+    )
+    if not seg:
+        errors.append("[ADR 20260823-2] order_amount 산정 구간을 찾지 못함 — 검증규칙 갱신 필요")
+        return
+    mid = seg.group("mid")
+    if "MAX_POSITION_WEIGHT" not in mid or not re.search(r"order_amount\s*=", mid):
+        errors.append(
+            "[ADR 20260823-2] order_amount에 MAX_POSITION_WEIGHT 상한이 실제로 적용되지 않음 — "
+            "빈 슬롯 1개일 때 가용 현금 전액이 한 종목에 투입된다 (실측 총자산의 47.3%)"
+        )
+    elif 'balance.get("total_krw")' not in mid and "balance.get('total_krw')" not in mid:
+        # 주석에 total_krw 를 언급하기만 해도 통과하면 안 된다 — 실제 조회 호출을 요구.
+        # (2026-08-23 역방향 테스트에서 자기 주석이 검사를 통과시킨 사례)
+        errors.append(
+            "[ADR 20260823-2] 비중 상한 기준이 총자산(total_krw)이 아님 — "
+            "현금만 기준으로 하면 보유 평가액을 무시해 상한이 무의미해진다"
+        )
+
+
 def main() -> None:
     print("=" * 50)
     print("배포 전 검증 (pre-deploy check)")
@@ -2695,6 +2778,7 @@ def main() -> None:
     check_exec_price_settled()
     check_cron_watchdog_outside_cron()
     check_validation_baseline()
+    check_position_weight_cap()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")

@@ -37,7 +37,7 @@ from services.execution.config import (
     SCHEDULER_INTEGRITY_CHECK_ENABLED, SCHEDULER_UNIT_PREFIX,
     SCHEDULER_BASELINE_UNITS, SCHEDULER_ALERT_INTERVAL_SEC,
     DAILY_LOSS_LIMIT_ENABLED, DAILY_LOSS_LIMIT_PCT, DAILY_LOSS_BASE_KRW,
-    MAX_POSITIONS, POSITION_RATIO, MIN_VOLUME_KRW,
+    MAX_POSITIONS, POSITION_RATIO, MAX_POSITION_WEIGHT, MIN_VOLUME_KRW,
     MIN_ORDER_KRW, DRY_RUN, EXCLUDE_SYMBOLS, MIN_LISTING_DAYS,
     NOTIFY_ON_BUY, NOTIFY_ON_SELL, NOTIFY_DAILY_REPORT, NOTIFY_NEAR_SIGNAL,
     VB_ENABLED, VB_DRY_RUN, VB_K_BULL, VB_K_NEUTRAL, VB_K_BEAR, VB_K_CRISIS,
@@ -2189,6 +2189,16 @@ class RealtimeMonitor:
 
         slots_empty = MAX_POSITIONS - len(positions)
         order_amount = available * POSITION_RATIO / slots_empty
+
+        # 단일 종목 비중 상한 (ADR 20260823-2) — 위 식은 빈 슬롯이 1개면 가용 현금
+        # 전액을 한 종목에 넣는다. 기준은 반드시 총자산(total_krw): 현금만 보면
+        # 보유 평가액을 무시해 상한이 무의미해진다.
+        _equity = float(balance.get("total_krw") or 0)
+        _cap = _equity * MAX_POSITION_WEIGHT
+        if _cap > 0 and order_amount > _cap:
+            print(f"  [사이징] {symbol} {order_amount:,.0f} → {_cap:,.0f} "
+                  f"({MAX_POSITION_WEIGHT*100:.0f}% 상한)", flush=True)
+            order_amount = _cap
 
         if order_amount < MIN_ORDER_KRW:
             return
