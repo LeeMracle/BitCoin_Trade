@@ -168,7 +168,7 @@ async def main() -> int:
     ap.add_argument("--days", type=int, default=700)
     ap.add_argument("--runs", type=int, default=12)
     ap.add_argument("--axis", default="all",
-                    choices=["all", "slots", "tp", "stop", "dc"])
+                    choices=["all", "slots", "tp", "stop", "dc", "combo"])
     args = ap.parse_args()
 
     now = datetime.now(tz=timezone.utc)
@@ -195,10 +195,24 @@ async def main() -> int:
             print(f"  로딩 {i}/{args.coins}", flush=True)
 
     all_dates = sorted({d for df in raw.values() for d in df.index})
-    split = int(len(all_dates) * 0.6)
-    is_dates, oos_dates = all_dates[:split], all_dates[split:]
-    print(f"\n종목 {len(raw)} / 전체 {len(all_dates)}일 "
-          f"(IS {len(is_dates)}일 ~ {is_dates[-1].date()} / OOS {len(oos_dates)}일)")
+
+    # ── IS/OOS 분리는 "거래 가능일" 기준 ──────────────────────────────
+    # 달력 60/40으로 나누면 OOS가 통째로 레짐 폐쇄 구간(2026 Q1/Q2 통과율 0%)에
+    # 들어가 거래 3~16건뿐인 무의미한 표본이 된다 (2026-08-23 1차 시도 실측).
+    # 레짐이 열려 있던 날만 세어 그 60% 지점을 경계로 삼아야 양쪽에 표본이 생긴다.
+    open_set = {d for d in all_dates
+                if bool(regime.get(int(d.timestamp() * 1000), False))}
+    open_dates = sorted(open_set)
+    if len(open_dates) < 20:
+        print("거래 가능일이 너무 적어 IS/OOS 분리 불가")
+        return 1
+    boundary = open_dates[int(len(open_dates) * 0.6)]
+    is_dates = [d for d in all_dates if d <= boundary]
+    oos_dates = [d for d in all_dates if d > boundary]
+    is_open = sum(1 for d in is_dates if d in open_set)
+    print(f"\n종목 {len(raw)} / 전체 {len(all_dates)}일 (거래가능 {len(open_dates)}일)")
+    print(f"  IS  {len(is_dates):>4}일 (거래가능 {is_open:>3}일) ~ {boundary.date()}")
+    print(f"  OOS {len(oos_dates):>4}일 (거래가능 {len(open_dates)-is_open:>3}일)")
     print(f"무작위 선택 {args.runs}회 평균. 절대수익은 생존편향으로 낙관 — 상대비교용.\n")
 
     axes: dict[str, list[tuple[str, dict]]] = {
@@ -217,6 +231,19 @@ async def main() -> int:
                  for h, m in ((0.10, 3.0), (0.07, 3.0), (0.15, 3.0),
                               (0.20, 3.0), (0.10, 2.0), (0.10, 4.0))],
         "dc": [(f"DC {n}", {"dc": n}) for n in (8, 12, 20, 30, 50)],
+        # 결합 검증은 **IS·OOS 방향이 일관된 축만** 묶는다.
+        # 단일요인 결과: 슬롯↑ 일관 개선 / TP 늦추기 일관 개선 /
+        #               손절·ATR 신호 없음 / DC는 IS와 OOS가 반대(과최적화 함정) →
+        # 뒤 두 축은 결합에서 제외한다. 격자 탐색이 아니라 근거 있는 2축 조합이다.
+        "combo": [
+            ("현행 (슬롯5 TP5/12)", {}),
+            ("슬롯10 + TP없음", {"slots": 10, "tp": [{"trigger_pct": 9.99, "sell_ratio": 1.0}]}),
+            ("슬롯10 + TP15%", {"slots": 10, "tp": [{"trigger_pct": 0.15, "sell_ratio": 0.5},
+                                                     {"trigger_pct": 0.30, "sell_ratio": 0.5}]}),
+            ("슬롯15 + TP없음", {"slots": 15, "tp": [{"trigger_pct": 9.99, "sell_ratio": 1.0}]}),
+            ("슬롯15 + TP15%", {"slots": 15, "tp": [{"trigger_pct": 0.15, "sell_ratio": 0.5},
+                                                     {"trigger_pct": 0.30, "sell_ratio": 0.5}]}),
+        ],
     }
     todo = list(axes) if args.axis == "all" else [args.axis]
 
