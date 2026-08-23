@@ -168,7 +168,7 @@ async def main() -> int:
     ap.add_argument("--days", type=int, default=700)
     ap.add_argument("--runs", type=int, default=12)
     ap.add_argument("--axis", default="all",
-                    choices=["all", "slots", "tp", "stop", "dc", "combo"])
+                    choices=["all", "slots", "tp", "tp55", "stop", "dc", "combo"])
     args = ap.parse_args()
 
     now = datetime.now(tz=timezone.utc)
@@ -226,6 +226,18 @@ async def main() -> int:
                                     {"trigger_pct": 0.30, "sell_ratio": 0.5}]}),
             ("TP1 5%/30%", {"tp": [{"trigger_pct": 0.05, "sell_ratio": 0.3},
                                    {"trigger_pct": 0.12, "sell_ratio": 0.5}]}),
+        ],
+        # 사용자 제안(2026-08-24): "5% 수익 내면 익절, 수수료 포함 5.5%에 매도".
+        # 수수료 계산은 맞다(업비트 0.05% x 2 = 0.1%). 다만 5.5%는 현행 5%와 같은
+        # 구간이므로, 이 축은 **0.5%p 차이**와 **부분 vs 전량**을 분리해서 본다.
+        # 전량 익절은 승자를 더 강하게 잘라내므로 방향이 반대일 수 있다.
+        "tp55": [
+            ("현행 5%/50% + 12%", {}),
+            ("5.5% 부분 50% + 12%", {"tp": [{"trigger_pct": 0.055, "sell_ratio": 0.5},
+                                            {"trigger_pct": 0.12, "sell_ratio": 0.5}]}),
+            ("5.5% 전량", {"tp": [{"trigger_pct": 0.055, "sell_ratio": 1.0}]}),
+            ("5.0% 전량", {"tp": [{"trigger_pct": 0.05, "sell_ratio": 1.0}]}),
+            ("15% 전량 (대조)", {"tp": [{"trigger_pct": 0.15, "sell_ratio": 1.0}]}),
         ],
         "stop": [(f"손절 {int(h*100)}% / ATRx{m}", {"hard": h, "atr_mult": m})
                  for h, m in ((0.10, 3.0), (0.07, 3.0), (0.15, 3.0),
