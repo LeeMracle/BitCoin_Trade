@@ -149,8 +149,12 @@ def run_sim(panel: dict[str, pd.DataFrame], dates: list, p: P, seed: int) -> dic
     eq = pd.Series(curve)
     final = curve[-1] if curve else INIT
     mdd = ((eq - eq.cummax()) / eq.cummax()).min() * 100 if len(eq) else 0.0
+    # 거래별 평균/표준편차 — "판정에 몇 건이 필요한가"를 계산하기 위한 값.
+    # 포트폴리오 수익률(ret)만으로는 표본 수 요구량을 알 수 없다.
+    ta = np.array(trades) * 100 if trades else np.array([0.0])
     return {"ret": final / INIT - 1, "mdd": mdd, "n": len(trades),
-            "wr": (sum(1 for t in trades if t > 0) / len(trades) * 100) if trades else 0.0}
+            "wr": (sum(1 for t in trades if t > 0) / len(trades) * 100) if trades else 0.0,
+            "tmean": float(ta.mean()), "tstd": float(ta.std(ddof=1)) if len(ta) > 1 else 0.0}
 
 
 def evaluate(panel: dict, dates: list, p: P, runs: int) -> dict:
@@ -159,7 +163,9 @@ def evaluate(panel: dict, dates: list, p: P, runs: int) -> dict:
     return {"mean": r.mean(), "std": r.std(), "min": r.min(), "max": r.max(),
             "mdd": np.mean([x["mdd"] for x in rs]),
             "n": np.mean([x["n"] for x in rs]),
-            "wr": np.mean([x["wr"] for x in rs])}
+            "wr": np.mean([x["wr"] for x in rs]),
+            "tmean": np.mean([x["tmean"] for x in rs]),
+            "tstd": np.mean([x["tstd"] for x in rs])}
 
 
 async def main() -> int:
@@ -168,7 +174,7 @@ async def main() -> int:
     ap.add_argument("--days", type=int, default=700)
     ap.add_argument("--runs", type=int, default=12)
     ap.add_argument("--axis", default="all",
-                    choices=["all", "slots", "tp", "tp55", "stop", "dc", "combo"])
+                    choices=["all", "slots", "tp", "tp55", "tp2", "stop", "dc", "combo"])
     args = ap.parse_args()
 
     now = datetime.now(tz=timezone.utc)
@@ -239,6 +245,14 @@ async def main() -> int:
             ("5.0% 전량", {"tp": [{"trigger_pct": 0.05, "sell_ratio": 1.0}]}),
             ("15% 전량 (대조)", {"tp": [{"trigger_pct": 0.15, "sell_ratio": 1.0}]}),
         ],
+        # TP2 단독 측정 (2026-08-24). TP2=12% 는 ADR 20260516-1 에서 dust 회피로
+        # 3단계(5/10/15)를 2단계로 압축하며 나온 절충값이고, **단독으로 측정된 적이 없다.**
+        # TP1 은 현행 5.5% 로 고정하고 TP2 만 움직인다 (단일요인 원칙).
+        "tp2": [
+            (f"TP2 {int(t*100)}%", {"tp": [{"trigger_pct": 0.055, "sell_ratio": 0.5},
+                                           {"trigger_pct": t, "sell_ratio": 0.5}]})
+            for t in (0.08, 0.10, 0.12, 0.15, 0.20, 0.30)
+        ],
         "stop": [(f"손절 {int(h*100)}% / ATRx{m}", {"hard": h, "atr_mult": m})
                  for h, m in ((0.10, 3.0), (0.07, 3.0), (0.15, 3.0),
                               (0.20, 3.0), (0.10, 2.0), (0.10, 4.0))],
@@ -269,7 +283,7 @@ async def main() -> int:
         print(f"[축] {axis}")
         print("=" * 84)
         print(f"{'설정':<22}{'IS 평균':>10}{'OOS 평균':>10}{'OOS 표준편차':>13}"
-              f"{'OOS MDD':>10}{'거래':>7}{'승률':>7}")
+              f"{'OOS MDD':>10}{'거래':>7}{'승률':>7}{'건당평균':>9}{'건당편차':>9}{'필요표본':>9}")
         for label, kw in axes[axis]:
             tried += 1
             p = P(**kw)
@@ -277,9 +291,15 @@ async def main() -> int:
                                    and p.vol_mult == base.vol_mult) else build_panel(raw, regime, p)
             r_is = evaluate(panel, is_dates, p, args.runs)
             r_oos = evaluate(panel, oos_dates, p, args.runs)
+            # 필요표본: 건당 평균이 0과 유의하게 다르다고 말하려면 몇 건이 필요한가.
+            #   n >= (1.96 * 건당표준편차 / 건당평균)^2   (양측 95%)
+            tm, ts = r_oos["tmean"], r_oos["tstd"]
+            need = int((1.96 * ts / tm) ** 2) if tm > 0 and ts > 0 else 0
+            need_s = f"{need:,}" if need else "판정불가"
             print(f"{label:<22}{r_is['mean']:>9.1f}%{r_oos['mean']:>9.1f}%"
                   f"{r_oos['std']:>12.1f}%{r_oos['mdd']:>9.1f}%"
-                  f"{r_oos['n']:>7.0f}{r_oos['wr']:>6.1f}%")
+                  f"{r_oos['n']:>7.0f}{r_oos['wr']:>6.1f}%"
+                  f"{tm:>8.2f}%{ts:>8.2f}%{need_s:>9}")
             # IS·OOS 양쪽 모두 기준선보다 나은 것만 후보로 (한쪽만 좋으면 과최적화 의심)
             if r_is["mean"] > 0 and r_oos["mean"] > 0:
                 survivors.append((label, {"is": r_is["mean"], "oos": r_oos["mean"]}))
