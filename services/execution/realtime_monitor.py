@@ -848,7 +848,11 @@ class RealtimeMonitor:
                     try:
                         entry_dt = datetime.strptime(pos["entry_date"], "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
                         hours = (now - entry_dt).total_seconds() / 3600
-                        msg += f"  {sym} {ret:+.1f}% ({hours:.0f}h/48h)\n"
+                        # "/48h"를 붙이지 않는다 — 시간 제한 청산은 IS_DAYTRADING
+                        # 분기(_DT_MAX_BARS*4)에만 있고 현행 composite 전략엔 없다.
+                        # 하드코딩된 마감선은 임박한 청산이 있는 것처럼 오해를 부른다
+                        # (실측: POL 50.2h / JUP 60.3h 보유 중인데 아무 일도 일어나지 않음).
+                        msg += f"  {sym} {ret:+.1f}% ({hours:.0f}h 보유)\n"
                     except (ValueError, KeyError):
                         msg += f"  {sym} {ret:+.1f}%\n"
                 else:
