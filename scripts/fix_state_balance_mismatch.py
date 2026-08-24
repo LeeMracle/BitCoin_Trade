@@ -31,6 +31,10 @@ sys.path.insert(0, str(ROOT))
 load_dotenv(ROOT / "services" / ".env")
 
 from services.execution.config import HARD_STOP_LOSS_PCT  # noqa: E402
+from services.execution.position_pnl import (  # noqa: E402
+    position_return_pct,
+    rebuild_realized_from_exchange,
+)
 
 STATE_PATH = ROOT / "workspace" / "multi_trading_state.json"
 VB_STATE_PATH = ROOT / "workspace" / "vb_state.json"
@@ -181,12 +185,49 @@ def main() -> int:
         print(f"  + {sym}: entry {avg_price:,.4g} ({entry_date[:10]}), highest {highest:,.4g}, "
               f"trail {trail_stop:,.4g}")
 
-    # 7. 제거
+    # 7. 제거 — closed_trades 기록 후 제거 (lessons #45)
+    #
+    # 이전에는 pos.pop() 만 하고 기록을 남기지 않았다. 그러면 이미 끝난 거래가
+    # 통계에서 통째로 사라져 ADR 20260823-1 의 검증 표본(30건)이 채워지지 않는다.
+    # realtime_monitor._execute_sell 에 있던 것과 **같은 결함의 세 번째 경로**였다.
+    #
+    # return_pct 는 거래소 체결 이력으로 재구성한다. 수동 매도 대금은 state 의
+    # realized_pl_krw 에 없으므로, 그대로 두면 부분 익절분만 반영된 값이 남는다.
     for coin in to_remove:
         sym = state_coins[coin]
         removed = pos.pop(sym, None)
-        ep = (removed or {}).get("entry_price") or 0
-        print(f"  - {sym}: 제거 (entry {ep:,.4g})")
+        if not removed:
+            print(f"  - {sym}: 제거 (state 항목 없음)")
+            continue
+        ep = removed.get("entry_price") or 0
+
+        rebuilt = None
+        try:
+            rebuilt = rebuild_realized_from_exchange(ex, sym, removed)
+        except Exception as _e:
+            print(f"    체결 이력 재구성 오류 ({_e}) — 기존 realized 값으로 폴백")
+        if rebuilt:
+            removed["realized_pl_krw"] = rebuilt["realized_pl_krw"]
+            removed["realized_qty"] = rebuilt["realized_qty"]
+            exit_price = rebuilt["last_exec_price"]
+            source = f"거래소 체결 {rebuilt['n_orders']}건"
+        else:
+            exit_price = float(removed.get("highest") or ep or 0)
+            source = "체결 이력 없음 — 폴백"
+
+        ret_pct = position_return_pct(removed, fallback_price=exit_price)
+        closed_trades = state.setdefault("closed_trades", [])
+        closed_trades.append({
+            "symbol": sym,
+            "entry_date": removed.get("entry_date", ""),
+            "entry_price": ep,
+            "exit_date": today,
+            "exit_price": exit_price,
+            "return_pct": round(ret_pct, 2),
+            "exit_reason": "reconcile_removed",
+        })
+        print(f"  - {sym}: 제거 (entry {ep:,.4g}) → closed_trades 기록 "
+              f"{ret_pct:+.2f}% [{source}]")
 
     # 7b. 잔량 미러링 적용 (lessons #10/#25 강화 — 2026-05-24)
     for sym, fix in qty_fixes:

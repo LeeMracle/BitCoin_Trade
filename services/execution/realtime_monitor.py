@@ -68,7 +68,11 @@ from services.execution.circuit_breaker import (
     is_l2_triggered,
 )
 from services.execution.filter_stats import record_block
-from services.execution.position_pnl import position_return_pct, record_realized
+from services.execution.position_pnl import (
+    position_return_pct,
+    rebuild_realized_from_exchange,
+    record_realized,
+)
 from services.execution.multi_trader import (
     load_state, save_state, append_log,
     buy_market_coin, sell_market_coin,
@@ -395,7 +399,18 @@ class RealtimeMonitor:
                                         msg += f"거래소에만 존재: {', '.join(only_exchange)}\n"
                                     if only_state:
                                         msg += f"State에만 존재: {', '.join(only_state)}\n"
-                                    msg += f"자동 보정 없음 — 수동 확인 필요 (state {state_age:.0f}s 전 갱신, {new_count}회 연속)"
+                                    # only_state = "state엔 있는데 거래소엔 없음" = 수동 매도 의심.
+                                    # 알림만 하면 슬롯이 계속 묶이고 그 거래가 closed_trades에
+                                    # 안 남는다(lessons #45와 같은 표본 소실). 거래소 체결
+                                    # 이력에서 실제 매도가를 읽어 정확한 손익으로 청산한다.
+                                    closed = await self._close_manually_sold(only_state, exchange)
+                                    if closed:
+                                        msg += (
+                                            "자동 청산 완료 (거래소 체결가 기준):\n"
+                                            + "".join(f"  {c}\n" for c in closed)
+                                        )
+                                    else:
+                                        msg += f"자동 보정 없음 — 수동 확인 필요 (state {state_age:.0f}s 전 갱신, {new_count}회 연속)"
                                     await notify_error(msg)
                                     print(f"  [교차검증] {new_count}회 연속 불일치 — 알림 발송 + pending 클리어", flush=True)
                                     pending_flag.unlink(missing_ok=True)
@@ -1822,6 +1837,50 @@ class RealtimeMonitor:
             flush=True,
         )
         return ret_pct
+
+    async def _close_manually_sold(self, only_state: set, exchange) -> list[str]:
+        """사용자가 거래소에서 직접 매도한 포지션을 실제 체결가로 청산 확정한다.
+
+        1시간 주기 교차검증이 `only_state`(state엔 있는데 거래소엔 없음)를 3회 연속
+        확인했을 때만 호출된다 — 매수 직후 timing race는 이미 걸러진 상태다.
+
+        왜 거래소 체결 이력을 쓰나:
+            수동 매도 대금은 `realized_pl_krw`에 잡히지 않는다. 그대로 정리하면
+            부분 익절분만 반영되거나(POL 실측: 실제 약 +6.5%인데 +2.36%로 기록)
+            정리 시점 시장가로 계산되어 실제와 무관한 값이 남는다.
+            ADR 20260823-1의 판정 지표가 이 값 위에 서 있으므로 체결 이력이
+            유일한 진실 원천이다 (lessons #10 "state는 거래소 미러").
+
+        재구성 실패 시(조회 오류 등)에는 **청산하지 않는다** — 틀린 손익을 남기느니
+        알림을 띄우고 사람이 확인하는 편이 낫다(fail-closed, 교훈 #21).
+        """
+        closed: list[str] = []
+        for symbol in sorted(only_state):
+            pos = self.state.get("positions", {}).get(symbol)
+            if pos is None:
+                continue  # VB/EMA 등 다른 전략 state — 여기서 다루지 않는다
+            try:
+                rebuilt = rebuild_realized_from_exchange(exchange, symbol, pos)
+            except Exception as e:
+                print(f"  [수동매도] {symbol} 체결 이력 재구성 오류: {e} — 청산 보류", flush=True)
+                continue
+            if not rebuilt:
+                print(
+                    f"  [수동매도] {symbol} 체결 이력 없음/조회 실패 — 청산 보류 "
+                    f"(틀린 손익을 남기지 않는다)",
+                    flush=True,
+                )
+                continue
+            pos["realized_pl_krw"] = rebuilt["realized_pl_krw"]
+            pos["realized_qty"] = rebuilt["realized_qty"]
+            ret = self._close_position(
+                symbol, pos, rebuilt["last_exec_price"], "manual_sell"
+            )
+            closed.append(
+                f"{symbol} {ret:+.2f}% (체결 {rebuilt['n_orders']}건, "
+                f"최종가 {rebuilt['last_exec_price']:,.4g})"
+            )
+        return closed
 
     async def _close_if_liquidated(self, symbol: str, price: float, pos: dict):
         """TP 전 단계 매도 완료 포지션: 거래소 잔량이 dust면 종료를 확정한다.
