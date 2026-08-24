@@ -36,6 +36,8 @@ from services.execution.scanner import get_krw_market_coins  # noqa: E402
 from services.execution import config as C  # noqa: E402
 
 FEE = 0.0005
+# 시드머니. --capital 로 덮어쓸 수 있다 — 최소주문(5,000원) 제약 때문에
+# 슬롯 수를 늘리려면 자본이 함께 커져야 하는지 확인하기 위한 축.
 INIT = float(C.CIRCUIT_BREAKER_INITIAL_CAPITAL)
 
 
@@ -173,9 +175,15 @@ async def main() -> int:
     ap.add_argument("--coins", type=int, default=120)
     ap.add_argument("--days", type=int, default=700)
     ap.add_argument("--runs", type=int, default=12)
+    ap.add_argument("--capital", type=float, default=None,
+                    help="시드머니 override (기본: config.CIRCUIT_BREAKER_INITIAL_CAPITAL)")
     ap.add_argument("--axis", default="all",
                     choices=["all", "slots", "tp", "tp55", "tp2", "stop", "dc", "combo"])
     args = ap.parse_args()
+
+    if args.capital:
+        global INIT
+        INIT = float(args.capital)
 
     now = datetime.now(tz=timezone.utc)
     s = (now - timedelta(days=args.days + 260)).strftime("%Y-%m-%dT00:00:00Z")
@@ -219,10 +227,13 @@ async def main() -> int:
     print(f"\n종목 {len(raw)} / 전체 {len(all_dates)}일 (거래가능 {len(open_dates)}일)")
     print(f"  IS  {len(is_dates):>4}일 (거래가능 {is_open:>3}일) ~ {boundary.date()}")
     print(f"  OOS {len(oos_dates):>4}일 (거래가능 {len(open_dates)-is_open:>3}일)")
+    print(f"시드머니 {INIT:,.0f}원 / 최소주문 {C.MIN_ORDER_KRW:,}원 / "
+          f"슬롯당 비중상한 {C.MAX_POSITION_WEIGHT:.0%}")
     print(f"무작위 선택 {args.runs}회 평균. 절대수익은 생존편향으로 낙관 — 상대비교용.\n")
 
     axes: dict[str, list[tuple[str, dict]]] = {
-        "slots": [(f"슬롯 {n}", {"slots": n}) for n in (3, 5, 7, 10, 15)],
+        "slots": [(f"슬롯 {n} (종목당 {INIT * C.POSITION_RATIO / n:,.0f}원)", {"slots": n})
+                  for n in (3, 5, 7, 10, 15, 20)],
         "tp": [
             ("TP 현행 5/12%", {}),
             ("TP 없음(트레일만)", {"tp": [{"trigger_pct": 9.99, "sell_ratio": 1.0}]}),
@@ -261,14 +272,18 @@ async def main() -> int:
         # 단일요인 결과: 슬롯↑ 일관 개선 / TP 늦추기 일관 개선 /
         #               손절·ATR 신호 없음 / DC는 IS와 OOS가 반대(과최적화 함정) →
         # 뒤 두 축은 결합에서 제외한다. 격자 탐색이 아니라 근거 있는 2축 조합이다.
+        # 결합 검증은 **IS·OOS 방향이 일관된 축만** 묶는다 (슬롯↑ / TP 늦추기).
+        # 2026-08-24: 현행 TP 가 5.5/10 으로 바뀌어 기준선 라벨 갱신.
         "combo": [
-            ("현행 (슬롯5 TP5/12)", {}),
-            ("슬롯10 + TP없음", {"slots": 10, "tp": [{"trigger_pct": 9.99, "sell_ratio": 1.0}]}),
-            ("슬롯10 + TP15%", {"slots": 10, "tp": [{"trigger_pct": 0.15, "sell_ratio": 0.5},
-                                                     {"trigger_pct": 0.30, "sell_ratio": 0.5}]}),
-            ("슬롯15 + TP없음", {"slots": 15, "tp": [{"trigger_pct": 9.99, "sell_ratio": 1.0}]}),
-            ("슬롯15 + TP15%", {"slots": 15, "tp": [{"trigger_pct": 0.15, "sell_ratio": 0.5},
-                                                     {"trigger_pct": 0.30, "sell_ratio": 0.5}]}),
+            ("현행 (슬롯5 TP5.5/10)", {}),
+            ("슬롯10 + 현행TP", {"slots": 10}),
+            ("슬롯15 + 현행TP", {"slots": 15}),
+            ("슬롯10 + TP15/30", {"slots": 10, "tp": [{"trigger_pct": 0.15, "sell_ratio": 0.5},
+                                                       {"trigger_pct": 0.30, "sell_ratio": 0.5}]}),
+            ("슬롯15 + TP15/30", {"slots": 15, "tp": [{"trigger_pct": 0.15, "sell_ratio": 0.5},
+                                                       {"trigger_pct": 0.30, "sell_ratio": 0.5}]}),
+            ("슬롯20 + TP15/30", {"slots": 20, "tp": [{"trigger_pct": 0.15, "sell_ratio": 0.5},
+                                                       {"trigger_pct": 0.30, "sell_ratio": 0.5}]}),
         ],
     }
     todo = list(axes) if args.axis == "all" else [args.axis]
