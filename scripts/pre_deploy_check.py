@@ -3078,6 +3078,56 @@ def check_exit_reasons_classified() -> None:
             )
 
 
+# ══════════════════════════════════════════════════════════════════
+# 검증 N+12: 웹소켓 정상 끊김이 봇 자동중지로 번지지 않게 (2026-08-25)
+# ══════════════════════════════════════════════════════════════════
+
+def check_ws_error_not_cumulative() -> None:
+    """웹소켓 끊김 처리가 봇 오류 카운터를 오염하지 않는지 검증.
+
+    배경 (2026-08-25 실제 알람):
+        `웹소켓 오류: Cannot write to closing transport (연속 오류: 1/5)`
+        — 업비트가 연결을 정리할 때 aiohttp heartbeat 핑이 닫히는 소켓에 쓰면
+        나는 **정상 경로**인데 consecutive_errors 로 세고 있었다.
+        더 나쁜 건 reset 이 매수/매도 성공 경로에만 있어, 거래가 없는 날엔
+        "연속 오류"가 사실상 **누적 오류**가 된다 → 5회가 차면
+        `self.running = False` 로 봇이 멈춘다(실제 고장이 없는데도).
+
+    검증규칙:
+        1) is_benign_ws_error 가 정의되고 웹소켓 예외 분기에서 **호출**될 것
+        2) 틱 수신 경로에 _reset_errors() 호출이 있을 것
+           (오류 카운터가 거래 없이도 해소되는 유일한 경로)
+    """
+    f = PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py"
+    if not f.exists():
+        errors.append("[WS오류] realtime_monitor.py 없음")
+        return
+    txt = f.read_text(encoding="utf-8")
+
+    if not re.search(r"def is_benign_ws_error\(", txt):
+        errors.append(
+            "[WS오류] is_benign_ws_error 정의 없음 — 정상 끊김을 봇 오류로 세면 "
+            "거래 없는 날 카운터 누적으로 봇이 자동 중지된다"
+        )
+    # 정의만 하고 안 쓰면 사문화 — 호출 형태를 요구 (lessons #44 계열)
+    elif not re.search(r"if is_benign_ws_error\(", txt):
+        errors.append("[WS오류] is_benign_ws_error 가 정의만 되고 분기에서 호출되지 않음")
+
+    m = re.search(
+        r"^(?P<ind>[ \t]+)async def _run_websocket\([^)]*\)[^:\n]*:[ \t]*\n"
+        r"(?P<body>.*?)(?=^(?P=ind)(?:async )?def |\Z)",
+        txt, re.MULTILINE | re.DOTALL,
+    )
+    if not m:
+        errors.append("[WS오류] _run_websocket 정의를 찾지 못함 — 검증규칙 갱신 필요")
+        return
+    if not re.search(r"self\._reset_errors\(\)", m.group("body")):
+        errors.append(
+            "[WS오류] 웹소켓 수신 경로에 _reset_errors() 호출이 없다 — "
+            "오류 카운터가 체결 없이는 영원히 내려가지 않아 누적 중지로 이어진다"
+        )
+
+
 def main() -> None:
     print("=" * 50)
     print("배포 전 검증 (pre-deploy check)")
@@ -3150,6 +3200,7 @@ def main() -> None:
     check_slot_count_not_hardcoded()
     check_slot_min_order_margin()
     check_exit_reasons_classified()
+    check_ws_error_not_cumulative()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")

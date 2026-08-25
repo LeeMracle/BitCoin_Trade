@@ -114,6 +114,27 @@ ERROR_COOLDOWN_SEC = 60        # 오류 발생 후 동일 종목 재시도 대�
 ALERT_COOLDOWN_SEC = 300       # 동일 오류 알림 간격 (5분)
 WS_RECONNECT_BASE = 5          # 웹소켓 재연결 초기 대기 (초)
 WS_RECONNECT_MAX = 60          # 웹소켓 재연결 최대 대기 (초)
+# 웹소켓 끊김은 업비트 쪽 정기 종료로 **정상 발생**한다.
+# 1시간에 이 횟수를 넘어야 이상으로 본다.
+WS_DISCONNECT_ALERT_PER_HOUR = 10
+
+
+def is_benign_ws_error(exc: BaseException) -> bool:
+    """웹소켓 예외가 "정상 끊김"인가 (2026-08-25).
+
+    업비트는 연결을 주기적으로 정리한다. 그때 aiohttp 가 heartbeat=30 핑을
+    이미 닫히는 중인 소켓에 쓰면 `Cannot write to closing transport` 가 난다.
+    재연결하면 끝이므로 봇 오류(consecutive_errors)로 세면 안 된다 —
+    reset 이 매수/매도 성공 경로에만 있어서 거래 없는 날엔 누적되기만 하고,
+    5회가 차면 `self.running = False` 로 봇이 멈췔버린다.
+
+    반대로 예상 밖 예외(파싱 오류·코드 버그)는 그대로 세서 중지시켜야 한다.
+    """
+    return isinstance(exc, (
+        aiohttp.ClientConnectionError,   # ClientConnectionResetError / ServerDisconnectedError 포함
+        ConnectionResetError,
+        asyncio.TimeoutError,
+    )) or "closing transport" in str(exc)
 
 
 VR_STATE_FILE = Path(__file__).resolve().parents[2] / "workspace" / "vol_reversal_dryrun_state.json"
@@ -141,6 +162,9 @@ class RealtimeMonitor:
         self._load_ema_trend_state()
         # 안전장치
         self.consecutive_errors = 0
+        # 웹소켓 끊김 추적 (2026-08-25) — 정상 끊김을 봇 오류로 세지 않도록
+        # 별도 카운터로 분리. 빈도가 비정상일 때만 알림을 올린다.
+        self._ws_disconnects: list[float] = []
         # v2 필터 캐시 (레벨 갱신 시 1회 조회)
         self._fg_value: "float | None" = None
         self._btc_above_ema: bool = True
@@ -967,6 +991,11 @@ class RealtimeMonitor:
                             if msg.type == aiohttp.WSMsgType.BINARY:
                                 data = json.loads(msg.data.decode("utf-8"))
                                 self._last_msg_ts = _time.monotonic()  # P7-07
+                                # 실제 틱 수신 = 연결이 살아있다 → 오류 카운터 리셋.
+                                # 기존 reset 은 매수/매도 성공 경로에만 있어서 거래가 없는 날엔
+                                # "연속 오류"가 사실상 **누적 오류**였다 (2026-08-25).
+                                if self.consecutive_errors:
+                                    self._reset_errors()
                                 await self._handle_tick(data)
 
                                 # heartbeat: 2분마다 /tmp/bata_heartbeat touch + systemd watchdog
@@ -1005,8 +1034,27 @@ class RealtimeMonitor:
                                     break
 
             except Exception as e:
-                print(f"웹소켓 오류: {e}")
-                await self._handle_error("ws_connect", f"웹소켓 오류: {e}\n{UPBIT_WS_URL}")
+                # 정상 끊김과 진짜 고장을 구분한다 (2026-08-25).
+                # `Cannot write to closing transport` 는 aiohttp 가 heartbeat=30 핑을
+                # **이미 닫히는 중인** 소켓에 쓸 때 나온다 — 서버가 연결을
+                # 정리하는 정상 경로다(재연결하면 끝).
+                # 이걸 consecutive_errors 로 세면, reset 이 매수/매도 성공에만 있어서
+                # 거래 없는 날엔 카운터가 누적되기만 해 결국 5/5 로 봇이 자동 중지된다.
+                if is_benign_ws_error(e):
+                    _now_m = _time.monotonic()
+                    self._ws_disconnects = [t for t in self._ws_disconnects
+                                            if _now_m - t < 3600]
+                    self._ws_disconnects.append(_now_m)
+                    n_h = len(self._ws_disconnects)
+                    print(f"웹소켓 끊김(정상 범위): {e} — 최근 1시간 {n_h}회", flush=True)
+                    if n_h >= WS_DISCONNECT_ALERT_PER_HOUR:
+                        await self._handle_error(
+                            "ws_flapping",
+                            f"웹소켓 재연결 빈발: 1시간 {n_h}회\n{UPBIT_WS_URL}",
+                        )
+                else:
+                    print(f"웹소켓 오류: {e}")
+                    await self._handle_error("ws_connect", f"웹소켓 오류: {e}\n{UPBIT_WS_URL}")
 
             if self.running:
                 print(f"{reconnect_delay}초 후 재연결...")
