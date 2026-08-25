@@ -1965,17 +1965,35 @@ def check_consec_loss_floor_consistency() -> None:
     pa = PROJECT_ROOT / "services" / "reporting" / "periodic_analysis.py"
     rm = PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py"
     missing: list[str] = []
+    bodies: dict[str, str] = {}
     if pa.exists():
         txt = pa.read_text(encoding="utf-8")
         # check_consec_loss 함수 본문에 floor 참조 존재
         m = re.search(r"def check_consec_loss\(.*?\n(.*?)(?=\ndef |\Z)", txt, re.S)
-        if not (m and "consec_loss_floor_date" in m.group(1)):
+        bodies["periodic_analysis.check_consec_loss"] = m.group(1) if m else ""
+        # 주석에 이름만 적혀 있어도 통과하면 안 된다 — 실제 조회 형태를 요구
+        # (2026-08-25 역방향 테스트에서 floor 대입을 지워도 위 주석 때문에 통과했다)
+        _floor_call = re.search(r"get\([\"']consec_loss_floor_date[\"']\)", m.group(1)) if m else None
+        if not _floor_call:
             missing.append("periodic_analysis.check_consec_loss")
     if rm.exists():
         txt = rm.read_text(encoding="utf-8")
         m = re.search(r"def _get_consec_loss\(.*?\n(.*?)(?=\n    def |\Z)", txt, re.S)
-        if not (m and "consec_loss_floor_date" in m.group(1)):
+        bodies["realtime_monitor._get_consec_loss"] = m.group(1) if m else ""
+        _floor_call = re.search(r"get\([\"']consec_loss_floor_date[\"']\)", m.group(1)) if m else None
+        if not _floor_call:
             missing.append("realtime_monitor._get_consec_loss")
+    # 2026-08-25: 수동 개입 청산 제외도 두 경로가 **함께** 적용돼야 한다.
+    # 한쪽만 적용하면 보고서의 연패와 실제 매수 차단이 갈린다 (경로 A/B 불일치, lessons #38).
+    # 주석 언급만으로 통과하지 않도록 **호출 형태**를 요구한다 (동일 유형 5회째).
+    no_manual = [name for name, body in bodies.items()
+                 if not re.search(r"counts_for_consec_loss\s*\(", body)]
+    if no_manual:
+        errors.append(
+            f"[연패-수동제외] counts_for_consec_loss 미적용: {no_manual} — "
+            f"사용자 개입 청산(weight_trim/manual_tp_user)의 손실이 5연패 브레이커를 "
+            f"오발동시킨다. 두 산정 함수가 같은 판정을 써야 한다 (lessons #38)"
+        )
     if missing:
         errors.append(
             f"[연패-floor] consec_loss_floor_date 필터 누락: {missing} — "

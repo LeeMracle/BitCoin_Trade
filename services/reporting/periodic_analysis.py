@@ -43,9 +43,14 @@ def check_consec_loss(state: dict,
     Returns:
         (consec_loss, total_trades, wins) — 모두 현재 전략 기간 한정
     """
+    from services.execution.trade_class import (
+        split as _split, counts_for_consec_loss, in_window,
+    )
     closed = state.get("closed_trades", [])
     strategy_start = state.get("strategy_start", strategy_default_start)
-    current = [t for t in closed if t.get("exit_date", "") >= strategy_start]
+    # 누적 통계(n/wins)는 **전략 청산만** — build_strategy_summary 및 5연패 알람의
+    # 승률 표시가 같은 값을 쓰도록 (2026-08-25, 교훈 #19/#38 경로 A/B 일치).
+    current = _split(closed, strategy_start)["strategy"]
     n = len(current)
     wins = sum(1 for t in current if t.get("return_pct", 0) > 0)
     # ── 연패 카운트 floor (lessons #38, 2026-06-07) ──
@@ -53,10 +58,14 @@ def check_consec_loss(state: dict,
     # consec_loss_floor_date 이후(>) 거래로 한정. 옛 원인(저유동성 알트 등)
     # 제거 후 cooldown을 근본 해제할 때 사용 — cooldown_until만 리셋하면
     # 매 cycle closed_trades 재계산으로 재설정되는 함정 차단.
+    # 연패 산정 풀은 통계와 다르다 — 미분류(unknown)까지 포함해 안전한 쪽으로 튼다.
+    # 사용자 개입 청산(manual/repair)은 제외: 브레이커는 "전략이 망가졌을 때" 멈추는
+    # 장치이므로, 비중 축소나 지시 매도의 손실로 72h 매수 중단이 걸리면 오작동이다.
     floor = state.get("consec_loss_floor_date")
-    consec_pool = current
+    consec_pool = [t for t in in_window(closed, strategy_start)
+                   if counts_for_consec_loss(t)]
     if floor:
-        consec_pool = [t for t in current if t.get("exit_date", "") > floor]
+        consec_pool = [t for t in consec_pool if t.get("exit_date", "") > floor]
     consec = 0
     for t in reversed(consec_pool):
         if t.get("return_pct", 0) <= 0:

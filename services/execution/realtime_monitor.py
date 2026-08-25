@@ -2064,10 +2064,17 @@ class RealtimeMonitor:
         # 써서 연패 산정이 갈린다 (lessons #38이 지적한 경로 A/B 불일치).
         from services.reporting.periodic_analysis import _DEFAULT_STRATEGY_START
         strategy_start = self.state.get("strategy_start", _DEFAULT_STRATEGY_START)
-        current_trades = [t for t in closed if t.get("exit_date", "") >= strategy_start]
+        # 사용자 개입 청산은 연패 산정에서 제외 (2026-08-25 사용자 결정).
+        # 브레이커는 "전략이 망가졌을 때" 매수를 멈추는 장치다. 비중 축소(weight_trim)나
+        # 지시 매도(manual_tp_user)의 손실로 72h 중단이 걸리면 오작동이다.
+        # 미분류(unknown)는 **포함**한다 — 통계 경로와 반대 방향으로 튼 것이며 의도적이다
+        # (services/execution/trade_class.counts_for_consec_loss 참조).
+        # check_consec_loss(periodic_analysis)와 반드시 같은 판정을 써야 한다 (lessons #38).
+        from services.execution.trade_class import counts_for_consec_loss, in_window
+        current_trades = [t for t in in_window(closed, strategy_start)
+                          if counts_for_consec_loss(t)]
         # ── 연패 카운트 floor (lessons #38, 2026-06-07) ──
-        # check_consec_loss(periodic_analysis)와 동일 로직 — consec_loss_floor_date
-        # 이후(>) 거래만 연패 산정. cooldown 근본 해제 시 재설정 함정 차단.
+        # consec_loss_floor_date 이후(>) 거래만 연패 산정. cooldown 근본 해제 시 재설정 함정 차단.
         floor = self.state.get("consec_loss_floor_date")
         if floor:
             current_trades = [t for t in current_trades if t.get("exit_date", "") > floor]

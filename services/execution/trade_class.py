@@ -107,3 +107,30 @@ def non_strategy_note(parts: dict[str, list[dict]]) -> str:
             s = summarize(parts[kind])
             bits.append(f"{label} {s['n']}건({s['sum_ret']:+.1f}%)")
     return ("ⓘ 표본 제외: " + " / ".join(bits)) if bits else ""
+
+
+def counts_for_consec_loss(trade: dict) -> bool:
+    """연패(5연패 자동 중단) 산정에 포함할 청산인가.
+
+    ## 통계 경로와 일부러 다르게 판정한다
+
+    | | 통계(검증 표본) | 연패 카운터(안전장치) |
+    |---|---|---|
+    | strategy | 포함 | 포함 |
+    | manual / repair | **제외** | **제외** |
+    | **unknown** | **제외** | **포함** |
+
+    `unknown` 의 처리가 갈리는 것은 실수가 아니라 **각 경로가 안전한 쪽으로 틀리도록**
+    맞춘 것이다:
+
+    - 통계에서 미분류를 포함하면 전략 성적이 **부풀 수** 있다 → 제외해서 과소평가 쪽으로.
+    - 안전장치에서 미분류를 제외하면 브레이커가 **안 걸릴 수** 있다 → 포함해서 민감한 쪽으로.
+
+    즉 새 매도 경로를 만들고 `trade_class` 등록을 잊었을 때,
+    "성적이 좋아 보이는데 브레이커가 안 걸린다"는 최악 조합이 나오지 않는다.
+
+    manual 을 빼는 이유(2026-08-25 사용자 결정): 연패 브레이커는 **전략이 망가졌을 때**
+    매수를 멈추는 장치다. 사람이 비중을 줄이거나(weight_trim) 지시로 정리한 손실은
+    전략의 실패가 아니므로, 이걸로 72시간 매수 중단이 걸리면 오작동이다.
+    """
+    return classify(trade) in (STRATEGY, UNKNOWN)
