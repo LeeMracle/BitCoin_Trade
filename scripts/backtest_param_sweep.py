@@ -28,6 +28,14 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+# Windows 리다이렉션 시 stdout 이 cp949 로 잡혀 em-dash 출력에서
+# UnicodeEncodeError 로 죽는다 (2026-08-25 측정 30분 날림). 결과표 직전에 죽어
+# 로드 시간만 소모하므로 진입 시점에 고정한다.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
@@ -178,7 +186,7 @@ async def main() -> int:
     ap.add_argument("--capital", type=float, default=None,
                     help="시드머니 override (기본: config.CIRCUIT_BREAKER_INITIAL_CAPITAL)")
     ap.add_argument("--axis", default="all",
-                    choices=["all", "slots", "tp", "tp55", "tp2", "stop", "dc", "combo"])
+                    choices=["all", "slots", "slotcap", "slot20", "tp", "tp55", "tp2", "stop", "dc", "combo"])
     args = ap.parse_args()
 
     if args.capital:
@@ -234,6 +242,30 @@ async def main() -> int:
     axes: dict[str, list[tuple[str, dict]]] = {
         "slots": [(f"슬롯 {n} (종목당 {INIT * C.POSITION_RATIO / n:,.0f}원)", {"slots": n})
                   for n in (3, 5, 7, 10, 15, 20)],
+        # 슬롯 확대 시 비중 상한(MAX_POSITION_WEIGHT)을 함께 조여야 하는가.
+        # ADR 20260823-2 검증룰은 상한 <= 1.5/슬롯 을 요구한다(상한이 무의미해지는 것 방지).
+        # 2026-08-24 slots 축은 상한을 20% 로 **고정**한 채 측정했으므로, 룰을 지킨
+        # 조합(슬롯10=15%, 슬롯15=10%)이 같은 개선을 유지하는지 별도로 본다.
+        # 상한은 "빈 슬롯이 적을 때"만 구속되므로 차이가 작을 것으로 예상하나,
+        # 예상은 근거가 아니다.
+        "slotcap": [
+            ("현행 슬롯5 상한20%", {"slots": 5, "weight": 0.20}),
+            ("슬롯10 상한20%", {"slots": 10, "weight": 0.20}),
+            ("슬롯10 상한15%(룰)", {"slots": 10, "weight": 0.15}),
+            ("슬롯10 상한10%(균등)", {"slots": 10, "weight": 0.10}),
+            ("슬롯15 상한20%", {"slots": 15, "weight": 0.20}),
+            ("슬롯15 상한10%(룰)", {"slots": 15, "weight": 0.10}),
+            ("슬롯15 상한6.7%(균등)", {"slots": 15, "weight": 1 / 15}),
+        ],
+        # 사용자 결정(2026-08-25): 슬롯 20. 인수인계 §2-3 은 20을 위험으로 봤으므로
+        # 최소한 **룰을 지킨 상한**(<=1.5/20 = 7.5%)에서 개선이 유지되는지는 확인한다.
+        "slot20": [
+            ("현행 슬롯5 상한20%", {"slots": 5, "weight": 0.20}),
+            ("슬롯15 상한10%(룰)", {"slots": 15, "weight": 0.10}),
+            ("슬롯20 상한20%(08-24 재현)", {"slots": 20, "weight": 0.20}),
+            ("슬롯20 상한7.5%(룰)", {"slots": 20, "weight": 0.075}),
+            ("슬롯20 상한5%(균등)", {"slots": 20, "weight": 0.05}),
+        ],
         "tp": [
             ("TP 현행 5/12%", {}),
             ("TP 없음(트레일만)", {"tp": [{"trigger_pct": 9.99, "sell_ratio": 1.0}]}),

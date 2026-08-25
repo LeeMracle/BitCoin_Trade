@@ -231,7 +231,9 @@ class TelegramCommandHandler:
         msg = f"📊 *현재 상태*\n\n"
         msg += f"KRW 잔고: {krw:,.0f}\n"
         msg += f"총 평가: {total:,.0f}\n"
-        msg += f"보유: {len(positions)}/5\n"
+        # 교훈 #19: 슬롯 수 리터럴 금지 (2026-08-25 5→20 확대 시 적발)
+        from services.execution.config import MAX_POSITIONS as _MAXPOS
+        msg += f"보유: {len(positions)}/{_MAXPOS}\n"
 
         if positions:
             msg += "\n*보유 종목:*\n"

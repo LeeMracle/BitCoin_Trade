@@ -131,7 +131,9 @@ def _build_report() -> str:
     closed = multi.get("closed_trades", [])
 
     lines.append(f"📈 *스윙 (composite)*")
-    lines.append(f"  보유: {len(positions)}/5종목")
+    # 교훈 #19: 슬롯 수 리터럴 금지 (2026-08-25 5→20 확대 시 적발)
+    from services.execution.config import MAX_POSITIONS as _MAXPOS
+    lines.append(f"  보유: {len(positions)}/{_MAXPOS}종목")
 
     if positions:
         for sym, pos in positions.items():

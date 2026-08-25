@@ -2876,6 +2876,84 @@ def check_stats_window_consistency() -> None:
             )
 
 
+# ═══════════════════════════════════════════════════════════════════
+# 검증 N+9: 슬롯 수 리터럴 금지 (ADR 20260825-1 / 교훈 #19)
+# ═══════════════════════════════════════════════════════════════════
+
+def check_slot_count_not_hardcoded() -> None:
+    """보유 슬롯 표시의 분모가 리터럴로 박혀 있지 않은지 검증.
+
+    배경 (2026-08-25 ADR 20260825-1 작업 중 실제 적발):
+        MAX_POSITIONS 를 5→20 으로 바꿀 때, 알림/보고 경로 3곳이
+        `f"보유 {len(positions)}/5"` 처럼 분모를 리터럴로 들고 있었다
+        (realtime_monitor 정기분석 / daily_report / telegram_bot `/status`).
+        동작에는 영향이 없지만 운영자가 보는 숫자가 거짓이 된다
+        ("보유 7/5") — 교훈 #19(상수 자체정의)의 표시 버전.
+
+    검증규칙:
+        운영 경로 파일에서 `len(positions)}/<숫자>` 패턴을 금지.
+        분모는 반드시 config 상수(MAX_POSITIONS)여야 한다.
+    """
+    targets = [
+        "services/execution/realtime_monitor.py",
+        "services/execution/multi_trader.py",
+        "services/execution/telegram_bot.py",
+        "scripts/daily_report.py",
+        "scripts/daily_check.py",
+    ]
+    pat = re.compile(r"len\(positions\)\}\s*/\s*\d")
+    for rel in targets:
+        f = PROJECT_ROOT / rel
+        if not f.exists():
+            continue
+        for i, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+            if pat.search(line):
+                errors.append(
+                    f"[교훈 #19] {rel}:{i} 슬롯 수가 리터럴로 박혔다 — "
+                    f"MAX_POSITIONS 변경 시 표시가 따라오지 않는다: {line.strip()}"
+                )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 검증 N+10: 슬롯 수 x 최소주문 마진 (ADR 20260825-1 / ADR 20260516-1 dust)
+# ═══════════════════════════════════════════════════════════════════
+
+def check_slot_min_order_margin() -> None:
+    """슬롯 수가 부분 익절을 유지할 수 있는 범위인지 검증.
+
+    배경:
+        realtime_monitor `_check_tp_levels` 는 TP 매도금이 MIN_ORDER_KRW 미달이면
+        "잔량 마지막 단계로 통합" — 즉 **부분 익절이 전량 매도로 격하**된다.
+        ADR 20260516-1이 슬롯을 10→5로 줄인 이유가 정확히 이 dust 문제였다.
+
+    검증규칙:
+        슬롯당 목표 금액(기준자본 x POSITION_RATIO / MAX_POSITIONS)이
+        최소 부분매도 금액(MIN_ORDER_KRW / 최소 sell_ratio)을 넘어야 한다.
+        TP1 이 50% 매도면 포지션 >= MIN_ORDER_KRW * 2 이어야 한다는 뜻.
+    """
+    try:
+        sys.path.insert(0, str(PROJECT_ROOT))
+        from services.execution import config as _C
+    except Exception as e:  # pragma: no cover
+        errors.append(f"[ADR 20260825-1] config 로드 실패: {e}")
+        return
+
+    if not getattr(_C, "TP_ENABLED", False):
+        return
+    ratios = [t["sell_ratio"] for t in _C.TP_LEVELS if t.get("sell_ratio", 0) > 0]
+    if not ratios:
+        return
+    need_position = _C.MIN_ORDER_KRW / min(ratios)
+    per_slot = _C.CIRCUIT_BREAKER_INITIAL_CAPITAL * _C.POSITION_RATIO / _C.MAX_POSITIONS
+    if per_slot < need_position:
+        errors.append(
+            f"[ADR 20260825-1] 슬롯 {_C.MAX_POSITIONS}개 — 슬롯당 {per_slot:,.0f}원 < "
+            f"부분익절 유지 하한 {need_position:,.0f}원 "
+            f"(TP 최소 매도비율 {min(ratios):.0%}, 최소주문 {_C.MIN_ORDER_KRW:,}원). "
+            f"이 상태면 TP가 전량 매도로 격하된다 (ADR 20260516-1 dust 재발)"
+        )
+
+
 def main() -> None:
     print("=" * 50)
     print("배포 전 검증 (pre-deploy check)")
@@ -2945,6 +3023,8 @@ def main() -> None:
     check_validation_baseline()
     check_position_weight_cap()
     check_stats_window_consistency()
+    check_slot_count_not_hardcoded()
+    check_slot_min_order_margin()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")

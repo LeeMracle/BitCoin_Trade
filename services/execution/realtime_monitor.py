@@ -854,7 +854,9 @@ class RealtimeMonitor:
         msg += market_msg
 
         # 포지션
-        msg += f"\n*보유 {len(positions)}/5*\n"
+        # 교훈 #19: 슬롯 수를 리터럴로 박으면 config 변경이 표시에 반영되지 않는다
+        # (2026-08-25 슬롯 5→20 확대 시 적발)
+        msg += f"\n*보유 {len(positions)}/{MAX_POSITIONS}*\n"
         if positions:
             for sym, pos in positions.items():
                 price = self.levels.get(sym, {}).get("close", 0)

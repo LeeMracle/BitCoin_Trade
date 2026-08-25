@@ -53,6 +53,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--date", default=DEFAULT_DATE, help="새 기준일 (YYYY-MM-DD)")
     ap.add_argument("--apply", action="store_true")
+    ap.add_argument("--reason", default=None,
+                    help="리셋 사유 (state.baseline_reset_note 에 기록). 미지정 시 ADR 20260823-1 사유)")
     args = ap.parse_args()
 
     try:
@@ -115,7 +117,9 @@ def main() -> int:
     state["consec_loss_floor_date"] = args.date
     state["regime_open_days"] = 0
     state.pop("regime_open_last_date", None)
-    state["baseline_reset_note"] = (
+    # 리셋은 사유가 매번 다르다(버그 오염 / 파라미터 변경).
+    # 기본문구를 그대로 남기면 나중에 "왜 이 날짜인가"를 다시 헤맨다.
+    state["baseline_reset_note"] = args.reason or (
         f"ADR 20260823-1: lessons #40~#43 실행버그 + 파라미터 반복변경으로 "
         f"{old_start} 창 폐기. 이력은 closed_trades에 보존."
     )
