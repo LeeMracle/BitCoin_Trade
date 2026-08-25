@@ -2954,6 +2954,112 @@ def check_slot_min_order_margin() -> None:
         )
 
 
+# ═══════════════════════════════════════════════════════════════════
+# 검증 N+11: 청산 사유 분류 누락 (2026-08-25 / ADR 20260823-1)
+# ═══════════════════════════════════════════════════════════════════
+
+def check_exit_reasons_classified() -> None:
+    """코드가 만드는 모든 exit_reason 이 trade_class 에 분류돼 있는지 검증.
+
+    배경 (2026-08-25):
+        검증 표본(ADR 20260823-1, 30건)은 **전략이 설계대로 도는가**를 보는 장치다.
+        그런데 같은 closed_trades 에 사용자 지시 매도(manual_tp_user)와
+        상태 보정(auto_cleanup_zero_balance)이 섞여 들어온다.
+        실측: 08-25 검증 창에 JUP(manual_tp_user) + STX(tp2_full_exit) →
+        합치면 "2건 승률 100%"이지만 전략 기여는 절반이다.
+
+    검증규칙:
+        `_close_position(..., "<사유>")` 와 `"exit_reason": "<사유>"` 로 등장하는
+        모든 리터럴이 trade_class 의 STRATEGY/MANUAL/REPAIR 중 하나에 있어야 한다.
+        미분류 사유는 unknown 으로 떨어져 전략 성적에서는 빠지지만,
+        새 전략 매도 경로를 추가하고 등록을 잊으면 **표본이 조용히 줄어든다**.
+    """
+    try:
+        sys.path.insert(0, str(PROJECT_ROOT))
+        from services.execution.trade_class import (
+            STRATEGY_EXIT_REASONS, MANUAL_EXIT_REASONS, REPAIR_EXIT_REASONS,
+        )
+    except Exception as e:
+        errors.append(f"[청산분류] trade_class 로드 실패: {e}")
+        return
+    known = set(STRATEGY_EXIT_REASONS) | set(MANUAL_EXIT_REASONS) | set(REPAIR_EXIT_REASONS)
+
+    targets = [
+        "services/execution/realtime_monitor.py",
+        "services/execution/multi_trader.py",
+        "scripts/manual_close_position.py",
+        "scripts/fix_state_balance_mismatch.py",
+        "scripts/backfill_realized_pl.py",
+    ]
+    def _reason_args(txt: str) -> set[str]:
+        """`_close_position(...)` 호출의 **마지막** 문자열 인자만 뽑는다.
+
+        단순 정규식은 `rebuilt["last_exec_price"]` 같은 **딕셔너리 키**를 사유로
+        오인한다 (초안 룰이 실제로 이 오탐을 냈다). 괄호 균형을 세어 호출 범위를
+        확정한 뒤, 그 안의 마지막 리터럴을 사유로 본다.
+        """
+        out: set[str] = set()
+        lit = re.compile(r"\"([a-z][a-z0-9_]*)\"")
+        for m in re.finditer(r"_close_position\(", txt):
+            i, depth = m.end(), 1
+            while i < len(txt) and depth:
+                if txt[i] == "(":
+                    depth += 1
+                elif txt[i] == ")":
+                    depth -= 1
+                i += 1
+            names = lit.findall(txt[m.end():i])
+            if names:
+                out.add(names[-1])
+        return out
+
+    pats = [
+        re.compile(r"\"exit_reason\"\s*:\s*\"([a-z][a-z0-9_]*)\""),
+        re.compile(r"--reason\"[^)]*?default=\"([a-z][a-z0-9_]*)\"", re.DOTALL),
+    ]
+    found: set[str] = set()
+    for rel in targets:
+        f = PROJECT_ROOT / rel
+        if not f.exists():
+            continue
+        txt = f.read_text(encoding="utf-8")
+        found.update(_reason_args(txt))
+        for pat in pats:
+            found.update(pat.findall(txt))
+    # f-string 으로 조립되는 tp{idx+1}_full_exit 는 정규식으로 잡힐 수 없다 —
+    # TP 단계가 늘어나면 수동 등록이 필요하므로 명시적으로 확인한다.
+    try:
+        from services.execution.config import TP_LEVELS
+        for i in range(1, len(TP_LEVELS) + 1):
+            found.add(f"tp{i}_full_exit")
+    except Exception:
+        pass
+
+    missing = sorted(r for r in found if r not in known)
+    if missing:
+        errors.append(
+            "[청산분류] trade_class 에 등록되지 않은 exit_reason: "
+            + ", ".join(missing)
+            + " — 미분류는 검증 표본에서 제외되므로 전략 성적이 조용히 줄어든다"
+        )
+
+    # 집계 경로가 분류기를 실제로 쓰는지 (주석만 달고 통과하면 안 된다)
+    for rel in ("scripts/daily_report.py", "services/reporting/periodic_analysis.py"):
+        f = PROJECT_ROOT / rel
+        if not f.exists():
+            continue
+        txt = f.read_text(encoding="utf-8")
+        # 주석에 "trade_class" 를 언급하기만 해도 통과하면 안 된다 — 실제 import 를 요구한다.
+        # (2026-08-25 역방향 테스트에서 초안 룰이 정확히 이 주석에 속았다. 동일 유형 4회째)
+        imported = re.search(r"from\s+services\.execution\.trade_class\s+import", txt)
+        used = re.search(r"(_split|split)\(closed", txt)
+        if not imported or not used:
+            errors.append(
+                f"[청산분류] {rel} 이 trade_class 분류기를 쓰지 않는다 — "
+                f"수동 매도가 전략 승률에 섞인다 (08-25 실제 발생)"
+            )
+
+
 def main() -> None:
     print("=" * 50)
     print("배포 전 검증 (pre-deploy check)")
@@ -3025,6 +3131,7 @@ def main() -> None:
     check_stats_window_consistency()
     check_slot_count_not_hardcoded()
     check_slot_min_order_margin()
+    check_exit_reasons_classified()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")

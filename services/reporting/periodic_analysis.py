@@ -88,11 +88,15 @@ def build_strategy_summary(state: dict,
     except Exception:
         days_elapsed = -1
 
-    current = [t for t in closed if t.get("exit_date", "") >= strategy_start]
-    n = len(current)
-    wins = sum(1 for t in current if t.get("return_pct", 0) > 0)
-    win_rate = wins / n * 100 if n > 0 else 0
-    avg_ret = sum(t.get("return_pct", 0) for t in current) / n if n > 0 else 0
+    # 검증 표본은 **전략이 낸 청산만** 센다 (2026-08-25).
+    # 같은 closed_trades 에 사용자 지시 매도(manual_tp_user)와 상태 보정
+    # (auto_cleanup_zero_balance)이 섞여 들어오는데, 이들을 합쳐 세면
+    # "30건 표본"이 전략 성적이 아니게 된다. 분류는 trade_class 단일 출처.
+    from services.execution.trade_class import split as _split, summarize as _sum, non_strategy_note
+    parts = _split(closed, strategy_start)
+    current = parts["strategy"]
+    st = _sum(current)
+    n, wins, win_rate, avg_ret = st["n"], st["wins"], st["win_rate"], st["avg_ret"]
     consec, _, _ = check_consec_loss(state, strategy_default_start)
 
     # 거래 "가능"했던 날 — 레짐 게이트(BTC>EMA200)가 열려 있던 일수.
@@ -102,10 +106,13 @@ def build_strategy_summary(state: dict,
     open_days = state.get("regime_open_days", 0)
 
     lines = [
-        f"검증 {days_elapsed}일차 (거래가능 {open_days}일) — 거래 {n}건 "
+        f"검증 {days_elapsed}일차 (거래가능 {open_days}일) — 전략 거래 {n}건 "
         f"(목표: 승률 {_BACKTEST_TARGET_WINRATE}%+, 평균 +{_BACKTEST_TARGET_AVG_RET}%+)",
         f"실제: 승률 {win_rate:.0f}% | 평균 {avg_ret:+.1f}% | 연속손실 {consec}건",
     ]
+    _note = non_strategy_note(parts)
+    if _note:
+        lines.append(_note)
 
     # ── 판정은 달력이 아니라 표본 수 기준 ──
     # 레짐 게이트가 닫혀 있으면 시간만 흐르고 거래는 안 쌓인다. 시간 기반 판정은

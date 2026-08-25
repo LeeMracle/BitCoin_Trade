@@ -149,17 +149,27 @@ def _build_report() -> str:
     # 교훈 #19/#38의 경로 A/B 불일치 — 집계 로직은 한 곳에서만 정의한다.
     from services.reporting.periodic_analysis import _DEFAULT_STRATEGY_START
     _start = multi.get("strategy_start", _DEFAULT_STRATEGY_START)
-    current = [t for t in closed if str(t.get("exit_date", "")) >= str(_start)]
+    # 전략 성적과 사람이 개입한 청산을 분리한다 (2026-08-25).
+    # 합쳐 세면 "승률 100%"가 나오는데 그 절반이 사용자 지시 매도인 상황이
+    # 실제로 발생했다 (JUP manual_tp_user + STX tp2_full_exit).
+    from services.execution.trade_class import split as _split, summarize as _sum
+    _parts = _split(closed, _start)
+    current = _parts["strategy"]
+    _st = _sum(current)
 
-    if current:
-        wins = sum(1 for t in current if t.get("return_pct", 0) > 0)
-        total_ret = sum(t.get("return_pct", 0) for t in current)
-        lines.append(f"  거래: {len(current)}회 | 승률: {wins}/{len(current)} ({wins*100//len(current)}%)")
-        lines.append(f"  누적수익: {total_ret:+.1f}%")
+    if _st["n"]:
+        lines.append(f"  전략 거래: {_st['n']}회 | 승률: {_st['wins']}/{_st['n']} "
+                     f"({_st['win_rate']:.0f}%)")
+        lines.append(f"  누적수익: {_st['sum_ret']:+.1f}%")
     else:
-        lines.append(f"  거래: 0회 (기준일 {_start} 이후)")
-    if len(closed) > len(current):
-        lines.append(f"  ⓘ 기준일 이전 {len(closed)-len(current)}건은 집계 제외 (ADR 20260823-1)")
+        lines.append(f"  전략 거래: 0회 (기준일 {_start} 이후)")
+    for _kind, _label in (("manual", "수동 개입"), ("repair", "상태 보정"), ("unknown", "미분류")):
+        if _parts[_kind]:
+            _s = _sum(_parts[_kind])
+            lines.append(f"  ⓘ {_label}: {_s['n']}회 ({_s['sum_ret']:+.1f}%) — 표본 제외")
+    _in_window = sum(len(v) for v in _parts.values())
+    if len(closed) > _in_window:
+        lines.append(f"  ⓘ 기준일 이전 {len(closed)-_in_window}건은 집계 제외 (ADR 20260823-1)")
 
     # ── plan 20260503 P1 (AC16): 정기 분석 함수 추출 ──
     # services/reporting/periodic_analysis.build_strategy_summary 사용 → lessons #19 분산 해소

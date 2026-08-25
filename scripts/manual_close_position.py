@@ -157,6 +157,21 @@ def main() -> int:
     print(f"  실현손익 반영: {net:+,.0f}원 "
           f"(누적 {float(pos['realized_pl_krw']):,.0f}원)")
 
+    # 일일 손익 한도(3%)에도 반영한다 (2026-08-25 적발).
+    # 봇의 TP/손절 경로는 daily_pl.record_sell 을 부르는데 이 스크립트가 빠뜨려서,
+    # 08-25 수동 거래 2건(JUP +1,724 / OP -5,768)이 한도 계산에서 통째로 누락됐다.
+    # 한도는 "오늘 얼마를 잃었나"를 보는 장치이므로 누가 팔았는지와 무관하게 집계해야 한다.
+    # 산식은 봇과 동일하게 (체결가 - 진입가) x 수량 — 수수료 미포함 (services/execution/daily_pl.py)
+    try:
+        from services.execution import daily_pl as _dpl
+        _pl_gross = (exec_price - entry) * filled
+        _st = _dpl.record_sell(args.symbol, _pl_gross, exec_price, filled)
+        # 교훈 #12: .get(key, default) 는 값이 None 이면 default 가 무시된다 → 포매팅 크래시
+        _today = float(_st.get("realized_pl_krw") or 0.0)
+        print(f"  일일손익 반영: {_pl_gross:+,.0f}원 (오늘 누계 {_today:+,.0f}원)")
+    except Exception as e:  # 한도 기록 실패가 청산 자체를 막으면 안 된다
+        print(f"  [경고] 일일손익 기록 실패: {e} — 한도 계산에서 이 거래가 빠진다")
+
     left_qty = max(total - filled, 0.0)
     if full or left_qty * exec_price < POSITION_DUST_KRW:
         ret = position_return_pct(pos, fallback_price=exec_price)
