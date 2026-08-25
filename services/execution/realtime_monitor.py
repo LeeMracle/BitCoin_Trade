@@ -1458,7 +1458,8 @@ class RealtimeMonitor:
                             )
                             _ml_score = 0.0
                             _ml_exception = True
-                        _ml_pass = _ml_flt.passes(_ml_score) and not _ml_exception
+                        # shadow 중엔 추론 예외가 차단으로 번지지 않는다 (2026-08-25, DC 경로와 동일)
+                        _ml_pass = _ml_flt.passes(_ml_score) and (_ml_flt.shadow or not _ml_exception)
                     else:
                         # B8 fail-closed: 모델 미로드/비활성
                         import os as _os
@@ -1482,6 +1483,7 @@ class RealtimeMonitor:
                         threshold=_ml_flt.threshold,
                         will_buy=_ml_pass,
                         ml_active=_ml_flt.is_active,
+                        would_block=_ml_flt.would_block(_ml_score),
                     )
                 except Exception as _ml_outer_e:
                     # 게이트 자체 예외 → fail-CLOSED (안전)
@@ -2317,7 +2319,10 @@ class RealtimeMonitor:
                 print(f"  [{symbol}] ML 점수 실패: {_e} — fail-CLOSED", flush=True)
                 _ml_score = 0.0
                 _ml_exception = True
-            _ml_pass = _ml_flt.passes(_ml_score) and not _ml_exception
+            # shadow 운영 중엔 점수 산출이 실패해도 차단하지 않는다 (2026-08-25).
+            # `and not _ml_exception` 이 shadow 를 덮어써 "점수만 기록" 약속을 깨뜨렸다 —
+            # 데이터 수집을 켜둔 상태에서 추론 오류 1번이 매수를 막으면 동작 변경이다.
+            _ml_pass = _ml_flt.passes(_ml_score) and (_ml_flt.shadow or not _ml_exception)
         else:
             # B8 fail-CLOSED: 모델 미로드/비활성 시 환경변수 기반 분기
             import os as _os
@@ -2339,6 +2344,7 @@ class RealtimeMonitor:
             signal_type="DC_breakout_realtime", score=_ml_score,
             threshold=_ml_flt.threshold, will_buy=_ml_pass,
             ml_active=_ml_flt.is_active,
+            would_block=_ml_flt.would_block(_ml_score),
         )
         if not _ml_pass:
             from services.common.log_throttle import throttled_print

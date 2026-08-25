@@ -132,6 +132,24 @@ class MLFilter:
             log.warning("score failed %s @%s: %s — fail-open", symbol, at_ts, e)
             return 1.0
 
+    @property
+    def shadow(self) -> bool:
+        """shadow 운영 여부 (점수만 기록, 차단 안 함).
+
+        호출 시점에 환경변수를 다시 읽는다 — 인스턴스가 싱글톤(get_filter)이라
+        기동 시점에 고정하면 운영 중 토글이 반영되지 않는다.
+        """
+        return os.getenv("ML_SHADOW_MODE", "1") == "1"
+
+    def would_block(self, score: float) -> bool:
+        """LIVE였다면 차단했을가 — shadow 데이터의 핵심 필드 (2026-08-25).
+
+        shadow 로그의 `will_buy` 는 shadow 중엔 항상 True 라
+        "게이트가 뭐를 했을지"를 담지 못한다. 나중에 결과와 대조하려면
+        이 값이 필요하다(차단했을 건데 실제로 +5% 갔다 = false negative).
+        """
+        return self.is_active and score < self.threshold
+
     def passes(self, score: float) -> bool:
         """gate 판정. 다음 조건 중 하나라도 True면 통과:
            1) 모델 미로드 (fail-open)

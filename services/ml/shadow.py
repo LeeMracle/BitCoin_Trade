@@ -26,6 +26,14 @@ log = logging.getLogger(__name__)
 
 _write_lock = threading.Lock()
 
+# ── 중복 로깅 억제 (2026-08-25) ───────────────────────────────
+# 봇은 돌파 감지마다 게이트를 호출하므로 같은 종목이 하루에 수백 번 기록된다
+# (실측 2026-05-14: 2종목이 855회씩 = 1,711행). 이 복제는 분석을 통째로 무의미하게
+# 만든다 — 원본 1,555쌍의 AUC 0.78이 (종목,일) 중복 제거 후 독립 표본 3건으로 줄었다.
+# 신호 1건 = 기록 1건이 되도록 (종목, 신호종류, UTC 날짜) 기준으로 첫 건만 남긴다.
+_seen_keys: set[tuple[str, str, str]] = set()
+_suppressed: dict[tuple[str, str, str], int] = {}
+
 
 def _path_for(ts: datetime) -> Path:
     return SHADOW_LOG_DIR / f"{ts.strftime('%Y%m%d')}.jsonl"
@@ -40,10 +48,23 @@ def log_decision(
     threshold: float,
     will_buy: bool,
     ml_active: bool,
+    would_block: Optional[bool] = None,
     extra: Optional[dict] = None,
 ) -> None:
-    """의사결정 1건 기록 (multi_trader 매수 분기에서 호출)."""
+    """의사결정 1건 기록. 같은 (종목, 종류, 날짜)는 **처음 1회만** 기록한다.
+
+    Args:
+        would_block: LIVE였다면 차단했을지. shadow 중엔 will_buy 가 항상 True라
+                     이 값이 없으면 나중에 게이트 성능을 평가할 수 없다.
+    """
     ensure_dirs()
+    now = datetime.now(timezone.utc)
+    key = (symbol, signal_type, now.strftime("%Y-%m-%d"))
+    with _write_lock:
+        if key in _seen_keys:
+            _suppressed[key] = _suppressed.get(key, 0) + 1
+            return
+        _seen_keys.add(key)
     rec = {
         "ts_utc": datetime.now(timezone.utc).isoformat(),
         "symbol": symbol,
@@ -54,9 +75,11 @@ def log_decision(
         "will_buy": bool(will_buy),
         "ml_active": bool(ml_active),
     }
+    if would_block is not None:
+        rec["would_block"] = bool(would_block)
     if extra:
         rec["extra"] = extra
-    path = _path_for(datetime.now(timezone.utc))
+    path = _path_for(now)
     with _write_lock:
         with path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
@@ -122,3 +145,12 @@ def summary(days: int = 30) -> dict:
         "block_rate": round(n_block / n_decisions, 3) if n_decisions else 0.0,
         "mean_score": round(score_sum / n_decisions, 4) if n_decisions else 0.0,
     }
+
+
+def suppressed_counts() -> dict[str, int]:
+    """중복으로 억제된 기록 수 — "왜 로그가 적지"를 설명하는 자리.
+
+    억제 자체는 정상 동작이지만, 숫자가 비정상적으로 크면
+    돌파 감지가 틱마다 재발화되고 있다는 신호일 수 있다.
+    """
+    return {f"{sym}|{typ}|{day}": n for (sym, typ, day), n in _suppressed.items()}

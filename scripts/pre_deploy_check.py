@@ -3128,6 +3128,57 @@ def check_ws_error_not_cumulative() -> None:
         )
 
 
+# ══════════════════════════════════════════════════════════════════
+# 검증 N+13: shadow 모드는 절대 차단하지 않고 로그는 중복 없이 (2026-08-25)
+# ══════════════════════════════════════════════════════════════════
+
+def check_ml_shadow_integrity() -> None:
+    """shadow 운영의 두 가지 약속을 강제한다.
+
+    배경 (2026-08-25):
+        (a) `_ml_pass = passes(score) and not _ml_exception` 이 shadow 를 덮어썼다.
+            점수만 모으려고 켜둔 상태에서 추론 오류 1번이 매수를 막으면
+            그건 관측이 아니라 **동작 변경**이다.
+        (b) 돌파 감지마다 기록해 같은 종목이 하루 855회까지 복제됐다.
+            그 복제 때문에 "표본 1,555건"이 실제로는 독립 3건이었다.
+
+    검증규칙:
+        1) MLFilter 에 shadow / would_block 정의
+        2) 매수 경로의 게이트 판정이 shadow 를 예외보다 우선할 것
+        3) shadow.log_decision 이 (종목, 종류, 날짜) 중복을 억제할 것
+    """
+    inf = PROJECT_ROOT / "services" / "ml" / "inference.py"
+    sh = PROJECT_ROOT / "services" / "ml" / "shadow.py"
+    rm = PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py"
+    for f, label in ((inf, "inference.py"), (sh, "shadow.py"), (rm, "realtime_monitor.py")):
+        if not f.exists():
+            errors.append(f"[ML-shadow] {label} 없음")
+            return
+    itxt, stxt, rtxt = (f.read_text(encoding="utf-8") for f in (inf, sh, rm))
+
+    for name in ("shadow", "would_block"):
+        if not re.search(r"def " + name + r"\(self", itxt):
+            errors.append(f"[ML-shadow] MLFilter.{name} 정의 없음")
+
+    # 게이트 판정이 shadow 를 예외보다 우선하는가 (양쪽 매수 경로)
+    good = len(re.findall(
+        r"passes\(_ml_score\)\s*and\s*\(_ml_flt\.shadow\s+or\s+not\s+_ml_exception\)",
+        rtxt))
+    bad = len(re.findall(r"passes\(_ml_score\)\s*and\s*not\s+_ml_exception", rtxt))
+    if bad or good < 2:
+        errors.append(
+            f"[ML-shadow] 게이트 판정이 shadow 를 예외보다 우선하지 않는다 "
+            f"(정상 {good}/2, 구버전 {bad}) — 점수만 모으는 중에 추론 오류가 "
+            f"매수를 막으면 관측이 아니라 동작 변경이다"
+        )
+
+    if not re.search(r"_seen_keys\.add\(", stxt) or "_suppressed" not in stxt:
+        errors.append(
+            "[ML-shadow] shadow.log_decision 에 (종목,종류,날짜) 중복 억제가 없다 — "
+            "돌파 감지마다 기록되어 분석 표본이 무의미해진다(실측 855배 복제)"
+        )
+
+
 def main() -> None:
     print("=" * 50)
     print("배포 전 검증 (pre-deploy check)")
@@ -3201,6 +3252,7 @@ def main() -> None:
     check_slot_min_order_margin()
     check_exit_reasons_classified()
     check_ws_error_not_cumulative()
+    check_ml_shadow_integrity()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")
