@@ -3132,6 +3132,59 @@ def check_ws_error_not_cumulative() -> None:
 # 검증 N+13: shadow 모드는 절대 차단하지 않고 로그는 중복 없이 (2026-08-25)
 # ══════════════════════════════════════════════════════════════════
 
+def check_tick_lag_instrumented() -> None:
+    """틱 지연 계측이 실제로 배선되어 있는지 (2026-08-27, research/20260827_1).
+
+    배경:
+        KERNEL 매수는 09:55 에 **09:50 의 가격(57)** 으로 판단됐고 체결은 67.8 이었다.
+        슬리피지가 아니라 입력이 낡은 것인데, 로그에 신선도가 없어 **사고 당시에는
+        알 수 없었다**. 분봉을 사후 재구성하고서야 드러났다.
+
+    강제하는 것 (계측은 "정의"가 아니라 "호출"되어야 의미가 있다 — 교훈 #44 계열):
+        (a) tick_lag 모듈 import + 인스턴스 보유
+        (b) 틱 수신 경로에서 record_tick() 실제 호출
+        (c) 핸들러 소요 측정 record_handler() 실제 호출
+            — (b)만 있으면 "얼마나 낡았나"는 알아도 "누가 늦췄나"를 못 가린다
+        (d) 매수 신호 기록에 지연이 실린다 (tick_lag_ms)
+            — 요약만 있으면 사고 시점의 값을 되짚을 수 없다
+
+    ⚠ 계측 전용이다. 지연으로 신호를 버리는 동작은 전략 변경이므로 별도 ADR 대상.
+    """
+    rm = PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py"
+    mod = PROJECT_ROOT / "services" / "execution" / "tick_lag.py"
+    if not mod.exists():
+        errors.append("[틱지연] services/execution/tick_lag.py 없음 — 계측 모듈 삭제됨")
+        return
+    if not rm.exists():
+        return
+    src = rm.read_text(encoding="utf-8")
+
+    if "from services.execution.tick_lag import" not in src:
+        errors.append("[틱지연] realtime_monitor 가 tick_lag 를 import 하지 않음")
+    if "self._tick_lag" not in src:
+        errors.append("[틱지연] TickLagTracker 인스턴스(self._tick_lag) 없음")
+    for call, why in (
+        (".record_tick(", "틱 지연 기록 미호출 — 계측이 정의만 되고 배선 안 됨"),
+        (".record_handler(", "핸들러 소요 미측정 — 원인(우리 루프 vs 네트워크) 구분 불가"),
+    ):
+        if call not in src:
+            errors.append(f"[틱지연] {call} {why}")
+    # ⚠ 부분문자열 검사 금지. 초안은 `"tick_lag_ms" not in src` 였는데
+    # 이름을 `tick_lag_msXX` 로 바꿔도 **통과**했다(역방향 테스트가 적발).
+    # lessons #44/#46 계열 — 룰은 "통과하는가"가 아니라 "실패를 잡는가"로 검증한다.
+    # 실제 기록 형태(dict 키)를 요구해야 이름만 살짜 바뀐 경우가 걸린다.
+    if not re.search(r"""['"]tick_lag_ms['"]\s*:""", src):
+        errors.append("[틱지연] 매수 신호 기록에 tick_lag_ms 키 미첨부 — 사고 시점 역추적 불가")
+
+    # config 자체정의 금지 (교훈 #19)
+    cfg = (PROJECT_ROOT / "services" / "execution" / "config.py").read_text(encoding="utf-8")
+    for const in ("TICK_LAG_WINDOW", "TICK_LAG_REPORT_INTERVAL_SEC", "TICK_LAG_SLOW_HANDLER_MS"):
+        if const not in cfg:
+            errors.append(f"[틱지연] config.py 에 {const} 미정의 (교훈 #19)")
+        if f"{const} =" in mod.read_text(encoding="utf-8"):
+            errors.append(f"[틱지연] tick_lag.py 가 {const} 를 자체 정의 (교훈 #19)")
+
+
 def check_ml_shadow_integrity() -> None:
     """shadow 운영의 두 가지 약속을 강제한다.
 
@@ -3253,6 +3306,7 @@ def main() -> None:
     check_exit_reasons_classified()
     check_ws_error_not_cumulative()
     check_ml_shadow_integrity()
+    check_tick_lag_instrumented()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")

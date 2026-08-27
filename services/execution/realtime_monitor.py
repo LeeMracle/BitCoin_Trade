@@ -27,12 +27,14 @@ import ccxt
 import numpy as np
 import pandas as pd
 
+from services.execution.tick_lag import TickLagTracker
 from services.execution.config import (
     STRATEGY, STRATEGY_KWARGS,
     DONCHIAN_PERIOD, ATR_PERIOD, ATR_MULTIPLIER,
     HARD_STOP_LOSS_PCT, MAX_ATR_PCT,
     TP_LEVELS, TP_ENABLED,
     VOL_FILTER_ENABLED, VOL_FILTER_MULTIPLIER,
+    TICK_LAG_ENABLED,
     TRAIL_PERSIST_INTERVAL_SEC,
     SCHEDULER_INTEGRITY_CHECK_ENABLED, SCHEDULER_UNIT_PREFIX,
     SCHEDULER_BASELINE_UNITS, SCHEDULER_ALERT_INTERVAL_SEC,
@@ -165,6 +167,8 @@ class RealtimeMonitor:
         # 웹소켓 끊김 추적 (2026-08-25) — 정상 끊김을 봇 오류로 세지 않도록
         # 별도 카운터로 분리. 빈도가 비정상일 때만 알림을 올린다.
         self._ws_disconnects: list[float] = []
+        # 틱 지연 계측 (research/20260827_1 §5) — 계측만, 매매 판단에 쓰지 않는다
+        self._tick_lag = TickLagTracker() if TICK_LAG_ENABLED else None
         # v2 필터 캐시 (레벨 갱신 시 1회 조회)
         self._fg_value: "float | None" = None
         self._btc_above_ema: bool = True
@@ -1015,6 +1019,11 @@ class RealtimeMonitor:
                                     except Exception:
                                         pass
 
+                                # 틱 지연 요약 (research/20260827_1 §5) — 15분 throttle, 교훈 #14.
+                                # 가설 판정 기준: 느린 handler 직후 가격지연이 치솟는 톱니가 보이는가.
+                                if self._tick_lag is not None and self._tick_lag.due():
+                                    print(self._tick_lag.format_summary(), flush=True)
+
                             elif msg.type in (aiohttp.WSMsgType.ERROR, aiohttp.WSMsgType.CLOSED):
                                 print("웹소켓 연결 종료")
                                 break
@@ -1062,7 +1071,21 @@ class RealtimeMonitor:
                 reconnect_delay = min(reconnect_delay * 2, WS_RECONNECT_MAX)
 
     async def _handle_tick(self, data: dict):
-        """실시간 체결 처리."""
+        """실시간 체결 처리.
+
+        틱 지연 계측(2026-08-27): 이 함수의 소요 시간이 곧 이벤트 루프를 붙잡는
+        시간이다. 여기서 블로킹이 일어나면 뒤따르는 메시지가 밀려 **다음 판단의
+        입력이 낡아진다** — research/20260827_1 §5 의 가설이 그것이다.
+        """
+        _t0 = _time.monotonic()
+        try:
+            await self._handle_tick_inner(data)
+        finally:
+            if TICK_LAG_ENABLED and self._tick_lag is not None:
+                self._tick_lag.record_handler(
+                    (_time.monotonic() - _t0) * 1000, data.get("code", ""))
+
+    async def _handle_tick_inner(self, data: dict):
         code = data.get("code", "")          # "KRW-BTC"
         price = data.get("trade_price", 0)   # 체결가
 
@@ -1072,6 +1095,13 @@ class RealtimeMonitor:
         # 업비트 코드 → 심볼 변환: KRW-BTC → BTC/KRW
         coin = code.replace("KRW-", "")
         symbol = f"{coin}/KRW"
+
+        # 틱 지연 계측 — 실패해도 매매를 막지 않는다 (계측은 부수 기능)
+        if TICK_LAG_ENABLED and self._tick_lag is not None:
+            try:
+                self._tick_lag.record_tick(symbol, data)
+            except Exception:
+                pass
 
         positions = self.state.get("positions", {})
 
@@ -1484,6 +1514,9 @@ class RealtimeMonitor:
                         will_buy=_ml_pass,
                         ml_active=_ml_flt.is_active,
                         would_block=_ml_flt.would_block(_ml_score),
+                        # 신호 시점의 입력 신선도. jsonl 로 남아야 사후 집계가 된다
+                        extra=(lambda r: {'tick_lag_ms': round(r['price_lag_ms'])} if r else None)(
+                            self._tick_lag.latest("BTC/KRW") if self._tick_lag else None),
                     )
                 except Exception as _ml_outer_e:
                     # 게이트 자체 예외 → fail-CLOSED (안전)
@@ -2345,6 +2378,9 @@ class RealtimeMonitor:
             threshold=_ml_flt.threshold, will_buy=_ml_pass,
             ml_active=_ml_flt.is_active,
             would_block=_ml_flt.would_block(_ml_score),
+            # 신호 시점의 입력 신선도. jsonl 로 남아야 사후 집계가 된다
+            extra=(lambda r: {'tick_lag_ms': round(r['price_lag_ms'])} if r else None)(
+                self._tick_lag.latest(symbol) if self._tick_lag else None),
         )
         if not _ml_pass:
             from services.common.log_throttle import throttled_print
@@ -2402,7 +2438,13 @@ class RealtimeMonitor:
                   f"추세:{level.get('trend_ok','?')} 거래량:{level.get('vol_ok','?')} "
                   f"(vol:{(level.get('latest_vol') or 0):.0f} / sma:{(level.get('vol_sma') or 0):.0f} x{_DT_VOL_THRESHOLD}) ***")
         else:
-            print(f"\n  *** {symbol} 돌파! 가격: {price:,.0f}  상단: {level['upper']:,.0f} ***")
+            # 틱 지연을 함께 남긴다 — 크면 "이 판단은 낡은 가격으로 내려졌다"는 뜻이다.
+            # 2026-08-27 KERNEL 은 5분 된 가격(57)으로 판단해 67.8 에 체결됐는데, 로그만으로는
+            # 그 사실을 알 수 없었다. 사후 대조가 되도록 **신호와 같은 줄에** 둔다.
+            _lag = self._tick_lag.latest(symbol) if self._tick_lag else None
+            _lag_txt = f"  지연: {_lag['price_lag_ms']:,.0f}ms" if _lag else ""
+            print(f"\n  *** {symbol} 돌파! 가격: {price:,.4g}  "
+                  f"상단: {level['upper']:,.4g}{_lag_txt} ***")
 
         if DRY_RUN:
             print(f"  [DRY-RUN] 매수 생략")
