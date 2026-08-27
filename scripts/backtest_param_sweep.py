@@ -32,7 +32,7 @@ import pandas as pd
 # UnicodeEncodeError 로 죽는다 (2026-08-25 측정 30분 날림). 결과표 직전에 죽어
 # 로드 시간만 소모하므로 진입 시점에 고정한다.
 try:
-    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding="utf-8", line_buffering=True)
 except Exception:
     pass
 
@@ -61,6 +61,10 @@ class P:
         self.max_atr = kw.get("max_atr", C.MAX_ATR_PCT)
         self.vol_mult = kw.get("vol_mult", C.VOL_FILTER_MULTIPLIER)
         self.weight = kw.get("weight", C.MAX_POSITION_WEIGHT)
+        # 진입가에 부과할 일률 슬리피지 (2026-08-27). 백테스트는 밴드에서
+        # 정확히 체결된다고 가정하므로 실거래의 집행 슬리피지가 반영되지 않는다.
+        self.slip = kw.get("slip", 0.0)
+
 
 
 def _atr(df: pd.DataFrame, period: int) -> pd.Series:
@@ -79,6 +83,15 @@ def build_panel(raw: dict[str, pd.DataFrame], regime: dict, p: P) -> dict[str, p
         df["atr"] = _atr(df, C.ATR_PERIOD)
         vsma = df["volume"].rolling(5).mean()
         df["entry_px"] = np.maximum(upper, df["open"])
+        # [2026-08-27 음성 결과 — 재시도 방지용 기록]
+        # "밴드 이격(entry_px/upper - 1) 이 큰 신호를 버리면 슬리피지 사고를 피하는가"
+        # 를 측정하려 했으나 **이 시장에서는 죽은 변수**다. entry_px = max(upper, open)
+        # 이므로 이격 > 0 은 시가가 이미 밴드 위일 때(걠1상승)뿐인데,
+        # 암호화폐는 24시간 연속 거래라 open ≈ 전일 close — 걡1이 생기지 않는다.
+        # 실측: 40종목/700일 1,733신호 중 이격>0 은 **2건(0.1%), 최대 +0.041%**.
+        # high 기준으로 바꾸면 변별력은 생기나 진입 시점에 당일 고가를 알 수 없으므로
+        # **lookahead bias** 다. → 이 현상은 일봉 아래에 살아 일봉 백테스트로 평가 불가.
+        # 분봉 기반 측정은 scripts/slippage_intraday.py 로 분리했다.
         df["signal"] = (
             (df["high"] > upper)
             & (df["atr"] / df["open"] <= p.max_atr)
@@ -149,7 +162,10 @@ def run_sim(panel: dict[str, pd.DataFrame], dates: list, p: P, seed: int) -> dic
             amt = min(amt, equity * p.weight, cash * C.POSITION_RATIO)
             if amt < C.MIN_ORDER_KRW:
                 continue
-            e = float(row["entry_px"])
+            # 슬리피지는 단순한 비용이 아니다 — 진입가가 부풀면 그 기준으로 잡히는
+            # 하드손절선과 TP 트리거가 함께 위로 이동한다(2026-08-27 KERNEL 사고의 핵심).
+            # 아래 trail/hard 계산이 e 를 참조하므로 그 효과가 자동 반영된다.
+            e = float(row["entry_px"]) * (1 + p.slip)
             a = float(row["atr"])
             cash -= amt
             pos[sym] = {"entry": e, "qty": amt * (1 - FEE) / e, "atr": a, "highest": e,
@@ -186,7 +202,8 @@ async def main() -> int:
     ap.add_argument("--capital", type=float, default=None,
                     help="시드머니 override (기본: config.CIRCUIT_BREAKER_INITIAL_CAPITAL)")
     ap.add_argument("--axis", default="all",
-                    choices=["all", "slots", "slotcap", "slot20", "tp", "tp55", "tp2", "stop", "dc", "combo"])
+                    choices=["all", "slots", "slotcap", "slot20", "tp", "tp55", "tp2",
+                             "stop", "dc", "slip", "combo"])
     args = ap.parse_args()
 
     if args.capital:
@@ -202,19 +219,37 @@ async def main() -> int:
     regime = dict(zip(btc["ts"], btc["close"] > btc["ema"]))
 
     raw = {}
+    load_err: dict[str, int] = {}
+    short = 0
     for i, c in enumerate(get_krw_market_coins()[: args.coins], 1):
         sym = c["symbol"]
         try:
             df = pd.DataFrame(await fetch_ohlcv(sym, "1d", s, e, use_cache=True))
             if len(df) < 60:
+                short += 1
                 continue
             df = df.tail(args.days).reset_index(drop=True)
             df.index = pd.to_datetime(df["ts"], unit="ms", utc=True)
             raw[sym] = df
-        except Exception:
+        except Exception as exc:
+            load_err[type(exc).__name__] = load_err.get(type(exc).__name__, 0) + 1
             continue
         if i % 40 == 0:
             print(f"  로딩 {i}/{args.coins}", flush=True)
+
+    # 로딩 실패를 조용히 삼키면 **표본이 줄어든 채로 멀쁳한 결과표가 나온다**.
+    # 2026-08-27 실제 사고: 다른 프로세스가 DuckDB 캐시를 잠그자 120종목 중 16개만
+    # 로드됐고, 출력은 "종목 16" 한 줄만 달라졌다 — 알아채기 쉽지 않다.
+    # 조용한 축소는 조용한 실패보다 위험하다(결과가 나오기 때문에).
+    if load_err:
+        print(f"\n[경고] 로딩 예외 {sum(load_err.values())}건: {load_err}", flush=True)
+    if short:
+        print(f"  [안내] 데이터 60일 미만으로 제외 {short}건 (신규 상장)", flush=True)
+    want = min(args.coins, 40)
+    if len(raw) < want:
+        print(f"\n[중단] 로드된 종목 {len(raw)}개 < 최소 {want}개 — 표본이 너무 작아 측정할 수 없다.")
+        print("           다른 프로세스가 data/cache.duckdb 를 잡고 있는지 확인할 것.")
+        return 1
 
     all_dates = sorted({d for df in raw.values() for d in df.index})
 
@@ -306,6 +341,11 @@ async def main() -> int:
         # 뒤 두 축은 결합에서 제외한다. 격자 탐색이 아니라 근거 있는 2축 조합이다.
         # 결합 검증은 **IS·OOS 방향이 일관된 축만** 묶는다 (슬롯↑ / TP 늦추기).
         # 2026-08-24: 현행 TP 가 5.5/10 으로 바뀌어 기준선 라벨 갱신.
+        # 2026-08-27 KERNEL 사고(신호 57 -> 체결 67.8, +18.9%) 후속 측정.
+        # 백테스트는 초 단위 급등을 재현할 수 없으므로, 슬리피지를 **비용**으로 부과해
+        # "몇 %에서 엣지가 사라지는가"를 답한다. 실측 중앙값은 0.12%, 최악 18.9%.
+        "slip": [(f"슬리피지 {x:.2%}" if x else "슬리피지 없음(현행 가정)", {"slip": x})
+                 for x in (0.0, 0.005, 0.01, 0.02, 0.05)],
         "combo": [
             ("현행 (슬롯5 TP5.5/10)", {}),
             ("슬롯10 + 현행TP", {"slots": 10}),
@@ -334,6 +374,9 @@ async def main() -> int:
         for label, kw in axes[axis]:
             tried += 1
             p = P(**kw)
+            # 신호 집합을 바꾸는 파라미터를 이 조건에서 빠뜨리면 캐시된 기준 panel 을
+            # 조용히 재사용해 **모든 값이 동일 결과**가 되고, 그걸 "효과 없음"으로
+            # 오독하게 된다. slip 은 run_sim 전용이므로 여기 넣지 않는다.
             panel = base_panel if (p.dc == base.dc and p.max_atr == base.max_atr
                                    and p.vol_mult == base.vol_mult) else build_panel(raw, regime, p)
             r_is = evaluate(panel, is_dates, p, args.runs)
