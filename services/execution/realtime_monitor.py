@@ -35,6 +35,7 @@ from services.execution.config import (
     TP_LEVELS, TP_ENABLED,
     VOL_FILTER_ENABLED, VOL_FILTER_MULTIPLIER,
     TICK_LAG_ENABLED,
+    WS_FRESHNESS_ENABLED,
     TRAIL_PERSIST_INTERVAL_SEC,
     SCHEDULER_INTEGRITY_CHECK_ENABLED, SCHEDULER_UNIT_PREFIX,
     SCHEDULER_BASELINE_UNITS, SCHEDULER_ALERT_INTERVAL_SEC,
@@ -169,6 +170,9 @@ class RealtimeMonitor:
         self._ws_disconnects: list[float] = []
         # 틱 지연 계측 (research/20260827_1 §5) — 계측만, 매매 판단에 쓰지 않는다
         self._tick_lag = TickLagTracker() if TICK_LAG_ENABLED else None
+        # WS 신선도 경보 디바운스 (교훈 #30: 안전장치 알람도 발사 후 throttle 필수)
+        self._ws_stale_alerts: list[float] = []
+        self._ws_stale_alert_until = 0.0
         # v2 필터 캐시 (레벨 갱신 시 1회 조회)
         self._fg_value: "float | None" = None
         self._btc_above_ema: bool = True
@@ -1024,6 +1028,22 @@ class RealtimeMonitor:
                                 if self._tick_lag is not None and self._tick_lag.due():
                                     print(self._tick_lag.format_summary(), flush=True)
 
+                                # ── 웹소켓 신선도 감시 (2026-08-29) ─────────────
+                                # 위 985행의 `wait_for(receive(), 300)` 은 **침묵**만 잡는다.
+                                # 실측: 연결은 죽기 전에 먼저 썩는다 — 메시지는 계속 오는데
+                                # 몇 분씩 늦다가 끊긴다(08-28 07:18 p50 164초 → 07:33 732초
+                                # → 07:37 연결 종료). 그 구간의 매수 판단은 낡은 가격으로\n# 내려진다(2026-08-27 KERNEL: 5분 된 57원으로 판단, 체결 67.8).
+                                if WS_FRESHNESS_ENABLED and self._tick_lag is not None:
+                                    _stale, _med = self._tick_lag.is_degraded()
+                                    if _stale:
+                                        print(f"  [WS-LAG] 전송지연 중앙값 {_med:,.0f}ms "
+                                              f"— 연결 열화, 강제 재연결", flush=True)
+                                        # 의도된 재연결이다. 오류 카운터를 올리면
+                                        # 정상 복구가 봇 자동중지로 번진다 (교훈 #47).
+                                        self._tick_lag.note_reconnect()
+                                        await self._notify_ws_stale(_med)
+                                        break
+
                             elif msg.type in (aiohttp.WSMsgType.ERROR, aiohttp.WSMsgType.CLOSED):
                                 print("웹소켓 연결 종료")
                                 break
@@ -1860,6 +1880,28 @@ class RealtimeMonitor:
         import time
         self.error_cooldown[symbol] = time.time() + ERROR_COOLDOWN_SEC
 
+    async def _notify_ws_stale(self, median_ms: float) -> None:
+        """웹소켓 열화 경보 — 1시간 1회로 제한한다.
+
+        열화 구간은 수십 분 이어질 수 있고, 그동안 재연결이 반복되면 같은 사실을
+        여러 번 알리게 된다(교훈 #30: 5연패 알람이 9분마다 4회 반복된 사고).
+        재연결 자체는 계속 하되 **알림만** 조인다 — 조치는 자동이고 사람이
+        알아야 할 것은 "지금 열화 중"이라는 사실 한 번뿐이다.
+        """
+        now = _time.monotonic()
+        self._ws_stale_alerts = [t for t in self._ws_stale_alerts if now - t < 3600]
+        if now < self._ws_stale_alert_until:
+            return
+        self._ws_stale_alert_until = now + 3600
+        self._ws_stale_alerts.append(now)
+        n = len(self._ws_stale_alerts)
+        await self._handle_error(
+            "ws_stale_lag",
+            f"웹소켓 전송지연 {median_ms / 1000:,.0f}초 (중앙값) — 강제 재연결\n"
+            f"낡은 가격으로 매수 판단이 내려질 수 있어 연결을 끊었다.\n"
+            f"최근 1시간 {n}회\n{UPBIT_WS_URL}",
+        )
+
     async def _handle_error(self, error_key: str, msg: str):
         """오류 처리: 연속 오류 카운트 + 알림 쿨다운."""
         import time
@@ -2438,8 +2480,7 @@ class RealtimeMonitor:
                   f"추세:{level.get('trend_ok','?')} 거래량:{level.get('vol_ok','?')} "
                   f"(vol:{(level.get('latest_vol') or 0):.0f} / sma:{(level.get('vol_sma') or 0):.0f} x{_DT_VOL_THRESHOLD}) ***")
         else:
-            # 틱 지연을 함께 남긴다 — 크면 "이 판단은 낡은 가격으로 내려졌다"는 뜻이다.
-            # 2026-08-27 KERNEL 은 5분 된 가격(57)으로 판단해 67.8 에 체결됐는데, 로그만으로는
+            # 틱 지연을 함께 남긴다 — 크면 "이 판단은 낡은 가격으로 내려졌다"는 뜻이다.\n# 2026-08-27 KERNEL 은 5분 된 가격(57)으로 판단해 67.8 에 체결됐는데, 로그만으로는
             # 그 사실을 알 수 없었다. 사후 대조가 되도록 **신호와 같은 줄에** 둔다.
             _lag = self._tick_lag.latest(symbol) if self._tick_lag else None
             _lag_txt = f"  지연: {_lag['price_lag_ms']:,.0f}ms" if _lag else ""

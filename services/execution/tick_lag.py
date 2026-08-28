@@ -48,6 +48,9 @@ from services.execution.config import (
     TICK_LAG_REPORT_INTERVAL_SEC,
     TICK_LAG_SLOW_HANDLER_MS,
     TICK_LAG_WINDOW,
+    WS_STALE_LAG_MS,
+    WS_STALE_MIN_SAMPLES,
+    WS_STALE_RECONNECT_COOLDOWN_SEC,
 )
 
 
@@ -70,6 +73,11 @@ class TickLagTracker:
         self._price_lag: deque[float] = deque(maxlen=window)
         # 전송 지연만. price_lag 와 나눠 봐야 "낡은 가격"의 원인이 갈린다.
         self._msg_lag: deque[float] = deque(maxlen=window)
+        # 신선도 판정용 **단기** 창. 통계용(_msg_lag, 5000)과 분리한다 —
+        # 5000개는 약 4분치라 열화를 늦게 알아채고, 회복도 늦게 반영된다.
+        self._recent_msg: deque[float] = deque(maxlen=200)
+        # 강제 재연결 직후 재판정 금지 (재연결 루프 방지)
+        self._reconnect_block_until = 0.0
         self._handler: deque[float] = deque(maxlen=window)
         # 종목별 최근 지연 — 매수 판단 시점의 신선도를 기록하기 위한 것.
         self._latest: dict[str, dict] = {}
@@ -97,6 +105,7 @@ class TickLagTracker:
         msg_lag = (now_ms - float(msg_ts)) if msg_ts else None
         if msg_lag is not None:
             self._msg_lag.append(msg_lag)
+            self._recent_msg.append(msg_lag)
         self._price_lag.append(price_lag)
         self._n += 1
         self._latest[symbol] = {
@@ -111,6 +120,39 @@ class TickLagTracker:
         self._handler.append(elapsed_ms)
         if elapsed_ms >= TICK_LAG_SLOW_HANDLER_MS:
             self._slow_events.append((_time.monotonic(), elapsed_ms, symbol))
+
+    # ── 신선도 판정 ─────────────────────────────────────────
+    def is_degraded(self) -> tuple[bool, float]:
+        """연결이 "썩었는지" 판정. (판정, 최근 지연 중앙값 ms).
+
+        ## 왜 중앙값인가
+
+        단발 지각 한 건으로 재연결하면 안 된다. 반대로 평균은 큰 outlier 하나에
+        끌려간다. 중앙값은 "표본의 절반이 이만큼 늦다"를 뜻하므로 **지속적 열화**에만
+        반응한다 — 실측 열화 구간이 정확히 그 모습이었다(p50 자체가 164~732초).
+
+        ## 왜 별도 감시가 필요한가
+
+        기존 `wait_for(ws.receive(), timeout=300)` 은 **침묵**만 잡는다. receive() 가
+        반환되기만 하면 타이머가 리셋되므로, 12분 늦은 메시지가 계속 오는 상태는
+        영원히 통과한다. liveness 감시로 freshness 를 지킬 수 없다.
+        """
+        if len(self._recent_msg) < WS_STALE_MIN_SAMPLES:
+            return False, 0.0
+        if _time.monotonic() < self._reconnect_block_until:
+            return False, 0.0
+        v = sorted(self._recent_msg)
+        med = v[len(v) // 2]
+        return med > WS_STALE_LAG_MS, med
+
+    def note_reconnect(self) -> None:
+        """강제 재연결 시 호출. 낡은 표본을 버리고 쿨다운을 건다.
+
+        버리지 않으면 재연결 직후에도 옛 지연값이 중앙값을 지배해 **즉시 다시**
+        판정이 서고 재연결 루프에 빠진다.
+        """
+        self._recent_msg.clear()
+        self._reconnect_block_until = _time.monotonic() + WS_STALE_RECONNECT_COOLDOWN_SEC
 
     def latest(self, symbol: str) -> dict | None:
         """해당 종목의 마지막 틱 지연. 매수 로그에 실어 사후 대조용으로 쓴다."""

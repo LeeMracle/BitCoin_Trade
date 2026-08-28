@@ -3185,6 +3185,63 @@ def check_tick_lag_instrumented() -> None:
             errors.append(f"[틱지연] tick_lag.py 가 {const} 를 자체 정의 (교훈 #19)")
 
 
+def check_ws_freshness_guard() -> None:
+    """웹소켓 신선도 감시가 실제로 배선되어 있는지 (2026-08-29).
+
+    배경:
+        기존 stale 감지는 `wait_for(ws.receive(), timeout=300)` 하나뿐이었다.
+        이건 **침묵**만 잡는다 — receive() 가 반환되기만 하면 타이머가 리셋되므로,
+        12분 늦은 메시지가 계속 들어오는 상태는 영원히 통과한다.
+        실측(08-28): 연결은 죽기 전에 먼저 썩는다. 전송지연 p50 이 164초 → 732초로
+        올라간 뒤에야 끊겼고, 그 구간의 매수 판단은 낡은 가격으로 내려졌다
+        (08-27 KERNEL: 5분 된 57원으로 판단, 체결 67.8, +18.9%).
+
+    강제하는 것:
+        (a) is_degraded() 정의 + **실제 호출** (교훈 #44: 정의만 하면 사문화)
+        (b) 강제 재연결 시 note_reconnect() 호출 — 없으면 낡은 표본이 중앙값을
+            지배해 즉시 재판정 → 재연결 루프
+        (c) 알림이 throttle 을 거친다 (교훈 #30: 안전장치 알람도 디바운스 필수)
+        (d) 임계 상수는 config.py 단일 정의 (교훈 #19)
+        (e) 판정이 **중앙값** 기반 — 평균은 outlier 하나에 끌려가고,
+            단순 비교는 단발 지각에 반응해 불필요한 재연결을 낳는다
+    """
+    rm = PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py"
+    tl = PROJECT_ROOT / "services" / "execution" / "tick_lag.py"
+    cfg = PROJECT_ROOT / "services" / "execution" / "config.py"
+    if not (rm.exists() and tl.exists()):
+        errors.append("[WS신선도] realtime_monitor 또는 tick_lag 없음")
+        return
+    src = rm.read_text(encoding="utf-8")
+    tsrc = tl.read_text(encoding="utf-8")
+    csrc = cfg.read_text(encoding="utf-8")
+
+    # 이름 존재 검사 금지 — `def is_degradedXX` 가 `def is_degraded` 를 포함해 통과한다
+    # (역방향 테스트가 적발, lessons #44/#46 계열 7회째). 정의 **형태**로 본다.
+    if not re.search(r"def is_degraded\s*\(", tsrc):
+        errors.append("[WS신선도] tick_lag.is_degraded() 미정의")
+    elif not re.search(r"\.is_degraded\s*\(", src):
+        errors.append("[WS신선도] is_degraded() 가 정의만 되고 호출되지 않음 (교훈 #44)")
+    if not re.search(r"\.note_reconnect\s*\(", src):
+        errors.append("[WS신선도] 강제 재연결 시 note_reconnect() 미호출 — 재연결 루프 위험")
+    # `_notify_ws_stale(` 만 보면 **정의부 자신**(`async def _notify_ws_stale(`)에
+    # 매칭돼 호출을 지워도 통과한다. 호출부는 `self.` 접두로만 구별된다.
+    if not re.search(r"self\._notify_ws_stale\s*\(", src):
+        errors.append("[WS신선도] 열화 알림(_notify_ws_stale) 미호출")
+    # 알림 throttle 존재 (교훈 #30)
+    if "_ws_stale_alert_until" not in src:
+        errors.append("[WS신선도] 열화 알림에 디바운스 없음 (교훈 #30)")
+    # 판정이 중앙값 기반인가 — 평균/단순비교로 바뀌면 단발 지각에 재연결한다
+    seg = tsrc[tsrc.find("def is_degraded"):tsrc.find("def note_reconnect")]
+    if "sorted(" not in seg or "// 2" not in seg:
+        errors.append("[WS신선도] is_degraded 가 중앙값 기반이 아님 — 단발 지각에 재연결 위험")
+    for const in ("WS_STALE_LAG_MS", "WS_STALE_MIN_SAMPLES",
+                  "WS_STALE_RECONNECT_COOLDOWN_SEC", "WS_FRESHNESS_ENABLED"):
+        if f"{const} =" not in csrc:
+            errors.append(f"[WS신선도] config.py 에 {const} 미정의 (교훈 #19)")
+        if f"{const} =" in tsrc or f"{const} =" in src:
+            errors.append(f"[WS신선도] {const} 자체 정의 발견 (교훈 #19)")
+
+
 def check_ml_shadow_integrity() -> None:
     """shadow 운영의 두 가지 약속을 강제한다.
 
@@ -3307,6 +3364,7 @@ def main() -> None:
     check_ws_error_not_cumulative()
     check_ml_shadow_integrity()
     check_tick_lag_instrumented()
+    check_ws_freshness_guard()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")
