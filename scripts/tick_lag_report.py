@@ -45,6 +45,10 @@ RE_SUM = re.compile(
     r"가격지연 p50 (?P<p50>[-\d,]+) / p90 (?P<p90>[-\d,]+) / "
     r"p99 (?P<p99>[-\d,]+) / 최대 (?P<max>[-\d,]+)ms \(최소 (?P<min>[-\d,]+)\)"
 )
+RE_MSG = re.compile(
+    r"전송지연 p50 (?P<m50>[-\d,]+) / p90 (?P<m90>[-\d,]+) / "
+    r"p99 (?P<m99>[-\d,]+) / 최대 (?P<mmax>[-\d,]+)ms"
+)
 RE_H = re.compile(
     r"handler p50 (?P<h50>[\d.,]+) / p99 (?P<h99>[\d.,]+) / "
     r"최대 (?P<hmax>[\d,]+)ms \| [\d,]+ms↑ (?P<slow>\d+)건"
@@ -71,10 +75,12 @@ def main() -> int:
     args = ap.parse_args()
 
     lines = journal(args.hours)
-    sums, hs, breaks = [], [], []
+    sums, msgs, hs, breaks = [], [], [], []
     for ln in lines:
         if m := RE_SUM.search(ln):
             sums.append({k: _n(v) for k, v in m.groupdict().items()})
+        if m := RE_MSG.search(ln):
+            msgs.append({k: _n(v) for k, v in m.groupdict().items()})
         if m := RE_H.search(ln):
             hs.append({k: _n(v) for k, v in m.groupdict().items()})
         if m := RE_BREAK.search(ln):
@@ -98,21 +104,31 @@ def main() -> int:
         if worst["min"] < -1000:
             print(f"  ⚠ 최소 지연 {worst['min']:,.0f}ms — 서버 시계가 앞선다. NTP 확인 필요")
 
-    if hs:
-        slow_total = sum(h["slow"] for h in hs)
-        hmax = max(h["hmax"] for h in hs)
-        print(f"\nhandler 소요: 최대 {hmax:,.0f}ms / 임계 초과 누적 {slow_total:,.0f}건")
-        print("  판정:")
-        if hmax >= 1000 and sums and max(s["max"] for s in sums) >= 10_000:
-            print("    → 느린 handler 와 큰 지연이 **함께** 관측됨. 가설(루프 블로킹)에 부합.")
-            print("      다음: get_balance() 블로킹 제거 검토 (executor / 잔고 캐시)")
-        elif hmax < 1000 and sums and max(s["max"] for s in sums) >= 10_000:
-            print("    → handler 는 빠른데 지연만 크다. 원인은 **우리 루프 밖**")
-            print("      (네트워크/업비트). 블로킹 제거는 처방이 아니다.")
-        elif sums:
-            print("    → 지연·handler 모두 작다. KERNEL 은 다른 원인일 가능성.")
-            print("      재발 시점을 기다려 이 표를 다시 볼 것.")
+    if msgs:
+        print(f"\n전송지연(now - timestamp) — **이쪽이 진짜 지연**")
+        print(f"  p50 최대 {max(m['m50'] for m in msgs):,.0f}ms / "
+              f"p99 최대 {max(m['m99'] for m in msgs):,.0f}ms / "
+              f"최대 {max(m['mmax'] for m in msgs):,.0f}ms")
+        print("  가격지연과의 차이 = 거래 희소성(그 종목이 그동안 거래되지 않았을 뿐)")
 
+    if hs:
+        # ⚠ slow_n 은 트래커 내부 **누적 게이지**다. 요약마다 같은 값이 다시 찍히므로
+        #    합산하면 중복 집계된다 — 2026-08-28 실제로 6건을 196건으로 부풀렸다.
+        #    '카운터처럼 보이는 게이지'는 집계 코드에서 흔한 함정이다.
+        slow_max = max(h["slow"] for h in hs)
+        hmax = max(h["hmax"] for h in hs)
+        m99 = max((m["m99"] for m in msgs), default=0.0)
+        print(f"\nhandler 소요: 최대 {hmax:,.0f}ms / 임계 초과 {slow_max:,.0f}건(누적 게이지)")
+        print("  판정:")
+        if hmax >= 5_000:
+            print("    → handler 가 수 초를 붙잡는다. 가설(루프 블로킹)에 부합.")
+            print("      다음: get_balance() 블로킹 제거 검토 (executor / 잔고 캐시)")
+        elif m99 >= 10_000:
+            print("    → handler 는 빠른데 **전송지연**이 크다. 원인은 우리 루프 밖")
+            print("      (네트워크/업비트). 블로킹 제거는 처방이 아니다.")
+        else:
+            print("    → 전송지연·handler 모두 작다. 가격지연이 커도 그건 거래 희소성이다.")
+            print("      → 루프 블로킹 가설은 **기각 방향**. 신호 시점 지연(아래)만 계속 본다.")
     # ── 결정적 계열: 매수 신호 시점의 지연 ────────────────────
     print("\n" + "-" * 74)
     print("매수 신호 시점의 지연 (결정적 — 분포가 좋아도 신호 때 낡았으면 문제다)")

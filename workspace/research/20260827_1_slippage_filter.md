@@ -224,6 +224,10 @@ ML shadow 의 `signal_ts` 는 09:55:14 다. 즉 봇은 **5분 된 가격으로 �
 재개될 때 오래된 틱부터 처리한다. 루프는 "살아있지만 과거를 보고 있는" 상태가 된다.
 거래량 필터 로그는 throttle 되어 있어(lessons #14) 백로그를 드러내지 않는다.
 
+> ✅ **2026-08-27 23:20 KST 계측 배선 완료** — [plan 20260827_2](../plans/20260827_2_tick_lag_instrumentation.md).
+> `price_lag_ms`(가격 신선도) + `handler_ms`(우리가 붙잡은 시간) + 매수 신호 시점 지연을
+> 함께 기록한다. 판정은 `scripts/tick_lag_report.py`. 24~48시간 후 확인.
+>
 > ⚠ **이건 가설이지 입증이 아니다.** 확인하려면 계산이 아니라 **계측**이 필요하다 —
 > 업비트 웹소켓 ticker 메시지는 자체 `timestamp` 를 실어 보낸다. 그걸
 > 수신 시각과 비교해 **틱 지연(tick lag)** 을 기록하면 끝난다.
@@ -282,6 +286,8 @@ KERNEL 은 진입 시점 이격이 **0%** 였다. 걸러낼 신호 특징이 없
 
 | 파일 | 내용 |
 | --- | --- |
+| `services/execution/tick_lag.py` | 틱 지연 계측 (§5-2 가설 판정용) — 신규, 2026-08-27 배포 |
+| `scripts/tick_lag_report.py` | 계측 결과 집계 + 판정 출력 — 신규 |
 | `scripts/slippage_audit.py` | 라이브 실측 (journalctl x state) — 신규 |
 | `scripts/slippage_intraday.py` | 분봉 기반 슬리피지 분포 — 신규 |
 | `scripts/backtest_param_sweep.py` | `--axis slip` 추가, `ext` 축 제거(음성), 로딩 가드 |

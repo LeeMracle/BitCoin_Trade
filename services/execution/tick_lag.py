@@ -11,9 +11,14 @@
 
 ## 무엇을 재는가 — 지표 하나로는 범인을 못 가린다
 
-    price_lag_ms   = now - trade_timestamp   가격이 얼마나 낡았나 (결과)
-    msg_lag_ms     = now - timestamp         메시지가 얼마나 낡았나
-    handler_ms     = _handle_tick 1회 소요   우리가 얼마나 오래 붙잡았나 (원인 후보)
+    price_lag_ms = now - trade_timestamp   전송 지연 + **거래 희소성**
+    msg_lag_ms   = now - timestamp         전송 지연만 (업비트가 메시지를 만든 시각)
+    handler_ms   = _handle_tick 1회 소요   우리가 얼마나 오래 붙잡았나
+
+price_lag 와 msg_lag 의 **차이가 곧 거래 희소성**이다. 이 구분이 없으면 진단이 틀린다:
+저유동성 알트가 20분간 거래가 없으면 `trade_timestamp` 는 20분 전이 맞고 그건 지연이
+아니다. 2026-08-27 첫 관측이 정확히 그 함정이었다 — price_lag p99 가 3.5~23분인데
+handler 는 p99 0.2ms. 희소성을 지연으로 읽을 뻔했다.
 
 `price_lag` 만 보면 "네트워크가 느렸다"와 "우리 루프가 밀렸다"를 구분할 수 없다.
 가설(async 안의 동기 `get_balance()` + `_retry_on_429` 1s/4s/16s 백오프가 루프를
@@ -63,6 +68,8 @@ class TickLagTracker:
 
     def __init__(self, window: int = TICK_LAG_WINDOW):
         self._price_lag: deque[float] = deque(maxlen=window)
+        # 전송 지연만. price_lag 와 나눠 봐야 "낡은 가격"의 원인이 갈린다.
+        self._msg_lag: deque[float] = deque(maxlen=window)
         self._handler: deque[float] = deque(maxlen=window)
         # 종목별 최근 지연 — 매수 판단 시점의 신선도를 기록하기 위한 것.
         self._latest: dict[str, dict] = {}
@@ -87,11 +94,14 @@ class TickLagTracker:
         except (TypeError, ValueError):
             return None
         msg_ts = data.get("timestamp")
+        msg_lag = (now_ms - float(msg_ts)) if msg_ts else None
+        if msg_lag is not None:
+            self._msg_lag.append(msg_lag)
         self._price_lag.append(price_lag)
         self._n += 1
         self._latest[symbol] = {
             "price_lag_ms": price_lag,
-            "msg_lag_ms": (now_ms - float(msg_ts)) if msg_ts else None,
+            "msg_lag_ms": msg_lag,
             "mono": _time.monotonic(),
         }
         return price_lag
@@ -114,8 +124,12 @@ class TickLagTracker:
         if reset_timer:
             self._last_report_mono = _time.monotonic()
         lags = sorted(self._price_lag)
+        msgs = sorted(self._msg_lag)
         hs = sorted(self._handler)
         return {
+            "m_p50": _pct(msgs, 0.50), "m_p90": _pct(msgs, 0.90),
+            "m_p99": _pct(msgs, 0.99),
+            "m_max": msgs[-1] if msgs else 0.0, "m_n": len(msgs),
             "n": len(lags), "total": self._n,
             "p50": _pct(lags, 0.50), "p90": _pct(lags, 0.90),
             "p99": _pct(lags, 0.99),
@@ -142,6 +156,9 @@ class TickLagTracker:
             f"가격지연 p50 {s['p50']:,.0f} / p90 {s['p90']:,.0f} / "
             f"p99 {s['p99']:,.0f} / 최대 {s['max']:,.0f}ms (최소 {s['min']:,.0f})"
             f"{skew}\n"
+            f"           전송지연 p50 {s['m_p50']:,.0f} / p90 {s['m_p90']:,.0f} / "
+            f"p99 {s['m_p99']:,.0f} / 최대 {s['m_max']:,.0f}ms  "
+            f"(가격지연과의 차이 = 거래 희소성)\n"
             f"           handler p50 {s['h_p50']:,.1f} / p99 {s['h_p99']:,.1f} / "
-            f"최대 {s['h_max']:,.0f}ms | {TICK_LAG_SLOW_HANDLER_MS:,}ms↑ {s['slow_n']}건{recent}"
+            f"최대 {s['h_max']:,.0f}ms | {TICK_LAG_SLOW_HANDLER_MS:,}ms↑ {s['slow_n']}건(누적){recent}"
         )
