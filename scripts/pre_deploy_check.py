@@ -1868,14 +1868,15 @@ def check_consec_loss_no_running_false() -> None:
         warnings.append("[5연패-B9] realtime_monitor.py 파일 없음")
         return
     lines = rm.read_text(encoding="utf-8").splitlines()
-    # 5연패 분기 탐색: "if consec >= 5:" 를 시작으로 다음 빈 줄 또는 "return" 까지 블록
+        # 5연패 분기 탐색. 2026-08-29 상수화(CONSEC_LOSS_LIMIT, 교훈 #19) 이후
+        # 리터럴 5 만 찾으면 룰이 조용히 사문화된다 (lessons #33 계열) — 양쪽 허용.
     start = None
     for i, ln in enumerate(lines):
-        if re.search(r"if\s+consec\s*>=\s*5\s*:", ln):
+        if re.search(r"if\s+consec\s*>=\s*(?:5|CONSEC_LOSS_LIMIT)\s*:", ln):
             start = i
             break
     if start is None:
-        warnings.append("[5연패-B9] 5연패 분기(`if consec >= 5:`)를 찾을 수 없음")
+        warnings.append("[5연패-B9] 5연패 분기(`if consec >= 5` 또는 `>= CONSEC_LOSS_LIMIT`)를 찾을 수 없음")
         return
     # 분기 끝: 다음 'return' 까지 또는 함수 종료(들여쓰기 감소)까지
     base_indent = len(lines[start]) - len(lines[start].lstrip())
@@ -3185,6 +3186,74 @@ def check_tick_lag_instrumented() -> None:
             errors.append(f"[틱지연] tick_lag.py 가 {const} 를 자체 정의 (교훈 #19)")
 
 
+def check_consec_cooldown_releases() -> None:
+    """5연패 쿨다운이 실제로 해제되는지 (ADR 20260829-1).
+
+    배경 (2026-08-29 적발):
+        연패는 별도 카운터가 아니라 closed_trades 를 매번 재계산한다(lessons #38).
+        그래서 "매수 차단"이 "새 거래 없음"을 낳고, 그게 다시 "연패 유지"를 낳는다 —
+        **쿨다운이 만료돼도 다음 재계산에서 즉시 72h 가 다시 걸린다.**
+        `72h` 라는 이름이 실제로는 "이길 때까지 무기한"이었다. 안전장치의 해제 조건이
+        그 장치 자신이 만든 상태에 의존하면 자기충족적으로 잠긴다.
+
+    강제하는 것:
+        (a) 만료 시 `consec_loss_floor_date` 를 밀어 **실제로** 해제한다
+            (cooldown_until 만 0 으로 만들면 다음 재계산에서 부활 — lessons #38)
+        (b) 해제/부과를 `cooldown_imposed_for` 지문으로 구분한다
+            — 없으면 "과거에 쿨다운이 있었던 계좌"의 **새 연패도 즉시 해제**되어
+              안전장치가 통째로 무력화된다
+        (c) 부과 시 지문을 기록한다 (없으면 (b) 가 영영 성립하지 않아 데드락 복귀)
+        (d) 지문 산정(`_consec_streak_tail`)이 연패 산정과 **같은 규칙**을 쓴다
+            — floor + counts_for_consec_loss. 한쪽만 적용하면 지문이 어긋나
+              해제가 성립하지 않는다 (lessons #38 경로 A/B 불일치 계열)
+    """
+    rm = PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py"
+    cfg = PROJECT_ROOT / "services" / "execution" / "config.py"
+    if not rm.exists():
+        return
+    src = rm.read_text(encoding="utf-8")
+    csrc = cfg.read_text(encoding="utf-8") if cfg.exists() else ""
+
+    if not re.search(r"""consec_loss_floor_date['"]\]\s*=""", src):
+        errors.append("[연패-해제] 만료 시 consec_loss_floor_date 대입 없음 — "
+                      "cooldown_until 만 지우면 다음 재계산에서 부활한다 (lessons #38)")
+    if "cooldown_imposed_for" not in src:
+        errors.append("[연패-해제] cooldown_imposed_for 지문 없음 — 과거 쿨다운 이력이 있는 "
+                      "계좌의 새 연패가 즉시 해제되어 안전장치가 무력화된다")
+    else:
+        # ⚠ 개수 세기 금지 — 그건 "이름이 존재하는가"의 변형이다.
+        # 역방향 테스트에서 **기록만 지워도** 개수 3이 유지돼 통과했다(동일 유형 8회째).
+        # 지문은 기록·대조·삭제 **세 동작이 모두** 있어야 성립하므로 각각의 문법
+        # 형태로 따로 묻는다. 기록이 빠지면 _served 가 영원히 False = 데드락 복귀인데,
+        # 총합만 보면 그게 보이지 않는다.
+        for _pat, _why in (
+            (r"\[['\"]cooldown_imposed_for['\"]\]\s*=(?!=)",
+             "지문 **기록** 없음 — _served 가 영원히 False 라 데드락 복귀"),
+            (r"get\(\s*['\"]cooldown_imposed_for",
+             "지문 **대조** 없음 — 부과/해제를 구분하지 못한다"),
+            (r"pop\(\s*['\"]cooldown_imposed_for",
+             "지문 **삭제** 없음 — 해제 후에도 옛 지문이 남는다"),
+        ):
+            if not re.search(_pat, src):
+                errors.append(f"[연패-해제] {_why}")
+    if not re.search(r"def _consec_streak_tail\s*\(", src):
+        errors.append("[연패-해제] _consec_streak_tail() 미정의 — 지문 산정 불가")
+    else:
+        m = re.search(r"def _consec_streak_tail\(.*?\n(.*?)(?=\n    def |\Z)", src, re.S)
+        body = m.group(1) if m else ""
+        for need, why in (
+            (r"consec_loss_floor_date", "floor 미적용 — 해제 후에도 옛 손실이 지문에 남는다"),
+            (r"counts_for_consec_loss\s*\(", "수동 개입 청산이 지문에 섞인다"),
+        ):
+            if not re.search(need, body):
+                errors.append(f"[연패-해제] _consec_streak_tail: {why} (lessons #38)")
+    for const in ("CONSEC_LOSS_LIMIT", "CONSEC_LOSS_COOLDOWN_HOURS"):
+        if f"{const} =" not in csrc:
+            errors.append(f"[연패-해제] config.py 에 {const} 미정의 (교훈 #19)")
+        if f"{const} =" in src:
+            errors.append(f"[연패-해제] {const} 자체 정의 발견 (교훈 #19)")
+
+
 def check_ws_freshness_guard() -> None:
     """웹소켓 신선도 감시가 실제로 배선되어 있는지 (2026-08-29).
 
@@ -3365,6 +3434,7 @@ def main() -> None:
     check_ml_shadow_integrity()
     check_tick_lag_instrumented()
     check_ws_freshness_guard()
+    check_consec_cooldown_releases()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")
