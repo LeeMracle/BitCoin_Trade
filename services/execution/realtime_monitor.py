@@ -1015,6 +1015,14 @@ class RealtimeMonitor:
                         await ws.send_json(subscribe)
                         print(f"  구독 완료: {len(upbit_codes)}개 종목", flush=True)
 
+                        # 새 연결에서는 옛 표본이 의미가 없다 — 창을 비우고 쿨다운을 건다.
+                        # 없으면 **기동 직후 오탐**이 난다(2026-08-30 실측): 기동~구독에
+                        # 2분 34초가 걸리는 동안 웹소켓 메시지가 쌓이고, 봇은 그 밀린
+                        # 메시지부터 처리하므로 지연 중앙값이 10초를 넘는다. 이건 연결
+                        # 열화가 아니라 초기화 대기다.
+                        if self._tick_lag is not None:
+                            self._tick_lag.note_reconnect()
+
                         # P7-07: async for 대신 wait_for(timeout=300)으로 stale 감지
                         while True:
                             try:
