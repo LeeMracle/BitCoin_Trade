@@ -203,7 +203,7 @@ async def main() -> int:
                     help="시드머니 override (기본: config.CIRCUIT_BREAKER_INITIAL_CAPITAL)")
     ap.add_argument("--axis", default="all",
                     choices=["all", "slots", "slotcap", "slot20", "tp", "tp55", "tp2",
-                             "stop", "dc", "slip", "combo"])
+                             "stop", "dc", "slip", "combo15", "combo"])
     args = ap.parse_args()
 
     if args.capital:
@@ -330,6 +330,19 @@ async def main() -> int:
             (f"TP2 {int(t*100)}%", {"tp": [{"trigger_pct": 0.055, "sell_ratio": 0.5},
                                            {"trigger_pct": t, "sell_ratio": 0.5}]})
             for t in (0.08, 0.10, 0.12, 0.15, 0.20, 0.30)
+        ],
+        # TP2 x 슬롯 상호작용 (2026-08-31, plan 20260831_1).
+        # ADR 20260824-2 의 "TP2 15% 가 최적"은 **슬롯 5** 시절 측정이다.
+        # 슬롯이 15로 바뀌었으니(ADR 20260825-1) 그 결론이 유지되는지 본다.
+        # 상한은 검증룰(<=1.5/슬롯)을 지킨 값으로 각각 고정한다 — 상한을 고정하면
+        # 슬롯 축의 효과에 상한 효과가 섞인다(08-24 slots 축의 한계였다).
+        "combo15": [
+            (f"슬롯{n} TP2 {int(t*100)}%",
+             {"slots": n, "weight": w,
+              "tp": [{"trigger_pct": 0.055, "sell_ratio": 0.5},
+                     {"trigger_pct": t, "sell_ratio": 0.5}]})
+            for n, w in ((10, 0.15), (15, 0.10), (20, 0.075))
+            for t in (0.10, 0.15)
         ],
         "stop": [(f"손절 {int(h*100)}% / ATRx{m}", {"hard": h, "atr_mult": m})
                  for h, m in ((0.10, 3.0), (0.07, 3.0), (0.15, 3.0),
