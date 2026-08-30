@@ -852,42 +852,42 @@ class RealtimeMonitor:
                 # → 5연패 안전장치 무력화. 봇 부활 후 cooldown_until만 살아있으면 다행, 우연 의존.
                 # 조치: process는 유지하고 cooldown_until + alerted_until 강제 연장으로 매수 차단 + silence 보장.
                 # 매수 경로(_is_loss_cooldown)는 cooldown_until만 보므로 cooldown_until 강제 연장이 핵심.
-            # ── 만료 판정: 같은 연패로 이미 72h 를 복역했는가 (ADR 20260829-1) ──
-            # `consec >= LIMIT` 이면서 cooldown 이 만료된 상태는 두 가지가 섞여 있다:
-            #   (a) 이 연패로 처음 걸린 경우      -> 72h 부과해야 한다
-            #   (b) 이 연패로 이미 72h 를 복역   -> 해제해야 한다
-            # `cooldown_until` 이 과거값이라는 것만으로 구분하면, 과거에 한 번이라도
-            # 쿨다운이 있었던 계좌는 **새 5연패도 즉시 해제**돼 안전장치가 무력화된다.
-            # 그래서 '어떤 연패에 대해 부과했는지'(마지막 손실의 exit_date)를 기록해 대조한다.
-            _pool_tail = self._consec_streak_tail()
-            _served = (self.state.get('cooldown_imposed_for')
-                       and self.state.get('cooldown_imposed_for') == _pool_tail)
-            if _served:
-                # 복역 완료 → floor 를 지금으로 밀어 이 연패를 산정에서 제외한다.
-                # cooldown_until 만 지우면 다음 재계산에서 그대로 부활한다(lessons #38).
-                _floor = datetime.now(tz=timezone.utc).strftime('%Y-%m-%d %H:%M')
-                self.state['consec_loss_floor_date'] = _floor
-                self.state['cooldown_until'] = 0
-                self.state['consec_loss_alerted_until'] = 0
-                self.state.pop('cooldown_imposed_for', None)
-                _rel = int(self.state.get('consec_loss_release_count') or 0) + 1
-                self.state['consec_loss_release_count'] = _rel
-                save_state(self.state)
-                print(f'  [5연패] 쿨다운 복역 완료 — floor={_floor} 로 해제 ({_rel}회째)', flush=True)
-                await send(
-                    f'✅ *5연패 쿨다운 해제 ({CONSEC_LOSS_COOLDOWN_HOURS}h 경과)*\n'
-                    f'연패 산정 기준일을 {_floor} 로 이동 — 신규 매수 재개\n'
-                    f'누적 통계(승률 {wins_n}/{n_trades})는 보존된다\n'
-                    f'⚠ 이번이 {_rel}회째 해제 — 반복되면 전략 자체를 의심할 것'
-                )
-            else:
-                cooldown_target = now_ts + 3600 * CONSEC_LOSS_COOLDOWN_HOURS
-                cur_cd = self.state.get('cooldown_until', 0) or 0
-                self.state['cooldown_until'] = max(cur_cd, cooldown_target)
-                self.state['consec_loss_alerted_until'] = self.state['cooldown_until']
-                # 어떤 연패에 대한 부과인지 기록 — 만료 시 (a)/(b) 구분의 근거
-                self.state['cooldown_imposed_for'] = _pool_tail
-                save_state(self.state)
+                # ── 만료 판정: 같은 연패로 이미 72h 를 복역했는가 (ADR 20260829-1) ──
+                # `consec >= LIMIT` 이면서 cooldown 이 만료된 상태는 두 가지가 섞여 있다:
+                #   (a) 이 연패로 처음 걸린 경우      -> 72h 부과해야 한다
+                #   (b) 이 연패로 이미 72h 를 복역   -> 해제해야 한다
+                # `cooldown_until` 이 과거값이라는 것만으로 구분하면, 과거에 한 번이라도
+                # 쿨다운이 있었던 계좌는 **새 5연패도 즉시 해제**돼 안전장치가 무력화된다.
+                # 그래서 '어떤 연패에 대해 부과했는지'(마지막 손실의 exit_date)를 기록해 대조한다.
+                _pool_tail = self._consec_streak_tail()
+                _served = (self.state.get('cooldown_imposed_for')
+                           and self.state.get('cooldown_imposed_for') == _pool_tail)
+                if _served:
+                    # 복역 완료 → floor 를 지금으로 밀어 이 연패를 산정에서 제외한다.
+                    # cooldown_until 만 지우면 다음 재계산에서 그대로 부활한다(lessons #38).
+                    _floor = datetime.now(tz=timezone.utc).strftime('%Y-%m-%d %H:%M')
+                    self.state['consec_loss_floor_date'] = _floor
+                    self.state['cooldown_until'] = 0
+                    self.state['consec_loss_alerted_until'] = 0
+                    self.state.pop('cooldown_imposed_for', None)
+                    _rel = int(self.state.get('consec_loss_release_count') or 0) + 1
+                    self.state['consec_loss_release_count'] = _rel
+                    save_state(self.state)
+                    print(f'  [5연패] 쿨다운 복역 완료 — floor={_floor} 로 해제 ({_rel}회째)', flush=True)
+                    await send(
+                        f'✅ *5연패 쿨다운 해제 ({CONSEC_LOSS_COOLDOWN_HOURS}h 경과)*\n'
+                        f'연패 산정 기준일을 {_floor} 로 이동 — 신규 매수 재개\n'
+                        f'누적 통계(승률 {wins_n}/{n_trades})는 보존된다\n'
+                        f'⚠ 이번이 {_rel}회째 해제 — 반복되면 전략 자체를 의심할 것'
+                    )
+                else:
+                    cooldown_target = now_ts + 3600 * CONSEC_LOSS_COOLDOWN_HOURS
+                    cur_cd = self.state.get('cooldown_until', 0) or 0
+                    self.state['cooldown_until'] = max(cur_cd, cooldown_target)
+                    self.state['consec_loss_alerted_until'] = self.state['cooldown_until']
+                    # 어떤 연패에 대한 부과인지 기록 — 만료 시 (a)/(b) 구분의 근거
+                    self.state['cooldown_imposed_for'] = _pool_tail
+                    save_state(self.state)
                 await send(
                     f"🛑 *5연패 cooldown 72h 자동 연장*\n"
                     f"연속 {consec}건 손실 — 신규 매수 차단 ({cooldown_target} until)\n"

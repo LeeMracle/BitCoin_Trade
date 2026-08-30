@@ -3252,6 +3252,46 @@ def check_consec_cooldown_releases() -> None:
             errors.append(f"[연패-해제] config.py 에 {const} 미정의 (교훈 #19)")
         if f"{const} =" in src:
             errors.append(f"[연패-해제] {const} 자체 정의 발견 (교훈 #19)")
+    # ── 배치 검증 (AST) — 2026-08-29 실제 사고 ─────────────────────────
+    # 해제 분기를 `else:` 밖(같은 들여쓰기)에 두는 실수를 저질렀고, 그 결과
+    # **쿨다운이 62.4시간 남았는데도 해제**됐다. 로그가 증거다:
+    #     [5연패] cooldown 활성 (62.4h 남음) — 알람 skip
+    #     [5연패] 쿨다운 복역 완료 — floor=... 로 해제 (1회째)
+    # 두 줄이 같이 나올 수 없는 구조인데 나왔다.
+    #
+    # 이 버그는 **구문 검사·시나리오 시뮬레이션·정규식 역방향 테스트를 모두 통과**했다.
+    # 시뮬레이션은 로직을 복제해 검사하므로 실제 파일의 들여쓰기와 무관하고,
+    # 정규식은 텍스트만 본다. "코드가 **어디에** 놓였는가"는 AST 로만 물을 수 있다
+    # (lessons #45 의 '종료 코드가 TP 루프 안에 있어 도달 불가' 와 같은 계열).
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return
+    target = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.If) and isinstance(node.test, ast.Compare):
+            t = ast.unparse(node.test)
+            if "consec" in t and ("CONSEC_LOSS_LIMIT" in t or ">= 5" in t):
+                target = node
+                break
+    if target is None:
+        errors.append("[연패-해제] 5연패 분기를 AST 에서 찾을 수 없음 — 배치 검증 불가")
+        return
+    inner = [n for n in target.body if isinstance(n, ast.If)]
+    if len(inner) != 1:
+        errors.append(f"[연패-해제] 5연패 분기 직속 if 가 {len(inner)}개 — "
+                      f"해제 분기가 '쿨다운 활성' 판정 밖으로 나왔다. "
+                      f"활성 중에도 해제가 실행된다")
+        return
+    act = inner[0]
+    def _has(nodes):
+        return any("_served" in ast.unparse(n) for n in nodes)
+    if not _has(act.orelse):
+        errors.append("[연패-해제] 해제 분기(_served)가 '쿨다운 활성' 판정의 else 안에 없음 — "
+                      "만료 여부와 무관하게 실행된다")
+    if _has(act.body) or _has([n for n in target.body if n is not act]):
+        errors.append("[연패-해제] 해제 분기(_served)가 else 밖에도 존재 — "
+                      "쿨다운이 남아 있는데 해제될 수 있다")
 
 
 def check_ws_freshness_guard() -> None:
