@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import os
 import sys
 import time as _time
 import uuid
@@ -194,6 +196,23 @@ class RealtimeMonitor:
         self._orphan_seen_count: dict[str, int] = {}
 
     async def start(self):
+        # ── 느린 콜백 추적 (2026-09-02) ──────────────────────────────
+        # 루프지연 p50 14초인데 handler 는 p50 0.0ms 다. 즉 범인은 틱 경로 밖이고
+        # 내가 가진 계측으로는 안 잡힌다. asyncio 는 디버그 모드에서
+        # **어떤 콜백이 몇 초 걸렸는지 이름과 함께** 로그로 남긴다 — 추측 대신 그걸 쓴다.
+        # 환경변수로 켠다: 상시 켜면 오버헤드가 있고, 원인 규명 후엔 필요 없다.
+        if os.getenv("ASYNCIO_SLOW_CALLBACK"):
+            try:
+                _loop = asyncio.get_running_loop()
+                _loop.set_debug(True)
+                _loop.slow_callback_duration = float(os.getenv("ASYNCIO_SLOW_CALLBACK"))
+                logging.getLogger("asyncio").setLevel(logging.WARNING)
+                logging.basicConfig(level=logging.WARNING, force=True)
+                print(f"  [진단] asyncio 느린콜백 추적 ON "
+                      f"({_loop.slow_callback_duration}s 초과 시 콜백명 출력)", flush=True)
+            except Exception as _e:
+                print(f"  [진단] 느린콜백 추적 실패: {_e}", flush=True)
+
         print("=" * 60, flush=True)
         print("실시간 모니터 시작", flush=True)
         if IS_DAYTRADING:
