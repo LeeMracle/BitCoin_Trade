@@ -2363,56 +2363,6 @@ class RealtimeMonitor:
                 self._dedupe_log_ts = _now_ts
             return
 
-        # ── 계좌 레벨 서킷브레이커 ─────────────────────────
-        if CIRCUIT_BREAKER_ENABLED:
-            try:
-                balance = get_balance()
-                total_krw = balance.get("total_krw", 0)
-                newly_triggered = check_and_trigger(total_krw)
-                if newly_triggered:
-                    loss_pct = (total_krw - CIRCUIT_BREAKER_INITIAL_CAPITAL) / CIRCUIT_BREAKER_INITIAL_CAPITAL * 100
-                    msg = (
-                        f"서킷브레이커 발동!\n"
-                        f"계좌 평가금액: {total_krw:,.0f} KRW\n"
-                        f"초기자본 대비: {loss_pct:+.1f}%\n"
-                        f"모든 신규 매수 차단 (기존 포지션 유지)\n"
-                        f"해제: workspace/circuit_breaker_state.json 삭제 또는 triggered=false 설정"
-                    )
-                    print(f"\n  [서킷브레이커] {msg}", flush=True)
-                    await send(f"🔴 *{msg}")
-                    return
-                _now = _time.monotonic()
-                if is_l2_triggered():
-                    if _now - self._cb_log_ts > 60:
-                        print(f"  [서킷브레이커-L2] 발동 중 — {symbol} 매수 차단", flush=True)
-                        self._cb_log_ts = _now
-                    record_block("cb_l2", symbol)
-                    return
-                if is_triggered():
-                    if _now - self._cb_log_ts > 60:
-                        print(f"  [서킷브레이커] 발동 중 — {symbol} 매수 차단", flush=True)
-                        self._cb_log_ts = _now
-                    record_block("cb_l1", symbol)
-                    return
-            except RateLimitExhausted as e:
-                # plan 20260503 P0 (AC7-AC10): 잔고 조회 429 → 매수 차단 (silent fallback 금지)
-                print(f"  [서킷브레이커] 잔고 조회 429 실패, 매수 차단: {e}", flush=True)
-                last = load_last_known_balance(max_age_hours=24)
-                if last:
-                    _last_total = last.get("total_krw") or 0
-                    print(f"  [서킷브레이커] last_known 캐시 ({_last_total:,.0f}) 사용", flush=True)
-                else:
-                    print(f"  [서킷브레이커] 캐시 만료/없음, 보수적 평가로 매수 차단", flush=True)
-                await self._notify_balance_fetch_fail(symbol, "rate_limit", str(e))
-                record_block("balance_fetch_fail", symbol)
-                return
-            except Exception as e:
-                # plan 20260503 P0: 일반 오류도 매수 차단 (이전엔 silent 매수 진행 → 안전장치 우회)
-                print(f"  [서킷브레이커] 잔고 조회 실패, 매수 차단: {e}", flush=True)
-                await self._notify_balance_fetch_fail(symbol, "general", str(e))
-                record_block("balance_fetch_fail", symbol)
-                return
-
         # 연패 쿨다운 확인 (3연패 시 3일 매수 중단)
         if self._is_loss_cooldown():
             return
@@ -2483,6 +2433,67 @@ class RealtimeMonitor:
                 )
                 record_block("atr_filter", symbol)
                 return
+        # ── 계좌 레벨 서킷브레이커 ─────────────────────────
+        # ⚠ 위치가 중요하다 (2026-09-02 이동). 이 블록은 get_balance() 를 부르는데
+        # 그건 **동기 블로킹 REST** 다(429 시 _retry_on_429 로 최대 21초).
+        # 예전엔 dedupe 직후, 즉 **모든 값싼 필터보다 앞**에 있어서 거래량·ATR 에서
+        # 걸러질 종목까지 전부 REST 를 냈다. 157종목 x 60초 dedupe = 분당 수십 회이고,
+        # 각 호출이 이벤트 루프를 통째로 멈춘다.
+        # 실측: handler 평균 42ms x 24건/s = **루프 점유율 101%** -> 메시지 처리가
+        # 밀려 전송지연 p50 240초(최소 201초). 그 상태의 매수는 4분 된 가격으로
+        # 판단된다(교훈 #48 KERNEL 과 같은 구조).
+        # => 값싼 필터(쿨다운/F&G/레짐/거래량/일일손실/ATR) **뒤로** 옮겼다.
+        #    안전 보장은 불변이다 — 매수 전에 반드시 평가되고, 실패 시 fail-closed 다.
+        if CIRCUIT_BREAKER_ENABLED:
+            try:
+                balance = get_balance()
+                total_krw = balance.get("total_krw", 0)
+                newly_triggered = check_and_trigger(total_krw)
+                if newly_triggered:
+                    loss_pct = (total_krw - CIRCUIT_BREAKER_INITIAL_CAPITAL) / CIRCUIT_BREAKER_INITIAL_CAPITAL * 100
+                    msg = (
+                        f"서킷브레이커 발동!\n"
+                        f"계좌 평가금액: {total_krw:,.0f} KRW\n"
+                        f"초기자본 대비: {loss_pct:+.1f}%\n"
+                        f"모든 신규 매수 차단 (기존 포지션 유지)\n"
+                        f"해제: workspace/circuit_breaker_state.json 삭제 또는 triggered=false 설정"
+                    )
+                    print(f"\n  [서킷브레이커] {msg}", flush=True)
+                    await send(f"🔴 *{msg}")
+                    return
+                _now = _time.monotonic()
+                if is_l2_triggered():
+                    if _now - self._cb_log_ts > 60:
+                        print(f"  [서킷브레이커-L2] 발동 중 — {symbol} 매수 차단", flush=True)
+                        self._cb_log_ts = _now
+                    record_block("cb_l2", symbol)
+                    return
+                if is_triggered():
+                    if _now - self._cb_log_ts > 60:
+                        print(f"  [서킷브레이커] 발동 중 — {symbol} 매수 차단", flush=True)
+                        self._cb_log_ts = _now
+                    record_block("cb_l1", symbol)
+                    return
+            except RateLimitExhausted as e:
+                # plan 20260503 P0 (AC7-AC10): 잔고 조회 429 → 매수 차단 (silent fallback 금지)
+                print(f"  [서킷브레이커] 잔고 조회 429 실패, 매수 차단: {e}", flush=True)
+                last = load_last_known_balance(max_age_hours=24)
+                if last:
+                    _last_total = last.get("total_krw") or 0
+                    print(f"  [서킷브레이커] last_known 캐시 ({_last_total:,.0f}) 사용", flush=True)
+                else:
+                    print(f"  [서킷브레이커] 캐시 만료/없음, 보수적 평가로 매수 차단", flush=True)
+                await self._notify_balance_fetch_fail(symbol, "rate_limit", str(e))
+                record_block("balance_fetch_fail", symbol)
+                return
+            except Exception as e:
+                # plan 20260503 P0: 일반 오류도 매수 차단 (이전엔 silent 매수 진행 → 안전장치 우회)
+                print(f"  [서킷브레이커] 잔고 조회 실패, 매수 차단: {e}", flush=True)
+                await self._notify_balance_fetch_fail(symbol, "general", str(e))
+                record_block("balance_fetch_fail", symbol)
+                return
+
+
         # ── ML 신호 필터 게이트 (lessons #36 B8: fail-CLOSED, 2026-06-04 재작성) ─────
         # 모든 사전 필터(서킷브레이커/F&G/EMA200/거래량/ATR) 통과 후 마지막 게이트.
         # multi_trader.py:210~ scanner DC와 동형 패턴.
