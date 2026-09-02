@@ -76,6 +76,8 @@ class TickLagTracker:
         # 신선도 판정용 **단기** 창. 통계용(_msg_lag, 5000)과 분리한다 —
         # 5000개는 약 4분치라 열화를 늦게 알아채고, 회복도 늦게 반영된다.
         self._recent_msg: deque[float] = deque(maxlen=200)
+        # 이벤트 루프 지연 (asyncio.sleep(1) 의 drift) — 1초 간격이라 1시간치
+        self._loop_lag: deque[float] = deque(maxlen=3600)
         # 강제 재연결 직후 재판정 금지 (재연결 루프 방지)
         self._reconnect_block_until = 0.0
         self._handler: deque[float] = deque(maxlen=window)
@@ -144,6 +146,29 @@ class TickLagTracker:
         v = sorted(self._recent_msg)
         med = v[len(v) // 2]
         return med > WS_STALE_LAG_MS, med
+
+    # ── 이벤트 루프 지연 ────────────────────────────────────
+    def record_loop_lag(self, drift_ms: float) -> None:
+        """`asyncio.sleep(1)` 의 초과 경과분. 루프가 붙잡힌 시간이다.
+
+        handler_ms 는 `_handle_tick` 만 잰다. 루프를 막는 건 **틱 경로 밖**일 수
+        있다(주기 리포트, TP 점검의 동기 REST 등). loop lag 는 어느 코루틴이
+        범인이든 상관없이 "루프가 몇 초 멈췄나"를 직접 준다.
+
+        2026-09-02 근거: 같은 서버의 독립 프로세스가 p50 37ms 를 보는데 봇만
+        15초였다. 네트워크·시계·업비트 정상 → 원인은 봇 안이고, handler 로는
+        안 잡혔다. 그래서 루프 자체를 재야 한다.
+        """
+        self._loop_lag.append(drift_ms)
+
+    def loop_summary(self) -> str:
+        v = sorted(self._loop_lag)
+        if not v:
+            return ""
+        n = len(v)
+        return (f"  [루프지연] n={n} | p50 {v[n//2]:,.0f} / p90 {v[int(n*.9)]:,.0f} / "
+                f"p99 {v[int(n*.99)]:,.0f} / 최대 {v[-1]:,.0f}ms"
+                f"{'  ⚠ 루프가 막히고 있다' if v[int(n*.9)] > 1000 else ''}")
 
     def note_reconnect(self) -> None:
         """강제 재연결 시 호출. 낡은 표본을 버리고 쿨다운을 건다.

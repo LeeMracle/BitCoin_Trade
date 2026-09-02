@@ -283,9 +283,12 @@ class RealtimeMonitor:
         except Exception:
             pass
 
+        # 루프 지연 프로브를 함께 띄운다 — 정의만 하면 사문화된다 (교훈 #44).
+        # 이 코루틴은 자고 깨어나기만 하므로 관측이 대상을 바꾸지 않는다.
         await asyncio.gather(
             self._run_websocket(),
             self._hourly_sync(),
+            self._loop_lag_probe(),
         )
 
     async def _hourly_sync(self):
@@ -1067,6 +1070,9 @@ class RealtimeMonitor:
                                 # 가설 판정 기준: 느린 handler 직후 가격지연이 치솟는 톱니가 보이는가.
                                 if self._tick_lag is not None and self._tick_lag.due():
                                     print(self._tick_lag.format_summary(), flush=True)
+                                    _ls = self._tick_lag.loop_summary()
+                                    if _ls:
+                                        print(_ls, flush=True)
 
                                 # ── 웹소켓 신선도 감시 (2026-08-29) ─────────────
                                 # 위 985행의 `wait_for(receive(), 300)` 은 **침묵**만 잡는다.
@@ -1076,13 +1082,15 @@ class RealtimeMonitor:
                                 if WS_FRESHNESS_ENABLED and self._tick_lag is not None:
                                     _stale, _med = self._tick_lag.is_degraded()
                                     if _stale:
+                                        # 2026-09-02: 강제 재연결을 **중단**했다. 24시간에 144회(약 2분마다 =
+                                        # 쿨다운 주기) 재연결했으나 지연은 그대로였다. 원인이 연결이 아니기 때문이다 —
+                                        # 같은 서버의 독립 프로세스가 동시각에 p50 37ms/최대 166ms 를 보는데 봇만 15초다.
+                                        # 네트워크·서버부하·시계(NTP 오프셋 27us)·업비트 모두 정상 확인.
+                                        # **봇의 이벤트 루프가 지연되고 있다** — 밖을 향한 처방으로 안의 문제는 못 고친다.
                                         print(f"  [WS-LAG] 전송지연 중앙값 {_med:,.0f}ms "
-                                              f"— 연결 열화, 강제 재연결", flush=True)
-                                        # 의도된 재연결이다. 오류 카운터를 올리면
-                                        # 정상 복구가 봇 자동중지로 번진다 (교훈 #47).
-                                        self._tick_lag.note_reconnect()
+                                              f"— 내부 지연 의심(재연결 안 함)", flush=True)
+                                        self._tick_lag.note_reconnect()   # 창 비움 + 쿨다운 (재판정 폭주 방지)
                                         await self._notify_ws_stale(_med)
-                                        break
 
                             elif msg.type in (aiohttp.WSMsgType.ERROR, aiohttp.WSMsgType.CLOSED):
                                 print("웹소켓 연결 종료")
@@ -1920,6 +1928,20 @@ class RealtimeMonitor:
         import time
         self.error_cooldown[symbol] = time.time() + ERROR_COOLDOWN_SEC
 
+    async def _loop_lag_probe(self) -> None:
+        """이벤트 루프 지연 감시 — 1초마다 자고 실제 경과를 잰다.
+
+        `await asyncio.sleep(1)` 이 1초 만에 깨어나지 못했다면 그 차이가
+        **다른 코루틴이 루프를 붙잡은 시간**이다. 이 코루틴 자체는 아무것도
+        하지 않으므로 관측이 관측 대상을 바꾸지 않는다.
+        """
+        while self.running:
+            t0 = _time.monotonic()
+            await asyncio.sleep(1.0)
+            drift = (_time.monotonic() - t0 - 1.0) * 1000
+            if self._tick_lag is not None:
+                self._tick_lag.record_loop_lag(max(drift, 0.0))
+
     async def _notify_ws_stale(self, median_ms: float) -> None:
         """웹소켓 열화 경보 — 1시간 1회로 제한한다.
 
@@ -1935,11 +1957,17 @@ class RealtimeMonitor:
         self._ws_stale_alert_until = now + 3600
         self._ws_stale_alerts.append(now)
         n = len(self._ws_stale_alerts)
-        await self._handle_error(
-            "ws_stale_lag",
-            f"웹소켓 전송지연 {median_ms / 1000:,.0f}초 (중앙값) — 강제 재연결\n"
-            f"낡은 가격으로 매수 판단이 내려질 수 있어 연결을 끊었다.\n"
-            f"최근 1시간 {n}회\n{UPBIT_WS_URL}",
+        # ⚠ _handle_error 금지 — consecutive_errors 를 올리고 5회에서
+        # self.running=False 로 봇을 멈춘다. 2026-09-02 알림에 실제로
+        # "(연속 오류: 1/5)" 가 찍혔다. 주석엔 "올리면 안 된다"고 써놓고
+        # 정확히 그 함수를 불렀다 — 교훈 #47 을 스스로 다시 위반했다.
+        # 이건 **감지된 이상**이지 봇의 오류가 아니다. 알림만 보낸다.
+        await send(
+            f"⚠️ *웹소켓 전송지연 {median_ms / 1000:,.0f}초* (중앙값)\n"
+            f"봇이 낡은 가격으로 판단할 수 있는 상태다.\n"
+            f"재연결은 하지 않는다 — 원인이 연결이 아니라 **봇 내부**임이 확인됐다\n"
+            f"(같은 서버 독립 프로세스는 동시각 p50 37ms)\n"
+            f"최근 1시간 {n}회"
         )
 
     async def _handle_error(self, error_key: str, msg: str):
