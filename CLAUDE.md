@@ -1,299 +1,239 @@
 # Bitcoin Auto-Trading Workflow
 
-## 프로젝트 목표
-
 비트코인 자동매매 워크플로우 — 시장 분석 → 전략 연구 → 백테스트 → 페이퍼 트레이딩 → 실전 거래
 
-## 거래소: 업비트 (Upbit) — 현물 전용
+## 🔴 세션 시작 시 읽는 순서
 
-- 기준 통화: **KRW** (심볼: `BTC/KRW`)
-- **현물 전용** — 선물/파생상품 없음. 펀딩레이트·미결제약정 데이터 없음
-- 포지션: **long/flat만** (숏 불가)
-- API 인증: JWT Bearer 토큰 방식 (`UPBIT_ACCESS_KEY`, `UPBIT_SECRET_KEY`)
-- Rate Limit: 기본 29 req/sec, 주문 4 req/sec
-- ccxt 사용: `ccxt.upbit({'apiKey': ..., 'secret': ...})`
-- 공식 문서: [업비트 개발자 센터](https://docs.upbit.com/kr)
+1. **[docs/ROADMAP.md](docs/ROADMAP.md)** — **지금 무엇을 해야 하는가** (현황판, 1페이지)
+2. [workspace/reports/20260825_1_session_handoff.md](workspace/reports/20260825_1_session_handoff.md) — 직전 세션 인수인계
+3. 이 문서 — 프로젝트 레퍼런스 (규칙·제약·파라미터·교훈 인덱스)
 
-### 환경: 로컬 PC + 유동 IP
+> ROADMAP.md 가 "다음 행동", 이 문서가 "변하지 않는 규칙"이다. **진척 상태를 이 문서에 적지 말 것.**
 
-- **공개 시세 API는 인증 불필요** — Phase 2 백테스트까지 API 키 없이 진행 가능
-- Phase 3 시작 전 아래 중 하나 선택 필요:
-  - ISP 고정 IP 신청 (권장, 소액 추가 비용)
-  - DDNS + IP 갱신 스크립트
-  - 클라우드 서버 이전 (Phase 4 실전 거래 시 필수 수준)
-- API 키에 **출금하기 권한 절대 부여 금지**
-- 상세 가이드: [workspace/reference/upbit-api-guide.md](workspace/reference/upbit-api-guide.md)
+---
 
-## 🔴 세션 시작 시 먼저 읽을 것
+## 거래소 제약: 업비트 (Upbit) — 현물 전용
 
-**[workspace/reports/20260825_1_session_handoff.md](workspace/reports/20260825_1_session_handoff.md)**
+전략 설계를 규정하는 **구조적 제약**이다. 여기서 벗어나려면 거래소를 바꿔야 한다.
 
-직전 세션(2026-08-25) 인수인계. 아래를 담고 있다:
+- 기준 통화 **KRW** (`BTC/KRW`) · **현물 전용** — 선물/파생 없음, 펀딩레이트·미결제약정 데이터 없음
+- 포지션 **long/flat 만** — **숏 불가 = 하락장 수익 수단이 원천적으로 없다**
+- 인증: JWT Bearer (`UPBIT_ACCESS_KEY`, `UPBIT_SECRET_KEY`) · ccxt `ccxt.upbit({...})`
+- Rate Limit: 기본 29 req/s, 주문 4 req/s
+- API 키에 **출금 권한 절대 부여 금지**
+- 상세: [workspace/reference/upbit-api-guide.md](workspace/reference/upbit-api-guide.md) · [업비트 개발자 센터](https://docs.upbit.com/kr)
 
-- **이번 세션 처리**: 슬롯 5 → **15** 확대 (ADR 20260825-1) + 비중 상한 0.20 → 0.10 +
-  검증 기준선 08-25 리셋 + 배포/기동 완료
-- 🔴 **다음 세션이 먼저 볼 것**: 전환기에는 신규 매수가 며칠 멈춘다(버그 아님 — §2),
-  총자산 158,000원선이 부분 익절 유지 하한
-- 이전 인수인계: [20260824_2](workspace/reports/20260824_2_session_handoff.md)(슬롯 측정 원본),
-  [20260824_1](workspace/reports/20260824_session_handoff.md)
+---
 
-## 현재 단계: Phase 2 완료, Phase 3 준비
+## 현재 전략 파라미터
 
-- [x] Phase 1: 레포 골격, 스킬 정의, MCP 계약 초안
-- [x] Phase 2: 시장 데이터 어댑터, 백테스트 러너, 전략 탐색 완료
-  - F&G 역추세 → 실패 (구조적 한계)
-  - 추세추종 전환 → **DC(50)+ATR(14)x3.0** OOS Sharpe 1.123, MDD -18.7% (엄격 기준 통과)
-  - 보조: RSI(10)>50<45+EMA(150) OOS Sharpe 1.040, MDD -14.9%
-- [ ] Phase 3: 페이퍼 트레이딩 진행 중
-  - 메인: **DC(12)+ATR(14)x3.0** (⚠ **ML 게이트는 2026-05-16부터 비활성** — 아래 별도 항목) — `services/paper_trading/` + `services/ml/` (DC50→20→15→10→15→12 단계적 공격→보수화→재적극화, [DC15 경위](docs/decisions/20260426_1_dc15_switch.md), [DC10 시도→DC15 복귀](docs/decisions/20260504_1_three_strategy_enhancements.md), [DC12 + ATR 10% + VOL 1.0 동시 튜닝](docs/decisions/20260505_1_strategy_param_tuning.md), [ML LIVE 가속 0.45 보수 시작](docs/decisions/20260505_2_ml_live_acceleration.md))
-  - **레짐 필터(EMA200) 재활성화됨 (현재 ON)** (2026-05-16 [ADR 20260516-2](docs/decisions/20260516_2_entry_conditions_tightening.md)) — `REGIME_FILTER_ENABLED = True`, BTC/KRW 종가 < EMA200 시 전 종목 신규 매수 차단(기존 포지션 트레일링스탑은 영향 없음). 경위: 5/3 [plan 20260503_2](workspace/plans/20260503_2_enable_trading_in_bear.md)에서 "거래 빈도 우선, 백테스트 미달 수용"으로 **해제(OFF)** 했으나 5/3~5/16 실거래 악화(승률 17.4%·PF 0.29·누적 -111%·손실 중 63%가 -9.5%↓ 하드손절 직행)로 ADR 20260516-2에서 **재활성화(ON)** 하며 plan 20260503_2를 원복. 동반 강화: VOL 필터 1.0→1.5, ATR 필터 0.10→0.07. 안전장치는 하드 손절 캡(-10%) + 서킷브레이커(-20%/-25%) + ATR 필터 유지
-  - **종목 풀**: MIN_VOLUME_KRW 3억 → 5억 환원 (2026-06-07 [ADR 20260607-1](docs/decisions/20260607_1_min_volume_revert_5e.md)) — 저유동성 알트 진입 차단(승률 17.4%·하드손절 직행 48% 주범), 약 150 → 117 종목으로 축소. 이전 확대(5억→3억)는 plan 20260503_5
-  - 보조: RSI(10)>50/<45+EMA(150) — 관찰용
-  - **검증 기준선 재설정 (2026-08-23, [ADR 20260823-1](docs/decisions/20260823_1_validation_baseline_reset.md); ADR 20260824-1로 **2026-08-24**로 재이동)** — `strategy_start` 2026-03-29 → 2026-08-23 → **2026-08-24**(TP1 변경에 따른 재리셋, 비용 1건). 이전 통계 폐기 사유: (1) 실행 버그 4건(lessons #40~#43)이 매매·통계를 오염, (2) 그 기간 전략 파라미터 반복 변경으로 서로 다른 전략 성적을 합산, (3) 레짐 게이트 통과율이 2026 Q1/Q2 **0%**·최근 180일 **1.1%**로 거래 자체가 거의 불가했음. `closed_trades` 26건은 **보존**(창만 이동)
-  - **목표치 재도출**: 승률 35%→**48%** / 평균 +0.5%→**+0.75%** — 현재 config 백테스트 실측(506건/54종목/700일, 수수료 반영: 승률 59.9%·평균 +1.50%·PF 1.51)의 하한. 기존 값은 TP(+5%/+12%) 도입 이전 잔재
-  - **판정 기준 전환**: 달력 기반(`7일+15건`) → **표본 수 기반**(최종 30건 / 중간 15건). 레짐 차단 구간에선 시간만 흐르고 표본이 안 쌓여 달력 판정이 무의미. 성과 요약에 `거래가능 M일`(regime_open_days) 병기
-  - **TP1 익절선 +5% → +5.5% (2026-08-24, [ADR 20260824-1](docs/decisions/20260824_1_tp1_55_partial.md))** — 부분 익절 50%는 유지(전량 아님). 업비트 수수료 0.05%x2=0.1%를 덮고 **순 +5%**를 남기기 위한 사용자 결정. 측정상 개선 근거는 없다(OOS +0.5%→+2.3%이나 표준편차 5.1% = 1σ 이내, IS는 1.1%p 열세로 방향 불일치) — 성과 최적화가 아니라 "익절선을 실수령 기준으로 정렬"한 것. 기각: **5.5% 전량 익절**(IS에서 부분 대비 7.5%p 열세 — 승자를 더 강하게 잘라내는 방향). ⚠ **미해결로 남김: TP1을 늦출수록 크게 개선**(15% 전량 IS -13.3%/OOS +17.0% vs 채택안 -20.0%/+2.3%)이며 **어느 설정도 IS 양수가 아니다**(-13.3~-27.5%) — TP 조정만으로 ADR 20260823-2의 포트폴리오 수익성은 미해결. ⚠ 알려진 불일치: `services/ml/config.py` `LABEL_TARGET_PCT = 0.05`(ML이 학습한 "+5% 도달" 라벨)와 0.5%p 어긋남 — 재학습 없이 상수만 바꾸면 threshold 0.45 보정이 깨지므로 **의도적으로 유지**, ML 재학습 시 정렬. 측정 전문: [research/20260824_1](workspace/research/20260824_1_tp55_evaluation.md)
-  - **TP2 익절선 +12% → +10% (2026-08-24, [ADR 20260824-2](docs/decisions/20260824_2_tp2_10pct.md))** — 두 익절선을 모두 5~10% 구간에 두는 사용자 결정. **채택 근거는 성과가 아니라 심리적 지속가능성**(승률 58.2%→60.2%) — 손실이 길게 이어지면 전략을 못 지키고 개입하게 되므로. TP2는 그간 **단독 측정된 적이 없었고**(12%는 ADR 20260516-1에서 dust 회피로 3단계→2단계 압축 시 나온 절충값), 이번에 `--axis tp2`로 처음 측정: 10% vs 12%는 **노이즈**(OOS는 10%가 +1.0%p 앞서나 IS는 12%가 +0.7%p 앞서 방향 반대) → "바꿔도 나빠지지 않는다"가 실질 근거. ⚠ **측정상 최적은 TP2 15%**(IS -5.3% / OOS +8.0% vs 채택안 -11.9% / +7.0%)이며 TP1 축과 독립적으로 같은 방향. **30%에서 뒤집힘**(IS +1.8% / OOS -1.3% = 과최적화) — "늦출수록 좋다"가 아니라 15~20%에 봉우리. 다음 변경은 TP 단독이 아니라 **슬롯 수와 결합** 검토(08-23 탐색에서 IS·OOS 동시 양수는 슬롯15+TP15%뿐). 측정 전문: [research/20260824_2](workspace/research/20260824_2_tp2_evaluation.md)
-  - **✅ TP2 미해결 종결 (2026-08-31, [research/20260831_1](workspace/research/20260831_1_tp2_slot_combo.md))** — ADR 20260824-2 가 남긴 "TP2 15% 가 최적"은 **슬롯 5 의 산물**이었고 현 기준선(슬롯15)에서 **소멸**했다. 재측정(48종목/700일/20회): TP2 10% IS +0.5%·OOS **+19.0%**·MDD -11.5%·필요표본 **67** vs TP2 15% IS +4.1%·OOS +18.9%·MDD -13.0%·표본 76 — **OOS 동률**(구간 완전 중첩)이고 MDD·표본효율은 현행 우세. 결합 측정(슬롯 10/15/20 × TP2 10/15%)에서 **TP2 를 늦추는 이득이 슬롯 10 +3.8%p → 15 -0.4%p → 20 +0.7%p 로 소멸**: 두 파라미터는 "승자를 충분히 취하는가"를 다르게 푸는 **대체재**라 독립 축으로 최적화하면 안 된다(OOS 편차가 슬롯 10→20 에서 3.6%→1.8% 로 반감 = 선택 운 소멸이 메커니즘). ⚠ 슬롯 20 은 5개 지표에서 우세(IS +8.5%·MDD -8.4%·필요표본 51)하나 **ADR 20260825-1 이 이미 검토·기각한 것과 같은 근거**다 — 생존편향이 슬롯 확대에 유리하고(48종목 중 20슬롯 = 유니버스 42% 동시보유) 이 데이터로 분리 불가. **파라미터 변경 없음, ADR 미발의**
-  - **슬롯 수 5 → 15 (2026-08-25, [ADR 20260825-1](docs/decisions/20260825_1_slot_expansion.md))** — `MAX_POSITIONS = 15`, 동반으로 `MAX_POSITION_WEIGHT 0.20 → 0.10`(검증룰이 `상한 ≤ 1.5/슬롯`을 강제). ADR 20260823-2가 지적한 **포트폴리오 무수익의 구조적 원인이 슬롯 부족**이었다 — 5슬롯은 신호의 27%만 취해 *어느 27%를 잡느냐*(선택 운)가 결과를 지배(선택 순서만 바꿔도 14%p). 측정(45종목/700일/무작위선택 20회 평균): 슬롯5 IS -10.0%/OOS +7.0%/MDD -20.3%/승률 59.9% → **슬롯15 IS +3.4%/OOS +14.2%/MDD -12.9%/승률 62.6%**로 **수익·MDD·승률·변동성이 모두 개선**(OOS 편차 4.2%→2.7% = 선택 운의 소멸이 실제 메커니즘). **필요표본 493건 → 109건** — 슬롯 확대는 성과 개선인 동시에 실거래 검증을 가능하게 하는 전제조건. ⚠ 측정상 최적은 슬롯20(OOS +15.7%)이나 **생존편향이 슬롯 확대에 유리하게 작용**하고(백테스트 종목군은 오늘 상장분뿐) 최소주문 마진도 얇아(슬롯20 필요자본 210,527원 vs 슬롯15 157,895원, 현재 총자산 258,270원) **15 채택**. ⚠ **전환기 주의**: 매수액은 `현금×0.95/빈 슬롯`이라 기존 5종목이 자본을 붙든 동안은 슬롯당 최소주문(5,000원) 미달로 **신규 매수가 며칠 멈춘다 — 버그 아님**(2건 청산 시 재개). 검증 기준선 `strategy_start` **2026-08-25로 리셋**(밀려난 표본 1건). 측정 전문: [research/20260825_1](workspace/research/20260825_1_slot20_weight_cap.md)
-  - ⚠ **ML 게이트 실제 상태: 비활성 (2026-05-16~, 2026-08-25 확인)** — 서버 `systemd drop-in /etc/systemd/system/btc-trader.service.d/ml.conf`가 `ML_FILTER_ENABLED=0`을 강제한다(ADR 20260515-1 Phase A NO-GO: 차단률 100%, 통과 매수 4건 1승3패). 최근 shadow 로그는 `score: 1.0, ml_active: false` — 모델 출력이 아니라 **비활성 자리표시자**다. **2026-08-25 수집 재개** — drop-in을 `ML_FILTER_ENABLED=1` + `ML_SHADOW_MODE=1`로 변경(점수 기록 O / 차단 X). ⚠ 정정: 초기에 "차단 없이 점수만 기록이 구조상 불가능"이라 적었으나 **오진단**이었다 — `MLFilter.passes()`가 shadow를 이미 처리한다(서버 실측 확인). 수집이 멈춘 진짜 이유는 `ENABLED=0`이 **모델 로드 자체를 막아** 점수 산출이 안 된 것. 실제 결함은 좁았다 — 호출부 `and not _ml_exception`이 shadow를 덮어써 추론 예외 시 차단했고, 수정했다. 동반: `would_block` 필드 기록(shadow 중 `will_buy`는 항상 True라 평가 불가) + **(종목,종류,날짜) 중복 억제**(855배 복제 차단) + 룰 `check_ml_shadow_integrity()`. ⚠ **판단 근거 없음**: shadow 로그 1,555쌍은 동일 종목 재평가 복제(05-14은 2종목을 855회씩)라 **(종목,일) 중복 제거 시 독립 표본은 3건**. "AUC 0.78"은 한 종목을 855번 센 결과다. 또 임계값이 분포와 어깋난다(학습 positive_rate 48.6% vs 라이브 점수 중앙값 0.147 → 임계 0.40이면 **99.3% 차단**) — 모델이 보수적인 게 아니라 **prior shift**. 모델은 2026-05-04 학습(mean_auc 0.553). **지금 켜지 말 것** — 켜면 99% 차단되어 슬롯 확대(ADR 20260825-1)가 무의미해진다. 순서: (1) shadow 결함 수정 → (2) 로깅 중복 제거((종목,일) 1건) → (3) 30~60일 수집 → (4) **차단기가 아니라 랭커로 재설계**(백분위 임계 + 빈 슬롯 여유 시 통과). 필요 표본 약 **800 신호(60~80 거래가능일)**. 분석 전문: [research/20260825_2](workspace/research/20260825_2_ml_gate_assessment.md)
-  - ⚠ **실거래 30건은 "실행 검증"용이지 파라미터 선택용이 아니다 (2026-08-24 산정)** — 건당 평균 0.52% / 건당 편차 8.57% 기준, n=30의 95% 신뢰구간은 `[-2.55%, +3.59%]`로 **0을 포함**한다. "수익이 나는가" 판정에 약 **1,064건**, "TP 10% vs 15%" 구분에 약 **9,700건** 필요 — 레짐 개방률을 감안하면 수십 년. 따라서 ADR 20260823-1의 30건 목표는 **체결가·필터·버그가 설계대로 도는가**를 보는 것이고, **파라미터 선택은 백테스트로만 가능하다**. 두 질문을 섞지 말 것
-  - **단일 종목 비중 상한 (2026-08-23, [ADR 20260823-2](docs/decisions/20260823_2_position_weight_cap.md))** — `MAX_POSITION_WEIGHT = 0.20`. 기존 `available*RATIO/slots_empty`는 빈 슬롯 1개일 때 가용 현금 95% 전액을 한 종목에 투입(실측 OP 47.3%). 상한 기준은 **총자산(total_krw)** — 현금 기준이면 보유분을 무시해 무의미. 백테스트: 수익 +1.4%p / MDD +4.2%p / 최대비중 42.8%→21.2%
-  - ⚠ **미해결: 포트폴리오 단위 수익성** — 종목별 백테스트(506신호, 승률 59.9%·평균 +1.50%)와 달리, **5슬롯 제약 포트폴리오는 무작위 선택 20회 전부 손실**(평균 -16.4%, 2025년 -28.3%). 원인: 신호 506개 중 27%만 취할 수 있어 *어떤 27%를 잡느냐*가 결과를 지배(선택 순서만 바꿔도 14%p 차이). 낙관 가정(TP 우선)으로도 -14.5%. 검토 방향: 슬롯 수 / TP 수준 / 손절·ATR 상호작용 / 진입 후보 선택 규칙. **파라미터는 실거래 재검증(ADR 20260823-1) 결과 전까지 변경 보류** — 또 바꾸면 성적을 합산할 수 없게 되는 실수 반복
-  - 일일 체크: `python scripts/daily_check.py` (09:05 KST 실행 권장)
-  - 텔레그램 알림: `services/.env.example` 참고하여 `.env` 설정 필요
-- [ ] Phase 4: 실전 거래 — 모듈 구현 완료, AWS 배포 필요
-  - 실행 모듈: `services/execution/` (upbit_client, trader)
-  - AWS 서버: `13.124.82.122` (Seoul, t3.micro, Ubuntu 24.04)
-  - 배포: `bash scripts/deploy_to_aws.sh`
-  - 일일 실행: `scripts/daily_live.py` (cron UTC 00:05 = KST 09:05)
+> **단일 진실 원천은 `services/execution/config.py` 다.** 아래 표는 사람이 읽는 사본이며,
+> `scripts/pre_deploy_check.py` 가 이 문서와 config 의 일치를 검사한다(lessons #4).
+> 상수를 모듈에서 자체 정의하지 말고 config 에서 import 할 것(lessons #19).
 
-## 에이전트 팀 구조 (v0.5.1, 도메인 축 4 + 보조 1)
-
-사용자는 **bata-pm**에게만 말한다. 나머지 에이전트는 PM이 위임 호출한다.
-정의 파일: `.claude/agents/*.md` (Claude Code sub-agents). 상세 책임: [agents/team.yaml](agents/team.yaml)
-
-| 에이전트 | 도메인 | 단일 책임 | 정의 파일 | 사용 스킬 |
-| --- | --- | --- | --- | --- |
-| **bata-pm** | PROJECT | 사용자 접점·우선순위·승인·주간 audit | `.claude/agents/bata-pm.md` | project-orchestrator |
-| **bata-investment-expert** | FINANCE | **P2 무수익** — 시장·전략·진단·도메인 파라미터 발의(독점) | `.claude/agents/bata-investment-expert.md` | market-analyst, strategy-researcher, backtest-engineer, strategy-pipeline |
-| **bata-engineer** | SOFTWARE | **P1 오류 반복** — 기획·개발·유지보수·배포·회귀방지 | `.claude/agents/bata-engineer.md` | cto |
-| **bata-operator** | OPERATIONS | 모니터링·알람 트리아지·일일/주간 보고 | `.claude/agents/bata-operator.md` | monitor, daily-work |
-| btc-market-news-analyst | MARKET | (보조) 시황·뉴스 종합 브리핑 | `.claude/agents/btc-market-news-analyst.md` | — |
-
-## 에이전트 호출 파이프라인 (PM 주도)
-
-PM은 사용자 요청을 받아 **싱글 / 병렬 / 순차** 3가지 패턴으로 다른 에이전트를 호출한다.
-실제 호출은 `Agent` 툴에 `subagent_type` 지정 — 병렬 호출은 **단일 메시지에 multiple Agent 블록** (반드시 동시).
-
-### 호출 패턴 3종
-
-| 패턴 | 언제 | 호출 방식 |
+| 항목 | 값 | 근거 |
 | --- | --- | --- |
-| **싱글** | 도메인 단일·책임자 명확 | `Agent(subagent_type="bata-engineer", ...)` 1회 |
-| **병렬** | 독립 작업 동시 진행 (audit, RCA+영향평가) | 단일 메시지에 `Agent` 블록 N개 동시 호출 |
-| **순차** | A 결과가 B 입력 (게이트, 승인 체인) | A 완료 → 결과 검토 → B 호출 |
+| 진입 | **DC(12)** 돌파 | [ADR 20260505-1](docs/decisions/20260505_1_strategy_param_tuning.md) (50→20→15→10→15→12) |
+| 손절 | ATR(14) × 3.0 트레일링 + **하드 캡 -10%** | lessons #13 |
+| 익절 | **TP1 +5.5% 50%** / **TP2 +10% 50%** | [ADR 20260824-1](docs/decisions/20260824_1_tp1_55_partial.md) · [20260824-2](docs/decisions/20260824_2_tp2_10pct.md) |
+| 슬롯 | **15** · 단일 종목 비중 상한 **0.10** | [ADR 20260825-1](docs/decisions/20260825_1_slot_expansion.md) |
+| 레짐 필터 | **ON** — BTC 종가 < EMA200 시 전 종목 신규 매수 차단 | [ADR 20260516-2](docs/decisions/20260516_2_entry_conditions_tightening.md) |
+| 종목 풀 | `MIN_VOLUME_KRW` **5억** (~117 종목) | [ADR 20260607-1](docs/decisions/20260607_1_min_volume_revert_5e.md) |
+| 변동성 필터 | `MAX_ATR_PCT` 0.07 · `VOL_FILTER` ×1.5 | ADR 20260516-2 |
+| 안전장치 | 서킷 -20% / -25% · 일일손실 -3% · 5연패 72h 중단 | lessons #11 · #30 · #38 |
+| 수수료 | 0.05% × 2 (`FEE_RATE = 0.0005`) | — |
 
-### 표준 파이프라인 5종
+**보조 전략(관찰용)**: RSI(10) >50 / <45 + EMA(150)
 
-#### 1. 일일 사이클 (daily)
-```
-09:05 PM → [싱글] bata-operator (start 브리핑)
-            ↓ (이상 항목 있으면)
-            PM이 분류해서 engineer 또는 expert에게 [싱글] 위임
-09:10~23:00 operator 9분 cycle (자동)
-23:00 PM → [싱글] bata-operator (end 브리핑)
-            → PM이 당일 요약 (직접)
-```
+### ⚠ ML 게이트 — 현재 shadow 수집 중, 차단 안 함
 
-#### 2. P1 사이클 — 오류 반복 차단 (incident)
-```
-알람 발생
-  ↓
-PM → [싱글] bata-operator (트리아지)
-  ↓ (분류 결과: 코드 오류)
-PM → [싱글] bata-engineer (RCA → 수정 → 배포 → lessons → 룰)
-  ↓
-PM → [싱글] bata-operator (24h 회귀 감시 위임)
-  ↓ (24h 후)
-PM: incident 4단계 close 확인 → close 또는 보강 지시
-```
+`ML_FILTER_ENABLED=1` + `ML_SHADOW_MODE=1` (서버 drop-in `/etc/systemd/system/btc-trader.service.d/ml.conf`).
+점수 기록 O / 매수 차단 X.
 
-#### 3. P2 사이클 — 주간 수익 개선 (월요일 09:30)
-```
-PM → [싱글] bata-investment-expert (주간 5Q 진단 + ADR 발의)
-  ↓ (ADR 산출)
-PM → [싱글] bata-engineer (게이트: 영향 grep + pre_deploy_check)
-  ↓ (게이트 PASS)
-PM: 승인 결정 (직접)
-  ↓ (승인)
-PM → [싱글] bata-engineer (배포 — deploy_to_aws.sh 또는 hotfix_deploy.sh)
-  ↓
-PM → [싱글] bata-operator (1주 drift 추적, 임계 초과 시 롤백 콜)
-```
+🔴 **지금 LIVE 로 켜지 말 것** — 학습 positive_rate 48.6% vs 라이브 점수 중앙값 0.147 로
+**prior shift** 가 있어 임계 0.40 이면 **99.3% 차단**된다. 슬롯 확대가 무의미해진다.
+전환 조건: 독립표본 800건 수집 → **차단기가 아니라 랭커로 재설계**.
+분석: [research/20260825_2](workspace/research/20260825_2_ml_gate_assessment.md)
 
-#### 4. 주간 audit (금요일) — **병렬 fan-out**
-```
-PM → [병렬] {
-  bata-engineer:           "이번 주 incident 4단계 close 변환율 + 신규 lessons/룰 카운트"
-  bata-investment-expert:  "이번 주 PnL/drift/필터 효과 요약"
-  bata-operator:           "이번 주 false alarm rate / 오분류율 / 좀비 lag"
-}
-  ↓ (3개 결과 동시 회수)
-PM: 통합 audit 보고서 작성 (직접) → 사용자 보고
-```
+---
 
-#### 5. 신규 사고 패턴 (lessons에 없음) — **병렬**
-```
-PM → [병렬] {
-  bata-engineer:           "RCA + 수정안 + lessons/룰 후보"
-  bata-investment-expert:  "이 사고가 전략 수익에 미친 영향 + 도메인 권고"
-}
-  ↓ (RCA + 영향 평가 동시)
-PM: 종합 → 우선순위 결정 → engineer 단독 또는 expert 합의로 다음 단계
-```
+## 판정 기준 — "지금 전략을 고쳐야 하는가"
 
-### 호출 코드 예시
+**[docs/strategy_improvement_criteria.md](docs/strategy_improvement_criteria.md)** 가 사전 등록된 규칙이다.
 
-**싱글 호출 (engineer 위임)**
-```
-Agent(
-  subagent_type="bata-engineer",
-  description="realtime_monitor KeyError RCA",
-  prompt="2026-05-24 22:15 KST 알람: realtime_monitor.py에서 KeyError 'pnl_realized'. RCA + 4단계 close 진행. 영향 범위 grep 결과 포함."
-)
-```
-
-**병렬 호출 (주간 audit fan-out — 단일 메시지에 3개 Agent 블록)**
-```
-[같은 메시지에서 동시 호출]
-Agent(subagent_type="bata-engineer", description="W## incident audit", prompt="...")
-Agent(subagent_type="bata-investment-expert", description="W## PnL audit", prompt="...")
-Agent(subagent_type="bata-operator", description="W## ops audit", prompt="...")
-```
-
-**순차 호출 (P2 사이클)**
-```
-1) Agent(subagent_type="bata-investment-expert", ...) → ADR 회수
-2) PM 검토 후
-3) Agent(subagent_type="bata-engineer", ..., prompt="ADR <링크> 게이트 검토") → 게이트 결과 회수
-4) PM 승인
-5) Agent(subagent_type="bata-engineer", ..., prompt="배포 실행") → 배포 결과 회수
-6) Agent(subagent_type="bata-operator", ..., prompt="1주 drift 추적")
-```
-
-### PM 호출 규칙
-
-- **싱글이 기본** — 단일 도메인 작업은 무조건 싱글 (병렬 남용 금지)
-- **병렬은 audit·신규 사고만** — 독립 fan-out에만 사용. 의존 작업을 병렬로 돌리면 결과 불일치
-- **순차에서 PM 직접 처리 단계 명시** — 게이트 결과 검토, 승인은 PM 본인 (위임 X)
-- **하드룰 R4 (자기평가 금지)** — engineer가 만든 코드를 engineer가 PASS 판정하면 안 됨. 게이트는 별도 호출 또는 `cto` review
-- **incident close는 PM이 직접 확인** — 4단계(lessons 작성, 룰 등록) 완료 검증 후 PM이 close 판정
-
-## 핵심 파일 위치
-
-- 에이전트 팀 정의: [agents/team.yaml](agents/team.yaml)
-- MCP 계약 (업비트): [infra/mcp.upbit.yaml](infra/mcp.upbit.yaml)
-- 운영 설계 문서: [docs/agent-team-draft.md](docs/agent-team-draft.md)
-- 작업 산출물: [workspace/](workspace/) (research/, reports/, specs/, runs/)
-- 레퍼런스 문서: [workspace/reference/](workspace/reference/)
-
-## MCP 서버
-
-업비트 맞춤 계약: [infra/mcp.upbit.yaml](infra/mcp.upbit.yaml)
-
-| 서버 | 상태 | 툴 |
-| --- | --- | --- |
-| **market_data** | 구현 중 | `get_ohlcv`, `get_ticker`, `get_orderbook`, `get_macro_series` |
-| **experiment_tracker** | 구현 중 | `create_experiment`, `log_run`, `compare_runs` |
-| exchange_execution | Phase 3 | 업비트 REST 주문 (페이퍼 → 실전) |
-| alerting | Phase 3 | Slack/Telegram |
-| secrets_config | Phase 3 | 정식 시크릿 관리 |
-
-> 업비트는 현물 전용 — `get_funding`, `get_open_interest` 없음
-
-## 아키텍처 뷰어 앱
-
-[src/App.jsx](src/App.jsx) — React/Vite 기반 프로젝트 구조 시각화 도구 (`npm run dev`)
-
-## 전략 개선 판정
-
-**[docs/strategy_improvement_criteria.md](docs/strategy_improvement_criteria.md)** — "지금 전략을 고쳐야 하는가"를 사전 등록된 규칙으로 판정한다.
-
-- **수익률로 판정 금지** — 필요 표본 68건(백테스트대로 작동 시) ~ 1,064건(엣지가 약할 시)
-- **승률이 훨씬 예민하다** — 같은 n=20 에서 수익률은 판정불가([-6.13%, +1.33%])인데 승률은 유의(p=0.034)
-- **구조적 손익분기 승률 56.3%** = `10/(7.75+10)` (완주 승 +7.75% / 완주 패 -10%) — 표본 0건으로 계산 가능. 백테스트 62.6~65% 대비 **여유 6~9%p뿐**
-- **판정 시점 사전 고정**: n=30 실행검증만 / **n=50 승률 CI상한 < 56.3% → 개선필요 확정** / n=150 CI하한 > 56.3% → 정상확인
+- **수익률로 판정 금지** — 필요 표본 68 ~ 1,064건
+- **승률이 훨씬 예민하다** — n=20 에서 수익률은 판정불가인데 승률은 유의(p=0.034)
+- **구조적 손익분기 승률 56.3%** = `10/(7.75+10)` — 표본 0건으로 계산 가능. 백테스트 62.6~65% 대비 여유 6~9%p뿐
+- **판정 시점 사전 고정**: n=30 실행검증만 / **n=50 CI상한 < 56.3% → 개선필요 확정** / n=150 CI하한 > 56.3% → 정상확인
 - ⚠ **L1(실행) 통과 전에는 L2(성과)를 읽지 않는다** — 결함이 섞인 표본은 전략 성적이 아니다
-- ⚠ **비대칭**: 나쁜 걸 확인하는 게 좋은 걸 확인하는 것보다 3배 빠르다(n=50 vs 150). 손익분기에 가까운 애매한 성적이 가장 오래 걸린다
+- ⚠ **실거래 30건은 "실행 검증"용이지 파라미터 선택용이 아니다** — 파라미터 선택은 백테스트로만 가능하다. 두 질문을 섞지 말 것
+
+### 미해결로 남은 것
+
+- **포트폴리오 수익성** — 종목별 백테스트는 양호하나 슬롯 제약 포트폴리오에서 손실 ([ADR 20260823-2](docs/decisions/20260823_2_position_weight_cap.md)). 슬롯 15 확대로 개선됐으나 실거래 미검증
+- **TP2 축** — 슬롯과 **대체재**라 독립 축으로 최적화하면 안 된다. 재측정 결과 변경 없음 ([research/20260831_1](workspace/research/20260831_1_tp2_slot_combo.md))
+
+---
 
 ## 작업 규칙
 
 - 전략 규칙은 반드시 Strategy Researcher 산출물(strategy_spec) 기반
 - 라이브 거래는 Execution Risk Guard 승인 + PM Orchestrator 최종 확인 필요
-- 인샘플 성과만으로 프로덕션 이동 금지
+- **인샘플 성과만으로 프로덕션 이동 금지**
 - 각 단계는 검토 가능한 아티팩트 필수 (보고서, 로그, 메트릭)
-- **Execution Plan 강제**: 비자명 작업(30분↑ / 코드·외부시스템·전략·CLAUDE.md 변경 중 1개↑)은 착수 전 `workspace/plans/YYYYMMDD_작업명.md`를 `workspace/plans/_TEMPLATE.md` 기반으로 생성한다. 목표·성공기준이 빈칸인 상태로 착수 금지. 상세 규칙은 [workspace/plans/README.md](workspace/plans/README.md)
-- **자기평가 금지 / 교차검증 필수**: 구현을 수행한 동일 세션은 자기 산출물을 PASS 판정하지 않는다. 대상 작업(코드·운영·전략·CLAUDE.md 변경)은 별도 세션 / 서브에이전트(`cto` review) / 자동 검증 스크립트(`pre_deploy_check.py` 등) 중 최소 1개로 검토하고, 결과는 "확인 항목 N개 / 발견 이슈 M개" 형식으로 기록한다. 상세: [docs/cross_review_policy.md](docs/cross_review_policy.md)
+- **Execution Plan 강제** — 비자명 작업(30분↑ / 코드·외부시스템·전략·CLAUDE.md 변경 중 1개↑)은
+  착수 전 `workspace/plans/YYYYMMDD_작업명.md` 생성. 목표·성공기준이 빈칸이면 착수 금지.
+  [workspace/plans/README.md](workspace/plans/README.md)
+- **자기평가 금지 / 교차검증 필수** — 구현한 세션은 자기 산출물을 PASS 판정하지 않는다.
+  별도 세션 / 서브에이전트(`cto` review) / 자동 검증 스크립트 중 최소 1개.
+  결과는 "확인 항목 N개 / 발견 이슈 M개" 형식. [docs/cross_review_policy.md](docs/cross_review_policy.md)
+
+---
 
 ## 시행착오 관리
 
-- **시행착오 기록**: `docs/lessons/YYYYMMDD_N_제목.md` — 오류 발생 시 원인·수정·검증규칙·교훈을 기록
-- **자동 검증**: `scripts/pre_deploy_check.py` — 배포 전 자동 실행, 기록된 검증규칙을 코드로 검증
-- **참조 의무**: 전략 변경, 배포 스크립트 수정, 서버 설정 변경 시 `docs/lessons/`의 관련 기록을 먼저 확인
-- **신규 오류 발생 시**: (1) 수정 → (2) lessons 기록 → (3) pre_deploy_check.py에 검증규칙 추가 → (4) 필요 시 CLAUDE.md 업데이트
+- **기록**: `docs/lessons/YYYYMMDD_N_제목.md` — 원인·수정·검증규칙·교훈
+- **자동 검증**: `scripts/pre_deploy_check.py` — 배포 전 실행, 기록된 검증규칙을 코드로 집행
+- **참조 의무**: 전략 변경·배포 스크립트 수정·서버 설정 변경 시 관련 lessons 먼저 확인
+- **신규 오류 시**: (1) 수정 → (2) lessons 기록 → (3) pre_deploy_check 룰 추가 → (4) 필요 시 이 문서 갱신
 
-### 주요 교훈 요약
+> 📖 **[docs/lessons/INDEX.md](docs/lessons/INDEX.md) — 49개 교훈 상세 (원인·수정·검증규칙 전문)**
+> 아래는 한 줄 인덱스다. **관련 영역을 건드리기 전에 INDEX 에서 해당 항목 전문을 읽을 것.**
 
-| # | 교훈 | 참조 |
-|---|------|------|
-| 1 | 봉 마감 기반 전략을 실시간 틱으로 실행 금지 (가짜 돌파) | [lessons/20260329_1](docs/lessons/20260329_1_tick_vs_bar_entry.md) |
-| 2 | 백테스트 상승장 비중 높으면 하락장 성과 과대평가 — 하락장 구간 별도 검증 | [lessons/20260329_2](docs/lessons/20260329_2_backtest_period_bias.md) |
-| 3 | 안전장치(연패 중단)는 주기 체크가 아닌 체결 즉시 체크 | [lessons/20260329_3](docs/lessons/20260329_3_auto_stop_delay.md) |
-| 4 | CLAUDE.md ↔ config.py ↔ 서버 전략 파라미터 동기화 필수 | [lessons/20260331_1](docs/lessons/20260331_1_dc_strategy_mismatch.md) |
-| 5 | t3.micro 스왑 필수, 서비스 추가 전 메모리 예산 확인 | [lessons/20260331_2](docs/lessons/20260331_2_server_memory_pressure.md) |
-| 6 | 전략 필터는 모든 매수 경로(scanner+realtime_monitor)에 적용 필수 | [lessons/20260404_1](docs/lessons/20260404_1_v2_filter_missing_path.md) |
-| 7 | 1일 1회 작업은 반드시 날짜 체크 + 상태 저장 (재시작 시 중복 방지) | [lessons/20260404_2](docs/lessons/20260404_2_vb_rotation_duplicate.md) |
-| 8 | 모니터링 평가금액은 거래소 API 전체 자산 합산 필수 (BTC만 집계하면 알트 누락) | [lessons/20260405_1](docs/lessons/20260405_1_balance_missing_alts.md) |
-| 9 | 자동화 전제 스크립트는 cron/systemd 등록 + pre_deploy_check로 검증 필수 | [lessons/20260408_1](docs/lessons/20260408_1_jarvis_cron_missing.md) |
-| 10 | 상태 파일은 "거래소 미러"여야 함 — state ↔ balance 불일치 즉시 경보 | [lessons/20260408_2](docs/lessons/20260408_2_state_balance_mismatch.md) |
-| 11 | 서킷브레이커는 신규 차단뿐 아니라 기존 포지션 처리 정책도 명시 필요 | [lessons/20260408_3](docs/lessons/20260408_3_cb_existing_positions_policy.md) |
-| 12 | dict.get(key, default)는 값이 None이면 default가 무시됨 — 린트 집행 | [lessons/20260408_4](docs/lessons/20260408_4_nonetype_format_lint.md) |
-| 13 | ATR*N 스탑은 고변동 종목에서 제어 불능 — 하드 손절 캡 필수 | [lessons/20260408_5](docs/lessons/20260408_5_ong_wide_stop.md) |
-| 14 | 이벤트 루프 내 로그는 throttle 필수 — 종목수×빈도 곱 폭발 | [lessons/20260410_1](docs/lessons/20260410_1_cb_log_spam.md) |
-| 15 | 외부 API 의존 초기화는 재시도+백오프 필수 — systemd 재시작은 대체 불가 | [lessons/20260413_1](docs/lessons/20260413_1_startup_refresh_crash.md) |
-| 16 | 배포 스크립트가 전제하는 로컬 CLI(rsync 등)도 pre_deploy_check로 검증 + 폴백 분기 필수 | [lessons/20260419_1](docs/lessons/20260419_1_rsync_missing_deploy_stall.md) |
-| 17 | 다중 프로젝트 공존 서버에서 프로세스 판정 시 `/proc/<pid>/cwd` + 전체 systemd unit 역탐색 필수 — 좀비 오판 방지 | [lessons/20260421_1](docs/lessons/20260421_1_multi_project_process_misdiagnosis.md) |
-| 18 | venv 디렉터리 리네임 시 crontab/systemd unit의 인터프리터 경로 동시 갱신 필수 — stderr→로그파일 리디렉션은 silent fail 유발 | [lessons/20260425_1](docs/lessons/20260425_1_crontab_venv_path_drift.md) |
-| 19 | 모듈이 config 상수를 import하지 않고 자체 정의하면 동기화 누락 위험 — 운영 변경 권장 시 코드베이스 전체 grep 필수 + import 통일 | [lessons/20260425_2](docs/lessons/20260425_2_config_constant_self_definition.md) |
-| 20 | 다중 API 키 운영 시 키↔환경(서버 IP) 매핑 미명시는 silent fail 직결 — critical 경로는 단명(매시 5분) 헬스체크 + 즉시 알람 + 디바운스 세트 필수, daily report만으로는 실시간 감시 불가 | [lessons/20260502_1](docs/lessons/20260502_1_upbit_keyset_ip_mapping.md) |
-| 21 | ccxt `enableRateLimit`은 인스턴스 수명에서만 throttle 추적 — `_create_exchange()` 매번 호출 시 무효. 모듈 싱글톤 + 명시 백오프 wrapper 둘 다 필수. 안전장치는 fail-closed 원칙(잔고 조회 실패 → 매수 차단), 헬스체크 판정 기준은 "정상 동작에도 항상 갱신되는 값"이어야 false alarm 회피 | [lessons/20260503_1](docs/lessons/20260503_1_rate_limit_cb_fallback_healthcheck_loop.md) |
-| 22 | wrapper(retry/backoff) 일괄 적용 금지 — 조회 경로만 적용, 매수/매도 즉시성 경로는 lessons #3 위배. 알림 등급(level) 도입은 default 호환 유지로 점진 마이그레이션. 신규 통합 cron 추가 시 기존 cron과 동일 거래 회피 로직 사전 설계 필수 (없으면 알림 2~3배 폭주) | [lessons/20260503_2](docs/lessons/20260503_2_p3_wrapper_alert_levels_function_unification.md) |
-| 23 | 침묵 모드 cron은 항상 heartbeat 파일과 짝 — 텔레그램 발송 안 해도 cron 죽음 감지 불가 시 더 큰 사고. retry/backoff는 idempotent 호출(조회)만 안전, 주문(매수/매도)에 적용 시 중복 주문 위험. 신규 cron은 pre_deploy_check 등록 검증 룰과 함께 추가 | [lessons/20260503_3](docs/lessons/20260503_3_p4_alert_migration_digest_cron_buy_wrapper_hold.md) |
-| 24 | 장시간 가동 스크립트(daily_live.py --realtime)는 systemd 단독 가동, cron 직접 호출 금지 — 매시 새 인스턴스 추가로 좀비 누적·race condition 다중 발화. 다중 프로젝트 환경 crontab 갱신은 grep -v 위험 (다른 프로젝트 라인 우연 매칭 삭제). 백업 디렉터리는 .disabled 등 명시적 격리. ps grep만으로 프로젝트 판단 금지 — `/proc/<PID>/cwd` 확인 필수 | [lessons/20260504_1](docs/lessons/20260504_1_zombie_processes_crontab_overwritten_bak_dirs.md) |
-| 25 | 부분 익절 잔량 회계는 "불변 입력(entry_qty/entry_amount_krw) + 가변 추적(tp_sold_levels)" 분리. SL/TP 동시 트리거 시 SL 우선 정책 명문화. 매도 retry 금지(lessons #3) — 실패 시 next-tick 재평가. 정기 reset은 cron보다 기존 함수 진입 시점 호출이 안전 (lessons #18/#24 회피) | [lessons/20260504_2](docs/lessons/20260504_2_strategy_enhancements_partial_tp_volume_daily_loss.md) |
-| 26 | "모든 매수 경로"에 적용되는 안전장치(필터·게이트)는 신규 추가 시 `grep buy_market` 등으로 모든 진입점 열거 + task별 분리 필수. fail-open 정책이라도 "일부 경로 누락"은 lessons #6 위배 면책 안 됨. pre_deploy_check에 매수 경로 hook 존재 강제 룰 등록 (자동 사각지대 차단) | [lessons/20260504_3](docs/lessons/20260504_3_ml_filter_realtime_path_missing.md) |
-| 27 | systemd 재시작은 cron으로 fork된 별도 PID(좀비)를 죽이지 않음 — 옛 코드 메모리로 알림 발사 지속. `daily_live.py` (no --realtime)도 종료 안 하면 좀비 누적. 알림 메시지에 PID/instance 자동 prefix + 다중 프로젝트 동거 환경에서 crontab 통째 갱신은 다른 프로젝트 라인 보존 책임. pre_deploy_check에 `pgrep -af daily_live.py` 좀비 카운트 룰 등록 | [lessons/20260506_1](docs/lessons/20260506_1_zombie_bot_old_code_alert.md) |
-| 28 | state 보정 도구는 모든 state 파일 커버 필수(`fix_state_balance_mismatch.py`는 multi+vb 동시 처리). 봇이 "잔고 0 — 정리 필요"를 인지하면 즉시 자동 정리(N=3회 누적 후 closed_trades+positions.pop) — 수동 의존 시 알람 피로 누적. 알람 디바운스만으로는 false alarm 영구 차단 불가, 근본 정합 + 자동 정리가 짝 | [lessons/20260511_1](docs/lessons/20260511_1_fix_state_vb_orphan.md) |
-| 29 | "거래소에만 존재" 차집합 알람은 dust(<5만원, state에 없음) 자동 silence 필수 — 봇이 정리(state)했지만 거래소 잔여 dust는 수동 매도 외 처리 불가 → 디바운스(3회)만으론 영구 알람 루프. 임계 단일 게이트(5천원)는 정책 없음, 컨텍스트(state 비교) 기반 분리 필요. only_state(매도 누락)는 임계 미적용 — 진짜 사고 알람 유지 | [lessons/20260515_1](docs/lessons/20260515_1_dust_only_exchange_alert_loop.md) |
-| 30 | 안전장치(5연패 자동 중단) 알람도 발사 후 디바운스 필수 — self.running=False만으로 cycle 중단 가정 금지. cooldown_until(매수 차단)과 alerted_until(알람 silence)은 분리 플래그로 관리. _send_periodic_report 매 cycle(9분) 호출 시 동일 5연패 재인지 → 동일 알람 4회 반복 사고 | [lessons/20260516_1](docs/lessons/20260516_1_consec_loss_alert_loop.md) |
-| 31 | 코드 변경(scp)과 인프라 변경(crontab/systemd)은 별도 채널 — scp+restart로는 cron 절대 갱신 안 됨. deploy_to_aws.sh 우회 시 cron 미등록 silent fail (ml_weekly_review/ml_outcome_match 5/15~5/19 누락). silence 플래그(alerted_until)와 매수 차단(cooldown_until)이 독립 관리 시 cooldown 갱신 후 alerted_until 자동 동기화 책임 코드 명시 필수. pre_deploy_check에 "기록된 cron 실제 등록" 검증 룰 추가 필요 (lessons #9 강화) | [lessons/20260520_1](docs/lessons/20260520_1_cron_registration_missing.md) |
-| 32 | 업비트 시장가 매수 응답 `order["amount"]`는 None일 수 있음 — `float(None)` → TypeError → entry_qty=0 영구 저장 → 부분 TP 후 state 잔량 회계 영구 drift. 결정 사슬은 `order.filled` → `order.amount` → `fetch_balance` → `order_amount/exec_price` 4단 + `entry_qty<=0` invariant 가드 필수. fix_state_balance_mismatch는 종목 add/remove 외에 잔량(qty) 미러링도 수행해야 함 (lessons #10 "state는 거래소 미러" = 종목+수량 양면). AWS crontab은 다른 프로젝트 deploy로 BitCoin 라인 7개 누락 가능 — pre_deploy_check에 deploy_to_aws.sh 활성 CRON_xxx baseline ≥ 8 검증 추가 | [lessons/20260524_2](docs/lessons/20260524_2_state_qty_zero_and_cron_loss.md) |
-| 33 | lessons #33 — 배포 검증 룰만 늘려도 `deploy_to_aws.sh`를 우회한 raw `scp+restart` 채널에서는 호출되지 않아 사문화. 우회 케이스는 **공식 hotfix wrapper**(`scripts/hotfix_deploy.sh`)로 흡수해 pre_deploy_check 강제 호출을 보존하고, deploy 스크립트 자체의 정합성(`CRON_xxx` 변수 정의 ↔ `echo` 등록 1:1)도 자동 lint 필수 (lessons #31 강화) | [lessons/20260524_1](docs/lessons/20260524_1_g6_deploy_guard.md) |
-| 34 | lessons #34 — systemd로 가동하는 장시간 스크립트(`daily_live.py --realtime`)는 cron에서 **절대 호출 금지**. non-realtime 매일 호출(`5 0 * * * daily_live.py`)도 매일 새 PID 추가로 좀비 누적(2026-06-02 8개 적발). pre_deploy_check `check_zombie_bot_processes()`의 non-realtime 처리를 warning에서 **ERROR 승격**(non_realtime ≥ 3 또는 합계 ≥ 3) + `deploy_to_aws.sh`가 등록하는 cron에서 `daily_live.py` (no `--realtime`) 라인 존재 금지 룰 추가 (lessons #24/#27 회귀 차단) | [lessons/20260602_1](docs/lessons/20260602_1_cron_zombie_relapse_no_realtime.md) |
-| 35 | 운영 자원(SSH 키/서버 정보)의 canonical 경로는 코드뿐 아니라 **별도 1차 문서**(`docs/ssh_access.md`)에 등재 필수. subagent/CI 세션은 `$HOME` 상속·`~/.ssh/config` 자동 매핑 보장 없음 → 경로 추측 시 `Permission denied (publickey)` silent fail. 정량 데이터 파일명도 등재 — `closed_trades.json`/`ml_outcomes.jsonl` 단독 파일은 부재(각각 `multi_trading_state.json["closed_trades"]`, `workspace/ml_shadow/YYYYMMDD.jsonl` 내부). pre_deploy_check에 canonical 키 + 표준 문서 존재 + deploy 일치 검증 룰 추가 | [lessons/20260603_1](docs/lessons/20260603_1_ssh_key_path_subagent_drift.md) |
-| 38 | 연패(consec)는 별도 카운터가 아니라 `closed_trades`를 매 cycle 재계산(`check_consec_loss`/`_get_consec_loss`) — 따라서 `cooldown_until`만 리셋하거나 `/cooldown clear`를 써도 다음 cycle `consec>=5`로 72h 재설정되는 함정. 원인 제거 후 cooldown 근본 해제는 `consec_loss_floor_date` 필드 도입(연패 산정만 floor 이후(>) 거래로 한정, 누적통계 n/wins는 strategy_start 기준 보존). 두 산정 함수 모두 floor 적용 필수(한쪽만 적용 시 경로 A/B 산정 불일치로 사일런트 부활). pre_deploy_check `check_consec_loss_floor_consistency()` 룰 추가 | [lessons/20260607_1](docs/lessons/20260607_1_consec_loss_floor_cooldown_release.md) |
-| 37 | lessons #37 — `regime_check.py`는 `--notify` 없이는 텔레그램 발송 안 함(:81 `if notify and should_notify(...)`)이나 `deploy_to_aws.sh` `CRON_REGIME`에 `--notify` 미부여 상태로 방치되어 **BULL 전환 알림 침묵 확정 상태**. 로그 100줄 전부 BEAR라 사고 미체감이었지만 다음 BULL 전환 시 관망 종료 인지 불가였음. cron 명령어 인자 누락은 대표적 silent fail — 선택 인자 default False + cron 명시 없음 = 양쪽 다 "누군가 켜주겠지" 구조. pre_deploy_check `check_regime_notify_flag()` 신설: `deploy_to_aws.sh` CRON_REGIME= 라인에서 `regime_check.py`+`--notify` 동시 존재 검증 (lessons #9/#22/#31 계열) | [lessons/20260801_2](docs/lessons/20260801_2_regime_notify_missing.md) |
-| 36-08 | BitCoin_Trade crontab 전면 소실 재발 — Stock_Trade `deploy_aws.sh`가 crontab을 파일 원자 갱신 방식(`crontab config/crontab.txt`)으로 통째 덮어써서 BitCoin_Trade cron 8개 소실, `critical_healthcheck` 3일 4시간 무기록. lessons #32/#34의 로컬 정적 검사(스크립트 소스 내 CRON 변수 카운트)는 PASS였음 — 다른 프로젝트의 서버 파괴 행위는 원천 방어 불가. 배포 성공 = 서버 반영 확인까지. `deploy_to_aws.sh` 마지막에 `ssh "crontab -l \| grep -c BitCoin_Trade" ≥ 8` 실측 게이트 + 미만 시 exit 1 추가. pre_deploy_check `check_deploy_post_check_remote_cron()` 신설 — 실측 라인 및 exit 1 가드 존재 정적 lint | [lessons/20260801_1](docs/lessons/20260801_1_cron_baseline_relapse.md) |
-| 38-08 | 아침 브리핑 채널 부재 — lessons #33/#34로 `CRON_LIVE`(09:05 KST 아침 트리거)를 좀비 회피 목적으로 제거했으나 **대체 아침 채널을 마련하지 않음** → 사용자 접점이 18:00 daily_report 단독으로 2개월 방치. `CLAUDE.md`엔 "09:05 KST 실행 권장"이라 있으나 crontab 실등록 X (문서·운영 괴리). `regime_check --notify`는 전환 시에만 발송 → BEAR 지속 상태 침묵. 09:32 KST `daily_check.py --notify --skip-console` 신설(regime 완료 2분 후 `regime_state.json` 신선 반영, 레짐/봇/계좌/cron/이상 5섹션 매일 발송). deploy 사후 실측 게이트 baseline 8→9 상향. pre_deploy_check `check_morning_briefing_registered()` 신설 | [lessons/20260801_3](docs/lessons/20260801_3_morning_briefing_missing.md) |
-| 39 | 텔레그램 발송 silent fail (Markdown 400 미확인) — 08-02 09:32 KST 아침 브리핑 첫 자동 발화가 서버 로그엔 "발송 성공"으로 남았으나 텔레그램 미도착. RCA: 브리핑 텍스트에 systemd 필드(`MainPID=…`, `ActiveEnterTimestamp=…`, `daily_live.py`) 등 밑줄이 다수 포함되어 legacy Markdown 파서가 짝이 안 맞아 HTTP 400 반환. 기존 `send_message`는 `resp.status` 미확인 + `except Exception: pass`로 400은 예외가 아니므로 조용히 무시되어 상위 호출자는 성공으로 오판. 어제 22:00 KST 수동 실행은 우연히 파싱을 통과한 텍스트 조합 — **간헐적·데이터 의존 silent fail**. 수정: `send_message` `-> bool` 반환 + `resp.status==200` 명시 확인 + 400 시 parse_mode 제거 plain payload로 자동 재시도 + 실패 시 stdout 로그. `daily_check.py::_send_briefing`은 반환값을 신뢰하여 실패 시 exit 1. pre_deploy_check `check_telegram_send_status_verified()` 신설 (lessons #21 fail-closed·#31 silent fail 계열) | [lessons/20260802_1](docs/lessons/20260802_1_telegram_send_silent_fail_markdown_400.md) |
-| 40 | 거래량 필터가 **진행 중인 봉**(`df["volume"].iloc[-1]`)을 읽어 24h 캐시 — `refresh_levels()`는 UTC 00:00 하루 1회 실행이므로 그 값은 개장 수십 초 된 오늘 일봉(누적 ≈ 0). `latest_vol < vol_sma*1.5`가 전 종목·하루 종일 참이 되어 **매수 신호 100% 차단**(08-22 차단 70,388건 / 매수 0건, 유휴 현금 111,017 KRW). BTC가 EMA200을 상향 돌파해 레짐 게이트가 열린 첫날 드러남. 백테스트(`advanced.py:348`)는 봉 **마감** 시점 `volume[i] vs vol_sma[i]`를 비교 — 같은 수식이 실시간에선 "자정 0시 30초 거래량"으로 의미가 뒤바뀐 것(교훈 #1 틱 vs 봉의 변종, 이번은 *필터 입력값*). 수정: `vol_sma`/`latest_vol` **둘 다** `iloc[-2]`(완성봉) + 최소 봉 수 가드 `6→7`(부족 시 NaN→0으로 `if vol_sma > 0`에서 필터 통째 무력화). pre_deploy_check `check_vol_filter_completed_bar()` 신설 | [lessons/20260822_1](docs/lessons/20260822_1_vol_filter_stale_snapshot.md) |
-| 41 | 트레일링스탑 고점 갱신 블록에 `save_state()` 누락 — 보유 3종목이 +5~7% 상승했음에도 상태 파일은 진입 시각(00:04)에 4시간 38분간 멈춰 `trail_stop`이 진입가 -10% 그대로. 메모리에선 정상 갱신되어 실시간 손절 판정은 옳게 동작하므로 **로그·동작상 무증상**, 그러나 `Restart=always`+`WatchdogSec=300` 서비스에서 재시작 시 확보 이익 보호가 전부 소멸. 같은 파일에 `save_state()`가 13곳 있는데 이 경로에만 누락 — 경로별 누락은 grep으로 세어야 보임(교훈 #6 계열). 수정: throttle(`TRAIL_PERSIST_INTERVAL_SEC=30`, **config.py 정의 후 import** — 교훈 #19 자체정의 금지) 후 `save_state()`. I/O 부담은 "안 쓰기"가 아니라 간격으로 해결. pre_deploy_check `check_trail_stop_persisted()` 신설 | [lessons/20260822_2](docs/lessons/20260822_2_trail_stop_not_persisted.md) |
-| 42 | **매수 직후 보유 종목이 웹소켓 구독에서 탈락 — 손절·익절 무방비.** `_execute_buy`가 재매수 방지로 `del self.levels[symbol]`을 하는데 구독 목록이 `self.levels.keys()`에서 생성됨. 웹소켓은 ~10분마다 재연결하며 구독을 재구성하므로 **매수 후 첫 재연결부터 보유 종목 틱이 끊김** → `_on_ticker` 미실행 → 트레일링스탑 이탈 매도·하드손절·부분익절이 전부 미평가. 실측 구독 194→191(보유 3종목만큼 감소), TP1 도달 03:30~04:00 UTC 대비 실제 체결 05:08(재시작 시점) = 1.1~1.6h 무방비. 하락장이었다면 손절 미발동 대형 손실. 근본원인: `self.levels`가 "매수 후보"와 "구독 대상" 두 의미를 겸함 — 전자 관점의 정당한 삭제가 후자를 파괴. 같은 구성부에 VR 포지션·BTC 예외 추가가 이미 2건 있었음(= levels만으론 부족하다는 신호를 두 번 무시). 수정: `self.state["positions"]` 기반 구독 추가. pre_deploy_check `check_positions_subscribed()` 신설 | [lessons/20260822_3](docs/lessons/20260822_3_positions_unsubscribed.md) |
-| 43 | **주문 체결가 대신 신호가가 기록 — 손익·손절선·성과통계 오염.** 업비트 `create_market_*_order` 응답에는 체결 정보가 없다(`average`/`price`/`filled`/`cost` 전부 None, status='wait'). `average or price` 방어가 있었으나 **둘 다 None**인 경우를 상정 못해 호출부 `order.get("price") or price` 폴백이 항상 발동, 돌파 감지 시점 신호가가 체결가로 기록됨. 실측 OP 155.0/815.7157 기록 vs 실제 157.0/805.3244. 매수는 `entry_price`·`entry_qty`·**하드손절선**을, 매도는 `exit_price`·`return_pct`·실현손익·`closed_trades`를 오염 → **승률·평균수익률 통계 자체가 부정확**. 발견 지연 원인 2가지: 업비트 시장가 매수는 잔여 KRW 환불로 **`canceled` 상태 종료**(체결 실패 아님 — status로 판정 금지) 이며 그 때문에 `fetch_closed_orders`에 매수가 안 잡힘, `fetchMyTrades`는 업비트 미지원. → `fetch_order(uuid)` 재조회가 유일 경로. 수정: `upbit_client.settle_order()`/`order_exec_price()` 공용 헬퍼(매수·매도 양쪽 적용, **`filled > 0`으로 성공 판정**, fail-open + 폴백 시 경고 로그) + `entry_amount_krw`를 실제 `cost`로 + `trail_stop`을 확정 체결가 기준 재계산. pre_deploy_check `check_exec_price_settled()` 신설 | [lessons/20260822_4](docs/lessons/20260822_4_exec_price_not_settled.md) |
-| 44 | **cron 소실 감시기가 cron 안에 있어 함께 죽음 — 19일 무알람.** 2026-08-03 Stock_Trade `deploy_aws.sh:128`의 `crontab config/crontab.txt`(파일 원자 교체)가 BATA cron 9개를 전면 소실시킴(lessons #36-08 재발). 워치독·헬스체크·아침브리핑·레짐알림 전부 정지했으나 **경보 0건** — lessons #36-08 대응으로 넣은 두 방어가 모두 무력: (a) `deploy_to_aws.sh` 배포 후 실측 게이트는 **배포할 때만** 실행되는데 19일간 전체 배포 없었고 오늘 수정도 hotfix(scp) 경로라 우회(교훈 #33 반복), (b) `daily_check.py::_section_cron` 감시는 **자기 자신이 cron**이라 crontab이 지워지면 감시기도 죽어 침묵. **감시기를 감시 대상 안에 둔 설계 결함**. 수정: `scripts/restore_cron.sh` 신설(읽고-덧붙이기 방식, 타 프로젝트 보존 + 사후 실측 검증 — BATA 0→9, 기타 95→95) + `realtime_monitor._check_cron_integrity()` 신설로 감시를 **systemd(crontab 무관)** 로 이전, baseline 미달 시 critical 경보(6h throttle). pre_deploy_check `check_cron_watchdog_outside_cron()` 신설(정의만 하고 미호출이면 ERROR). **근본 해결: 같은 날 9개를 systemd timer로 전면 이전**(`scripts/install_timers.sh`, JOBS 테이블이 스케줄 단일 진실 원천 — `deploy_to_aws.sh`의 CRON_* 변수 9개는 사문화 방지 위해 삭제). crontab을 0줄로 완전히 비운 시뮬레이션에서 timer 9개 생존 실증. 부수 소득: 역방향 테스트로 **검증 룰 2건이 실제로는 아무것도 잡지 못하는 상태**임을 적발(본문 정규식이 함수 경계 초과 캡처 / 안내 문구에 매칭) — 룰은 통과가 아니라 실패를 잡는지로 검증해야 함 | [lessons/20260822_5](docs/lessons/20260822_5_cron_wipe_detector_in_cron.md) |
-| 45 | **포지션 종료가 TP 루프 안에 있어 도달 불가능 — 유령 포지션 + 승리 거래 표본 소실.** 잔고 0 자동정리(lessons #28)가 `for idx, tp in enumerate(TP_LEVELS)` **안에** 있어서, 모든 TP 단계가 매도되면 루프가 전부 `continue`로 빠져나가 종료 코드가 **구조적으로 도달 불가능**해졌다. 실측: SPK/KRW가 08-23 14:03 TP2 전량 매도(+3,013원) 후에도 하루 넘게 `positions`에 잔류 — 슬롯 영구 점유 + `closed_trades` 미기록으로 **ADR 20260823-1의 검증 표본이 0에서 안 늘어남**. 핵심은 관심사 혼재: `_check_tp_levels`는 "부분매도" 함수인데 "생애주기 종료"까지 얹혀 있었고, 전자의 정상 흐름(전 단계 완료 = 더 팔 것 없음 = continue)이 후자를 정확히 무력화한다. **손절은 `_execute_sell`이 정상 제거하므로 이익 청산에서만 발생 = 잘 된 거래일수록 기록이 안 남는다**(통계 하방 편향). 동반 적발 3건: (a) `_execute_sell`의 잔고 0 경로가 `closed_trades` 없이 `del` — 표본 소실 두 번째 경로, (b) `return_pct`가 마지막 체결가만 반영해 **부분 익절 이익이 통계에서 소실**(+5%에 절반 실현 후 +1% 이탈 → `+1%` 기록, 실제 +3%) — `multi_trader.run_daily_cycle`에도 동일 산식(교훈 #6), (c) TP 직후 `remaining_qty`가 업비트 정산 전 값(매도 전 수량)으로 기록. 수정: 손익 산식을 `services/execution/position_pnl.py` 중립 모듈로 분리(매도 경로 3개 공유, 순환 import 회피) + `_close_position()` 단일 종료 경로 + 루프 **앞** 안전망(`_close_if_liquidated`) + 루프 **안** 근본 경로(매도 후 잔량 < `POSITION_DUST_KRW`) + `config.FEE_RATE`/`POSITION_DUST_KRW` 등재(교훈 #19 — 백테스트들이 `FEE`를 자체 정의 중이었음) + `scripts/backfill_realized_pl.py`(journal 실측 체결로 기존 4포지션 보정, 미보정 시 새 코드가 구 포지션에 대해 **더** 부정확). pre_deploy_check `check_position_close_outside_tp_loop()` 신설 — **AST 기반**(문자열 검사는 자기 주석에 3회 속았음). 역방향 테스트 5케이스 중 1건이 초안 룰의 결함을 적발(루프 안 잔고0 정리용 종료 호출에 매칭되어 통과) → `sell_market_coin` 이후 lineno 비교로 수정 | [lessons/20260824_1](docs/lessons/20260824_1_ghost_position_tp_complete.md) |
-| 46 | **수동 매도 회계: 틱 경로가 1시간 교차검증을 앞지른다.** 사용자가 직접(또는 스크립트로) 팔면 `_close_manually_sold()`(1h 교차검증 3회)가 체결이력으로 손익을 재구성하지만, `_check_tp_levels`의 잔고 0 감지(`_orphan_seen_count` 3회, **틱 주기**)가 몇 분 안에 먼저 도달해 `auto_cleanup_zero_balance`로 닫아버린다. 그 시점 `realized_pl_krw`에는 수동 매도 대금이 없어 **TP 실현분만으로 수익률이 확정**된다(JUP 실측: 실제 +6.44% vs 그 경로로는 +2.5%). → 매도와 회계를 한 트랜잭션으로 묶는 `scripts/manual_close_position.py`(봇 정지 강제 + 확정 체결가 + `record_realized` + `daily_pl` 기록). 파생: `closed_trades`는 검증표본·5연패 브레이커·일일보고 승률의 **공통 입력**이라 개입이 섞이면 셋 다 오염 — 실측으로 "전략 1건인데 2건 승률 100%", 수동 손실 3건이 섞여 **연패 5 → 72h 매수중단** 재현. → `services/execution/trade_class.py`(strategy/manual/repair/unknown, **allowlist**) 신설해 통계 2곳·연패 2곳에 동일 적용. ⚠ **unknown은 통계에서 제외, 연패에는 포함** — 각 경로가 안전한 쪽으로 틀리게 한 의도적 비대칭. 룰 `check_exit_reasons_classified()` + `check_consec_loss_floor_consistency()` 확장(역방향 4/4). 초안이 두 번 깨짐: 정규식이 dict 키를 사유로 오인 / **주석의 "trade_class"에 속아 통과**(동일 유형 5회째) | [lessons/20260825_1](docs/lessons/20260825_1_manual_sell_accounting_race.md) |
-| 47 | **"연속 오류"가 실은 누적 오류 — 정상 웹소켓 끊김이 봇 자동중지로 번진다.** 업비트가 연결을 정리할 때 aiohttp `heartbeat=30` 핑이 닫히는 소켓에 쓰이면 `Cannot write to closing transport`가 나는데(재연결하면 끝, 실측 같은 초에 구독 141개 복구) 이걸 `consecutive_errors`로 집계했다. 더 나쁜 건 `_reset_errors()`가 **매수/매도 성공 두 곳에만** 있어, 거래가 드문 이 봇에선 카운터가 내려갈 방법이 없다 → 며칠에 걸쳐 5회 쌓이면 `self.running=False`로 **고장 없이 봇이 멈춘다**. 변수명이 "연속"이라 설계를 감췄다. → `is_benign_ws_error()` 신설(ClientConnectionError 계열/ConnectionResetError/TimeoutError/"closing transport"), 정상 끊김은 1시간 슬라이딩 카운터로 **시간당 10회 이상일 때만** 알림. 예상 밖 예외(파싱·코드버그)는 종전대로 중지 대상. **틱 수신 시 `_reset_errors()`** 추가 — 거래 없이도 해소되는 유일 경로. 룰 `check_ws_error_not_cumulative()`(정의+실제호출+WS경로 reset, 역방향 3/3). 교훈: **안전장치 카운터는 리셋 조건이 얼마나 자주 성립하는가까지가 설계다** | [lessons/20260825_2](docs/lessons/20260825_2_ws_error_counter_cumulative.md) |
-| 48 | **연결은 죽기 전에 먼저 썩는다 — liveness 감시로 freshness를 지킬 수 없다.** 08-27 KERNEL 매수는 09:55 에 **09:50 의 가격(57)** 으로 판단됐고 체결은 67.8(+18.9%), 부풀린 체결가 기준 하드손절(61.0)이 실시세(58) 위에 깔려 **진입과 동시에 손절 영역**이었다. 처음엔 호가창 슬리피지로 진단했으나 분봉 600건 측정이 반증 — 돌파 분 즉시 체결 시 슬리피지는 **평균 -0.11%**이고, 08-27 매수 6건의 **체결가는 6/6 모두 당시 분봉 안**이었다(어긋난 건 신호가뿐). 계측 결과 전송지연은 평상시 **p50 38ms**인데 68창 중 3창에서 **p50 164/347/732초**로 치솟고 **그 직후 연결이 끊겼다**. 기존 방어 `wait_for(ws.receive(), timeout=300)` 은 **침묵만** 잡는다 — receive() 가 반환되기만 하면 타이머가 리셋되므로 12분 늦은 메시지가 계속 오는 상태는 영원히 통과. → `TickLagTracker.is_degraded()`(최근 200틱 **중앙값** > 10초) 신설 + `note_reconnect()` 로 창 비움·120s 쿨다운(없으면 재연결 루프) + 강제 재연결은 `consecutive_errors` 미증가(교훈 #47) + 알림 1시간 디바운스(교훈 #30). ⚠ 부수: 초안 룰이 `def is_degradedXX` 를 부분문자열로, `_notify_ws_stale(` 를 **정의부 자신**에 매칭시켜 2건 통과 — **룰이 이름을 물으면 정의부·주석·유사이름이 전부 답이 된다. 호출 형태(`self.foo(`)로 물어야 한다** (동일 유형 7회째). 역방향 9/9 | [lessons/20260829_1](docs/lessons/20260829_1_ws_freshness_vs_liveness.md) |
-| 49 | **들여쓰기 한 칸이 안전장치를 우회 — 배치는 AST로만 검증된다.** 5연패 쿨다운 데드락 수정(ADR 20260829-1) 중 해제 분기를 `else:` **밖**(12칸)에 넣어 **만료 여부와 무관하게 항상 실행**됐다. 로그가 증언: `cooldown 활성 (62.4h 남음)` 다음 줄에 `쿨다운 복역 완료 — 해제` — 두 줄이 같이 나올 수 없는 구조다. 하락장에서 매수가 66시간 일찍 열렸다. ⚠ **구문검사·시나리오 시뮬레이션 4/4·정규식 역방향 10/10 을 모두 통과**했다 — 시뮬레이션은 **로직을 복제**해 검사하므로 실제 파일 들여쓰기와 무관하고, 정규식은 무엇이 있는지만 본다. **"무엇이 있는가"와 "어디에 놓였는가"는 다른 질문이고 후자는 AST로만 물을 수 있다**(lessons #45 계열). → `check_consec_cooldown_releases()` 에 AST 배치 검증 추가(`if consec>=LIMIT` 직속 if 개수 + `_served` 가 활성판정 else 안에만 존재), 역방향은 **실제 사고를 코드로 재현**해 2/2. 2차 피해: 매수를 막으려 봇을 stop 하고 **재기동을 잊어** 이틀 방치 — systemd 자체 기동 시 서버는 여전히 버그판이라 복구한 상태가 즉시 재해제됐다(**상태 복구는 코드 수정 이후에**) | [lessons/20260829_2](docs/lessons/20260829_2_indent_bypassed_safety_gate.md) |
+### 메타 교훈 — 검증 룰 자체가 반복해서 속았다 (동일 유형 7회)
+
+| 무엇이 | 어떻게 실패했나 |
+| --- | --- |
+| 정규식이 **이름**을 물으면 | 정의부·주석·유사이름이 전부 답이 된다 → **호출 형태**(`self.foo(`)로 물어라 (#48) |
+| 정규식은 "무엇이 있는가"만 | "**어디에 놓였는가**"는 **AST 로만** 물을 수 있다 (#45, #49) |
+| 시뮬레이션은 로직을 **복제** | 실제 파일 들여쓰기와 무관 — 4/4 통과하고도 버그 생존 (#49) |
+| 룰은 통과가 아니라 | **실패를 잡는지**(역방향 테스트)로 검증해야 한다 (#44) |
+
+### 영역별 한 줄 인덱스
+
+#### 전략 실행 정합 — 백테스트와 실시간이 같은 것을 계산하는가
+
+| # | 한 줄 |
+| --- | --- |
+| 1 | 봉 마감 기반 전략을 실시간 틱으로 실행 금지 (가짜 돌파) |
+| 2 | 백테스트 상승장 비중 높으면 하락장 성과 과대평가 — 하락장 구간 별도 검증 |
+| 4 | CLAUDE.md ↔ config.py ↔ 서버 전략 파라미터 동기화 필수 |
+| 40 | 거래량 필터가 **진행 중인 봉**을 읽어 전 종목 100% 차단 — `iloc[-2]` 완성봉 필수 |
+| 43 | 업비트 시장가 응답엔 체결정보 없음(전부 None) — `fetch_order(uuid)` 재조회가 유일 경로 |
+| 48 | 연결은 죽기 전에 **먼저 썩는다** — liveness(침묵) 감시로 freshness(지연)를 지킬 수 없다 |
+
+#### 매수/매도 경로 누락 — "모든 경로"에 적용했는가
+
+| # | 한 줄 |
+| --- | --- |
+| 6 | 전략 필터는 모든 매수 경로(scanner + realtime_monitor)에 적용 필수 |
+| 26 | 안전장치 신규 추가 시 `grep buy_market` 등으로 진입점 전수 열거 + task별 분리 |
+| 42 | 매수 직후 보유 종목이 웹소켓 구독에서 탈락 — 손절·익절 무방비 (`positions` 기반 구독) |
+| 45 | 포지션 종료가 TP 루프 안에 있어 **도달 불가능** — 이익 청산에서만 발생 = 통계 하방 편향 |
+
+#### 상태·회계 정합 — state 는 거래소의 미러인가
+
+| # | 한 줄 |
+| --- | --- |
+| 8 | 평가금액은 거래소 API 전체 자산 합산 필수 (BTC만 집계하면 알트 누락) |
+| 10 | 상태 파일은 "거래소 미러" — state ↔ balance 불일치 즉시 경보 |
+| 25 | 부분 익절 회계 = 불변 입력(`entry_qty`) + 가변 추적(`tp_sold_levels`) 분리. SL 우선 |
+| 28 | state 보정 도구는 모든 state 파일 커버 + 잔고 0 인지 시 즉시 자동 정리 |
+| 32 | `order["amount"]` 는 None 일 수 있음 — 4단 결정 사슬 + `entry_qty<=0` 가드 |
+| 41 | 트레일링 고점 갱신에 `save_state()` 누락 — 무증상이나 재시작 시 확보 이익 소멸 |
+| 46 | 수동 매도 회계: 틱 경로가 1시간 교차검증을 앞질러 손익 확정 — `trade_class` allowlist 로 분리 |
+
+#### 안전장치 설계 — 카운터의 리셋 조건까지가 설계다
+
+| # | 한 줄 |
+| --- | --- |
+| 3 | 안전장치(연패 중단)는 주기 체크가 아닌 **체결 즉시** 체크 |
+| 11 | 서킷브레이커는 신규 차단뿐 아니라 **기존 포지션 처리 정책**도 명시 필요 |
+| 13 | ATR×N 스탑은 고변동 종목에서 제어 불능 — **하드 손절 캡 필수** |
+| 21 | 안전장치는 **fail-closed**(잔고 조회 실패 → 매수 차단). ccxt 싱글톤 + 명시 백오프 |
+| 30 | 안전장치 알람도 발사 후 디바운스 필수 — `cooldown_until` 과 `alerted_until` 은 분리 |
+| 38 | 연패는 `closed_trades` 재계산이라 cooldown 만 리셋하면 다음 cycle 에 부활 — `consec_loss_floor_date` |
+| 47 | "연속 오류"가 실은 **누적 오류** — 리셋 경로가 거래 성공뿐이라 고장 없이 봇이 멈춘다 |
+| 49 | 들여쓰기 한 칸이 해제 분기를 `else` 밖으로 빼내 안전장치 우회 — 배치는 AST 로만 검증 |
+
+#### 알림 — 폭주와 침묵은 같은 뿌리
+
+| # | 한 줄 |
+| --- | --- |
+| 12 | `dict.get(key, default)` 는 값이 None 이면 default 가 무시됨 — 린트 집행 |
+| 14 | 이벤트 루프 내 로그는 throttle 필수 — 종목수 × 빈도 곱 폭발 |
+| 22 | wrapper(retry/backoff) 일괄 적용 금지 — 조회만. 매수/매도 즉시성 경로는 lessons #3 위배 |
+| 29 | "거래소에만 존재" 알람은 dust 자동 silence 필수 — 디바운스만으론 영구 루프 |
+| 37 | `regime_check.py` 에 `--notify` 미부여로 BULL 전환 알림 침묵 — cron 인자 누락은 대표적 silent fail |
+| 39 | 텔레그램 Markdown 400 을 `except: pass` 가 삼킴 — `resp.status` 확인 + plain 재시도 |
+
+#### 배포·인프라 — 코드 채널과 인프라 채널은 다르다
+
+| # | 한 줄 |
+| --- | --- |
+| 5 | t3.micro 스왑 필수, 서비스 추가 전 메모리 예산 확인 |
+| 7 | **1일 1회 작업은 날짜 체크 + 상태 저장 필수** — 재시작 시 중복 실행 방지 |
+| 9 | 자동화 전제 스크립트는 cron/systemd 등록 + pre_deploy_check 검증 필수 |
+| 15 | 외부 API 의존 초기화는 재시도+백오프 필수 — systemd 재시작은 대체 불가 |
+| 16 | 배포 스크립트가 전제하는 로컬 CLI(rsync 등)도 검증 + 폴백 분기 필수 |
+| 17 | 다중 프로젝트 서버에서 프로세스 판정은 `/proc/<pid>/cwd` + systemd unit 역탐색 |
+| 18 | venv 리네임 시 crontab/systemd 인터프리터 경로 동시 갱신 — stderr 리디렉션은 silent fail |
+| 19 | 모듈이 config 상수를 **자체 정의**하면 동기화 누락 — import 통일 + 전체 grep |
+| 20 | 다중 API 키의 키↔환경(서버 IP) 매핑 미명시는 silent fail — 단명 헬스체크 + 디바운스 |
+| 23 | 침묵 모드 cron 은 반드시 heartbeat 파일과 짝. 주문에 retry 적용 금지(중복 주문) |
+| 24 | 장시간 스크립트는 systemd 단독 — cron 직접 호출 금지(좀비 누적·race) |
+| 27 | systemd 재시작은 cron 이 fork 한 좀비를 못 죽인다 — 옛 코드로 알림 발사 지속 |
+| 31 | 코드(scp)와 인프라(crontab/systemd)는 **별도 채널** — scp+restart 로 cron 은 갱신 안 됨 |
+| 33 | 검증 룰만 늘려도 `scp+restart` 우회 채널에선 사문화 — 공식 `hotfix_deploy.sh` 로 흡수 |
+| 34 | systemd 가동 스크립트의 cron 호출은 ERROR 승격 — non-realtime 매일 호출도 좀비 누적 |
+| 35 | 운영 자원(SSH 키/서버 정보)의 canonical 경로는 별도 1차 문서 필수 — [docs/ssh_access.md](docs/ssh_access.md) |
+| 36 | 타 프로젝트 `deploy` 가 crontab 을 통째 덮어써 BATA cron 소실 — **배포 성공 = 서버 반영 확인까지** |
+| 44 | **cron 소실 감시기가 cron 안에 있어 함께 죽음(19일 무알람)** — 감시를 systemd 로 이전 |
+
+---
+
+## 에이전트 팀 (v0.5.1)
+
+사용자는 **bata-pm** 에게만 말한다. 나머지는 PM 이 위임 호출한다.
+정의: `.claude/agents/*.md` · 책임: [agents/team.yaml](agents/team.yaml) · **호출 패턴 상세: [docs/agent_pipeline.md](docs/agent_pipeline.md)**
+
+| 에이전트 | 단일 책임 |
+| --- | --- |
+| **bata-pm** | 사용자 접점·우선순위·승인·주간 audit |
+| **bata-investment-expert** | 시장·전략·진단·도메인 파라미터 발의(독점) |
+| **bata-engineer** | 기획·개발·유지보수·배포·회귀방지 |
+| **bata-operator** | 모니터링·알람 트리아지·일일/주간 보고 |
+| btc-market-news-analyst | (보조) 시황·뉴스 브리핑 |
+
+**호출 규칙**: 싱글이 기본 · 병렬은 audit·신규사고 fan-out 에만 · 순차에서 게이트/승인은 PM 직접 ·
+**하드룰 R4** 엔지니어 산출물을 엔지니어가 PASS 판정 금지 · incident close 는 PM 직접 확인
+
+---
+
+## 핵심 파일 위치
+
+| | |
+| --- | --- |
+| **현황판 (지금 할 일)** | [docs/ROADMAP.md](docs/ROADMAP.md) |
+| **전략 파라미터 (단일 진실)** | `services/execution/config.py` |
+| 배포 | `bash scripts/deploy_to_aws.sh` · 핫픽스 `scripts/hotfix_deploy.sh` |
+| 배포 전 검증 | `python scripts/pre_deploy_check.py` |
+| 일일 체크 | `python scripts/daily_check.py` (09:32 KST 자동 발송) |
+| 서버 접속 | [docs/ssh_access.md](docs/ssh_access.md) — AWS `13.124.82.122` (Seoul, t3.micro, Ubuntu 24.04) |
+| 상태 파일 | 서버 `workspace/multi_trading_state.json` |
+| MCP 계약 | [infra/mcp.upbit.yaml](infra/mcp.upbit.yaml) |
+| 작업 산출물 | [workspace/](workspace/) — research/ reports/ specs/ plans/ runs/ |
+| 아키텍처 뷰어 | [src/App.jsx](src/App.jsx) (`npm run dev`) |
+| 아카이브 | [docs/00.보고/WBS.md](docs/00.보고/WBS.md) (2026-05-06 동결) |
+
+### MCP 서버
+
+| 서버 | 상태 | 툴 |
+| --- | --- | --- |
+| market_data | 구현 중 | `get_ohlcv`, `get_ticker`, `get_orderbook`, `get_macro_series` |
+| experiment_tracker | 구현 중 | `create_experiment`, `log_run`, `compare_runs` |
+| exchange_execution | Phase 3 | 업비트 REST 주문 (페이퍼 → 실전) |
+| alerting | Phase 3 | Slack/Telegram |
+| secrets_config | Phase 3 | 정식 시크릿 관리 |
+
+> 업비트는 현물 전용 — `get_funding`, `get_open_interest` 없음

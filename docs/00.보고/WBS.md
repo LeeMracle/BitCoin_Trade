@@ -1,5 +1,9 @@
 # WBS — Bitcoin Auto-Trading
 
+> 🗄 **아카이브 — 2026-05-06 동결.** 이 문서는 더 이상 갱신하지 않는다.
+> 현재 무엇을 해야 하는지는 **[docs/ROADMAP.md](../ROADMAP.md)** 를 볼 것.
+> 방치 경위와 후속 설계: `workspace/plans/20260907_1_roadmap_and_claude_md_slim.md`
+
 > 갱신: 2026-05-05 (W19, ML LIVE 가속 도입 P8-27 — threshold 0.45 보수 시작)
 
 ## 진행현황 요약
