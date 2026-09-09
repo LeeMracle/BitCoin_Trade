@@ -49,3 +49,6 @@ scripts/generate_erp_sales_strategy_report.py
 data/features/
 data/models/
 workspace/ml_shadow/
+
+# 서버에서 내려받은 shadow 로그 사본 (ssh_access.md 의 scp 대상) — 서버가 원본
+output/ml_shadow/

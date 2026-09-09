@@ -30,6 +30,26 @@ LABEL_TARGET_PCT = 0.05         # +5% 도달 = positive
 LABEL_HORIZON_BARS = 96         # 4일 (15분봉 기준 96봉)
 LABEL_SLIPPAGE_PCT = 0.002      # 0.2% 슬리피지 가정 (보수적 라벨)
 
+# ── 독립표본 계수 기준 (2026-09-09 확정) ─────────────
+# ML 게이트 LIVE 전환 트리거인 "독립표본 N / 800" 의 N 을 정의한다.
+# 이 정의는 scripts/ml_shadow_count.py 가 유일하게 구현하며,
+# pre_deploy_check.check_ml_shadow_count_basis() 가 이탈을 잡는다.
+#
+# 표본 1건의 자격 — 아래 4개를 모두 만족하는 로그 행:
+#   (1) 신호행일 것            — kind 필드 없음 (kind="outcome" 은 결과 라벨행)
+#   (2) 실제 추론일 것         — ml_active is True (False/None 은 비활성 자리표시자 score=1.0)
+#   (3) 기준일 이후일 것       — 파일명 날짜 >= SHADOW_SAMPLE_START
+#   (4) 라벨이 붙었을 것      — 같은 signal_ts 의 outcome 행이 존재
+# 그 후 (symbol, signal_type, UTC날짜) 중복을 제거한다.
+#
+# (3) 의 근거: 2026-08-25 이전 로그는 (a) 게이트 비활성으로 score=1.0 자리표시자이거나
+#   (b) 중복 억제 이전이라 동일 신호가 최대 855회 복제돼 있다. 둘 다 표본이 아니다.
+# (4) 의 근거: 800 이라는 목표치는 "도달률이 오르는지"의 검정력에서 나온 수이고,
+#   도달률은 outcome 라벨 없이는 계산되지 않는다. 미라벨 신호는 분모에 들어갈 수 없다.
+SHADOW_SAMPLE_START = "20260825"   # 중복억제 + 추론재개 배포일 (research/20260825_2)
+SHADOW_SAMPLE_TARGET = 800         # 목표 표본 — 변경은 ADR 필요(도메인 파라미터)
+SHADOW_DEDUP_KEY = ("symbol", "signal_type", "utc_date")
+
 # ── Feature 카탈로그 (학습/추론 공용 순서 보장) ─────
 # v2: 18 → 23 (MACD/BB/Stoch/BTC상관/1d EMA200 추가)
 FEATURE_COLUMNS: list[str] = [

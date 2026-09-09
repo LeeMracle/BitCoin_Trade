@@ -3398,6 +3398,107 @@ def check_ml_shadow_integrity() -> None:
         )
 
 
+def check_ml_shadow_count_basis() -> None:
+    """"독립표본 N / 800" 의 N 이 재현 가능한 숫자인지 강제한다.
+
+    배경 (2026-09-09):
+        ROADMAP 에 `shadow 독립표본 186 / 800` 이 적혀 있었는데 **어떤 정의로도
+        재현되지 않았다**. 실측은 46 이었다. 186 이 나올 수 없다는 증명은 간단하다 —
+        이 계수는 단조증가인데 현재값이 46 이다. 즉 손으로 적힌 오기였다.
+        정의가 사람 머릿속에만 있으면 이 오기를 아무도 잡을 수 없다.
+
+        이 숫자는 ML 게이트 LIVE 전환(= 매수 차단 재개)의 유일한 트리거다.
+        실제보다 크게 세면 준비 안 된 게이트를 켜서 슬롯을 굶긴다
+        (2026-05 LIVE 기간 차단률 100%, 매수 4건 1승 3패의 전례).
+
+    검증규칙:
+        1) 계수 기준 상수가 services/ml/config.py 에 있을 것 (단일 출처)
+        2) scripts/ml_shadow_count.py 가 그 상수를 **import** 할 것 —
+           자체 정의하면 정의가 갈라진다 (lessons #19). AST 로 배치를 묻는다.
+        3) 표본 자격 4개 술어가 모두 구현돼 있을 것
+        4) ROADMAP 이 숫자를 적을 때 산출 스크립트를 함께 인용할 것 —
+           다음 사람이 "어떻게 센 거지"에서 멈추지 않도록
+    """
+    cfg = PROJECT_ROOT / "services" / "ml" / "config.py"
+    cnt = PROJECT_ROOT / "scripts" / "ml_shadow_count.py"
+    road = PROJECT_ROOT / "docs" / "ROADMAP.md"
+    for f, label in ((cfg, "services/ml/config.py"), (cnt, "scripts/ml_shadow_count.py")):
+        if not f.exists():
+            errors.append(f"[ML-count] {label} 없음 — 독립표본 계수 기준이 사라졌다")
+            return
+
+    ctxt = cfg.read_text(encoding="utf-8")
+    names = ("SHADOW_SAMPLE_START", "SHADOW_SAMPLE_TARGET", "SHADOW_DEDUP_KEY")
+
+    # 1) 단일 출처 — config 가 상수를 module-level 로 정의하는가 (AST)
+    cfg_defined = {
+        t.id
+        for node in ast.parse(ctxt).body
+        if isinstance(node, ast.Assign)
+        for t in node.targets
+        if isinstance(t, ast.Name)
+    }
+    for n in names:
+        if n not in cfg_defined:
+            errors.append(
+                f"[ML-count] services/ml/config.py 에 {n} 정의 없음 — "
+                f"계수 기준의 단일 출처가 비었다"
+            )
+
+    # 2) 계수 스크립트가 import 하는가 / 자체 정의하지 않는가 (AST — 배치 질문)
+    ntxt = cnt.read_text(encoding="utf-8")
+    tree = ast.parse(ntxt)
+    imported = {
+        a.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and (node.module or "").endswith("ml.config")
+        for a in node.names
+    }
+    selfdef = {
+        t.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Assign)
+        for t in node.targets
+        if isinstance(t, ast.Name) and t.id in names
+    }
+    for n in names:
+        if n not in imported:
+            errors.append(
+                f"[ML-count] ml_shadow_count.py 가 {n} 을 config 에서 import 하지 않는다"
+            )
+    if selfdef:
+        errors.append(
+            f"[ML-count] ml_shadow_count.py 가 {sorted(selfdef)} 를 자체 정의한다 — "
+            f"config 와 갈라진다 (lessons #19)"
+        )
+
+    # 3) 표본 자격 4개 술어
+    predicates = {
+        "신호행만(kind 배제)": r'get\("kind"\)\s*is\s+None',
+        "실제 추론만(ml_active)": r'get\("ml_active"\)\s*is\s+True',
+        "기준일 이후만": r'>=\s*SHADOW_SAMPLE_START',
+        "라벨된 것만": r'get\("signal_ts"\)\s+in\s+outcomes',
+    }
+    for label, pat in predicates.items():
+        if not re.search(pat, ntxt):
+            errors.append(
+                f"[ML-count] ml_shadow_count.py 에 표본 자격 술어 누락: {label}"
+            )
+
+    # 4) ROADMAP 이 숫자와 산출 근거를 함께 적는가
+    if road.exists():
+        rtxt = road.read_text(encoding="utf-8")
+        for line in rtxt.splitlines():
+            if "독립표본" in line and re.search(r"\d+\s*/\s*800", line):
+                if "ml_shadow_count" not in line:
+                    errors.append(
+                        "[ML-count] ROADMAP 이 독립표본 수를 적으면서 산출 스크립트"
+                        "(ml_shadow_count.py)를 인용하지 않는다 — "
+                        "186 오기가 재현 불가였던 이유가 정확히 이것이다"
+                    )
+                break
+
+
 def main() -> None:
     print("=" * 50)
     print("배포 전 검증 (pre-deploy check)")
@@ -3472,6 +3573,7 @@ def main() -> None:
     check_exit_reasons_classified()
     check_ws_error_not_cumulative()
     check_ml_shadow_integrity()
+    check_ml_shadow_count_basis()
     check_tick_lag_instrumented()
     check_ws_freshness_guard()
     check_consec_cooldown_releases()
