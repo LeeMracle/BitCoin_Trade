@@ -3186,6 +3186,96 @@ def check_tick_lag_instrumented() -> None:
             errors.append(f"[틱지연] tick_lag.py 가 {const} 를 자체 정의 (교훈 #19)")
 
 
+def check_consec_loss_paths_aligned(src_path: Path | None = None) -> list[str]:
+    """연패 쿨다운 부과 경로가 전부 config 상수 + 부과 지문을 쓰는지 (lessons #51).
+
+    배경 (2026-09-17 적발):
+        매도즉시 경로가 `consec_loss >= 3` / `3 * 24 * 3600` 리터럴로 사양(5연패)보다 먼저 72h 를
+        걸었고(09-14 실발동), `cooldown_imposed_for` 를 남기지 않아 만료 후 주기 경로가 같은 연패에
+        72h 를 재부과했다. 기존 룰은 **올바른 분기가 있는가**만 물어 **틀린 분기가 또 있는가**를 못 봤다.
+
+    AST 로 묻는다 (이름·주석 매칭 금지 — lessons #48):
+        (a) `consec*` 이름과 정수 리터럴(≥2)의 비교 금지
+        (b) `self.state[...cooldown_until] = <0 이 아닌 값>` 을 하는 함수는 같은 함수 안에서
+            `cooldown_imposed_for` 도 대입해야 한다
+        (c) 그런 함수는 `CONSEC_LOSS_COOLDOWN_HOURS` 를 참조해야 한다 (`24 * 3600` 리터럴 금지)
+    반환값은 역방향 테스트용 — 기본 호출은 errors 에 누적.
+    """
+    rm = src_path or PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py"
+    found: list[str] = []
+    try:
+        tree = ast.parse(rm.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError) as e:
+        found.append(f"[연패-경로정합] realtime_monitor.py 파싱 불가: {e}")
+    else:
+        def _is_consec(n: ast.AST) -> bool:
+            # 변수(consec_loss) · 속성 · 호출(self._get_consec_loss()) 모두 — 상수(CONSEC_*)는 제외
+            if isinstance(n, ast.Call):
+                n = n.func
+            name = n.id if isinstance(n, ast.Name) else n.attr if isinstance(n, ast.Attribute) else ""
+            return "consec_loss" in name or name == "consec"
+
+        def _is_lit(n: ast.AST) -> bool:
+            return (isinstance(n, ast.Constant) and type(n.value) is int and n.value >= 2)
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Compare):
+                sides = [node.left, *node.comparators]
+                if any(_is_consec(s) for s in sides) and any(_is_lit(s) for s in sides):
+                    found.append(f"[연패-경로정합] L{node.lineno}: `{ast.unparse(node)}` — "
+                                 f"임계값 리터럴 금지, CONSEC_LOSS_LIMIT 사용 (교훈 #19)")
+
+        def _state_key(t: ast.AST) -> str | None:
+            if (isinstance(t, ast.Subscript) and isinstance(t.slice, ast.Constant)
+                    and isinstance(t.slice.value, str)
+                    and ast.unparse(t.value) == "self.state"):
+                return t.slice.value
+            return None
+
+        for fn in ast.walk(tree):
+            if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            impose_values: list[ast.AST] = []
+            keys: set[str] = set()
+            local_defs: dict[str, list[ast.AST]] = {}
+            for n in ast.walk(fn):
+                if isinstance(n, ast.Assign):
+                    for t in n.targets:
+                        if isinstance(t, ast.Name):
+                            local_defs.setdefault(t.id, []).append(n.value)
+                        k = _state_key(t)
+                        if k:
+                            keys.add(k)
+                            if (k == "cooldown_until" and not
+                                    (isinstance(n.value, ast.Constant) and not n.value.value)):
+                                impose_values.append(n.value)
+            if not impose_values:
+                continue
+            # (c) 는 **대입값의 산출 경로**로 묻는다 — 함수 안 아무 데나(알림 문구 f-string 등)
+            # 상수 이름이 있으면 통과하던 초안이 역방향 m3(`72 * 3600`)을 놓쳤다 (lessons #48 재발).
+            def _derived_names(expr: ast.AST, depth: int = 0) -> set[str]:
+                out: set[str] = set()
+                for x in ast.walk(expr):
+                    if isinstance(x, ast.Name):
+                        out.add(x.id)
+                        if depth < 3:
+                            for d in local_defs.get(x.id, []):
+                                out |= _derived_names(d, depth + 1)
+                return out
+            names: set[str] = set()
+            for v in impose_values:
+                names |= _derived_names(v)
+            if "cooldown_imposed_for" not in keys:
+                found.append(f"[연패-경로정합] {fn.name}(): cooldown_until 부과 시 cooldown_imposed_for "
+                             f"미기록 — 만료 후 주기 경로가 같은 연패에 재부과한다 (ADR 20260829-1)")
+            if "CONSEC_LOSS_COOLDOWN_HOURS" not in names:
+                found.append(f"[연패-경로정합] {fn.name}(): cooldown 기간이 CONSEC_LOSS_COOLDOWN_HOURS "
+                             f"기반이 아님 (교훈 #19)")
+    if src_path is None:
+        errors.extend(found)
+    return found
+
+
 def check_consec_cooldown_releases() -> None:
     """5연패 쿨다운이 실제로 해제되는지 (ADR 20260829-1).
 
@@ -3555,6 +3645,7 @@ def main() -> None:
     check_consec_loss_no_running_false()
     check_consec_loss_cooldown_invariant()
     check_consec_loss_floor_consistency()
+    check_consec_loss_paths_aligned()
     check_deploy_post_check_remote_cron()
     check_regime_notify_flag()
     check_morning_briefing_registered()

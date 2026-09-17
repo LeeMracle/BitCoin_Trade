@@ -910,14 +910,18 @@ class RealtimeMonitor:
                     # 어떤 연패에 대한 부과인지 기록 — 만료 시 (a)/(b) 구분의 근거
                     self.state['cooldown_imposed_for'] = _pool_tail
                     save_state(self.state)
-                await send(
-                    f"🛑 *5연패 cooldown 72h 자동 연장*\n"
-                    f"연속 {consec}건 손실 — 신규 매수 차단 ({cooldown_target} until)\n"
-                    f"승률: {win_rate:.0f}% ({wins_n}/{n_trades})\n"
-                    f"봇은 정상 가동 — 기존 포지션 트레일링/SL 계속 처리\n"
-                    f"원인 분석 후 cooldown 해제 또는 전략 수정 필요"
-                )
-                print(f"\n!!! 5연패 cooldown 72h 강제 연장 (B9: process 유지) !!!", flush=True)
+                    # 연장 알림은 부과 분기 안에만 (lessons #51) — 밖에 두면 해제 직후에도
+                    # 실행돼 `cooldown_target` 미정의 UnboundLocalError 로 보고 루틴이 죽었다.
+                    _cd_str = datetime.fromtimestamp(
+                        self.state['cooldown_until'], tz=timezone.utc).strftime('%Y-%m-%d %H:%M UTC')
+                    await send(
+                        f"🛑 *{CONSEC_LOSS_LIMIT}연패 cooldown {CONSEC_LOSS_COOLDOWN_HOURS}h 자동 연장*\n"
+                        f"연속 {consec}건 손실 — 신규 매수 차단 ({_cd_str} 까지)\n"
+                        f"승률: {win_rate:.0f}% ({wins_n}/{n_trades})\n"
+                        f"봇은 정상 가동 — 기존 포지션 트레일링/SL 계속 처리\n"
+                        f"원인 분석 후 cooldown 해제 또는 전략 수정 필요"
+                    )
+                    print(f"\n!!! {CONSEC_LOSS_LIMIT}연패 cooldown {CONSEC_LOSS_COOLDOWN_HOURS}h 강제 연장 (B9: process 유지) !!!", flush=True)
             return
 
         # ── 시장 + 누적 성적 (함수 호출로 통일) ──
@@ -2344,6 +2348,37 @@ class RealtimeMonitor:
         save_state(self.state)
         return False
 
+    async def _check_consec_loss_immediate(self) -> bool:
+        """매도 체결 직후 연패 체크 — 발동 시 True (lessons #51).
+
+        주기 경로(_send_periodic_report 의 5연패 분기)와 **같은 상수·같은 부과 기록**을 쓴다.
+        2026-09-17 적발: 이 경로만 `>= 3` / `3 * 24 * 3600` 리터럴을 써서 사양(5연패)보다 먼저
+        72h 를 걸었고, `cooldown_imposed_for` 를 남기지 않아 만료 후 주기 경로가 같은 연패를
+        "처음 걸린 연패"로 보고 72h 를 재부과했다(ADR 20260829-1 의 (a)/(b) 구분 무력화).
+        """
+        consec_loss = self._get_consec_loss()
+        if consec_loss < CONSEC_LOSS_LIMIT:
+            return False
+        now_ts = datetime.now(tz=timezone.utc).timestamp()
+        if (self.state.get("cooldown_until") or 0) > now_ts:
+            return False  # 이미 차단 중 — 연장·해제 판단은 주기 경로 몫
+        cooldown_until = now_ts + 3600 * CONSEC_LOSS_COOLDOWN_HOURS
+        self.state["cooldown_until"] = cooldown_until
+        # 주기 경로와 invariant 공유: silence 동기화(lessons #30) + 부과 지문(ADR 20260829-1)
+        self.state["consec_loss_alerted_until"] = cooldown_until
+        self.state["cooldown_imposed_for"] = self._consec_streak_tail()
+        save_state(self.state)
+        cooldown_str = datetime.fromtimestamp(cooldown_until, tz=timezone.utc).strftime(
+            "%Y-%m-%d %H:%M UTC")
+        print(f"  [쿨다운] {consec_loss}연패 감지 — {cooldown_str}까지 신규 매수 중단", flush=True)
+        await send(
+            f"⏸ *{CONSEC_LOSS_LIMIT}연패 쿨다운 시작*\n"
+            f"연속 {consec_loss}건 손실 → {CONSEC_LOSS_COOLDOWN_HOURS}h 신규 매수 중단\n"
+            f"재개 예정: {cooldown_str}\n"
+            f"기존 보유 종목은 트레일링스탑으로 정상 청산"
+        )
+        return True
+
     async def _execute_buy(self, symbol: str, price: float, level: dict):
         positions = self.state.get("positions", {})
         if symbol in positions:
@@ -2783,25 +2818,7 @@ class RealtimeMonitor:
                      "return_pct": ret_pct, "trigger": "realtime"})
 
         # ── 매도 체결 직후 연패 즉시 체크 (교훈 #3: 주기 체크 아닌 즉시 체크) ──
-        consec_loss = self._get_consec_loss()
-        if consec_loss >= 3 and not self.state.get("cooldown_until"):
-            cooldown_until = (
-                datetime.now(tz=timezone.utc).timestamp() + 3 * 24 * 3600
-            )
-            self.state["cooldown_until"] = cooldown_until
-            save_state(self.state)
-            cooldown_dt = datetime.fromtimestamp(cooldown_until, tz=timezone.utc)
-            cooldown_str = cooldown_dt.strftime("%Y-%m-%d %H:%M UTC")
-            print(
-                f"  [쿨다운] 3연패 감지 — {cooldown_str}까지 신규 매수 중단",
-                flush=True,
-            )
-            await send(
-                f"⏸ *3연패 쿨다운 시작*\n"
-                f"연속 {consec_loss}건 손실 → 3일간 신규 매수 중단\n"
-                f"재개 예정: {cooldown_str}\n"
-                f"기존 보유 종목은 트레일링스탑으로 정상 청산"
-            )
+        await self._check_consec_loss_immediate()
 
         if NOTIFY_ON_SELL:
             emoji = "🟢" if ret_pct > 0 else "🔴"
