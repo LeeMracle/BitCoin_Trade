@@ -56,3 +56,4 @@ output/ml_shadow/
 # 1분봉 재생 캐시 / 서버 state 사본 (2026-09-17) — 재생성 가능, 거래 상태 포함
 output/min1/
 output/state_*.json
+output/h1/
