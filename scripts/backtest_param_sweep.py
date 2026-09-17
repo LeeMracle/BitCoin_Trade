@@ -64,6 +64,9 @@ class P:
         # 진입가에 부과할 일률 슬리피지 (2026-08-27). 백테스트는 밴드에서
         # 정확히 체결된다고 가정하므로 실거래의 집행 슬리피지가 반영되지 않는다.
         self.slip = kw.get("slip", 0.0)
+        # 하루 신규 진입 상한 (2026-09-17). 실거래에서 동시진입 >=4 인 날 승률 41.5% vs <=3 83.3%
+        # (p=0.019, 사후 발견) — 시장 전체 급등일의 동반 돌파가 동반 하락으로 끝나는 군집 위험.
+        self.daycap = kw.get("daycap", 999)
 
 
 
@@ -155,8 +158,9 @@ def run_sim(panel: dict[str, pd.DataFrame], dates: list, p: P, seed: int) -> dic
                  if sym not in pos and d in panel[sym].index
                  and bool(panel[sym].loc[d, "signal"])]
         rng.shuffle(cands)
+        new_today = 0
         for sym, row in cands:
-            if len(pos) >= p.slots:
+            if len(pos) >= p.slots or new_today >= p.daycap:
                 break
             amt = cash * C.POSITION_RATIO / max(p.slots - len(pos), 1)
             amt = min(amt, equity * p.weight, cash * C.POSITION_RATIO)
@@ -171,6 +175,7 @@ def run_sim(panel: dict[str, pd.DataFrame], dates: list, p: P, seed: int) -> dic
             pos[sym] = {"entry": e, "qty": amt * (1 - FEE) / e, "atr": a, "highest": e,
                         "trail": max(e - a * p.atr_mult, e * (1 - p.hard)),
                         "tp_done": set(), "cost": amt, "proceeds": 0.0}
+            new_today += 1
 
     eq = pd.Series(curve)
     final = curve[-1] if curve else INIT
@@ -203,7 +208,7 @@ async def main() -> int:
                     help="시드머니 override (기본: config.CIRCUIT_BREAKER_INITIAL_CAPITAL)")
     ap.add_argument("--axis", default="all",
                     choices=["all", "slots", "slotcap", "slot20", "tp", "tp55", "tp2",
-                             "stop", "dc", "slip", "combo15", "combo"])
+                             "stop", "dc", "slip", "combo15", "combo", "review0917"])
     args = ap.parse_args()
 
     if args.capital:
@@ -345,9 +350,22 @@ async def main() -> int:
             for t in (0.10, 0.15)
         ],
         "stop": [(f"손절 {int(h*100)}% / ATRx{m}", {"hard": h, "atr_mult": m})
-                 for h, m in ((0.10, 3.0), (0.07, 3.0), (0.15, 3.0),
+                 for h, m in ((0.10, 3.0), (0.07, 3.0), (0.05, 3.0), (0.15, 3.0),
                               (0.20, 3.0), (0.10, 2.0), (0.10, 4.0))],
+        # 2026-09-17 사용자 질문 "손절 -10% -> -5%" — 0.05 추가. 일봉 재생은 같은 날
+        # 저가·고가 동시 도달 시 손절 우선이라 **좁은 손절에 불리하게 편향**된다.
+        # 실거래 1분봉 재생(workspace/research/20260917_1)과 함께 읽을 것.
         "dc": [(f"DC {n}", {"dc": n}) for n in (8, 12, 20, 30, 50)],
+        # 2026-09-17 실거래 53건 검토에서 나온 후보 2축을 한 번의 로딩으로 측정
+        "review0917": [
+            ("현행 SL10", {}),
+            ("SL7", {"hard": 0.07}),
+            ("SL5", {"hard": 0.05}),
+            ("일일진입 3", {"daycap": 3}),
+            ("일일진입 2", {"daycap": 2}),
+            ("일일진입 1", {"daycap": 1}),
+            ("SL5 + 일일진입 3", {"hard": 0.05, "daycap": 3}),
+        ],
         # 결합 검증은 **IS·OOS 방향이 일관된 축만** 묶는다.
         # 단일요인 결과: 슬롯↑ 일관 개선 / TP 늦추기 일관 개선 /
         #               손절·ATR 신호 없음 / DC는 IS와 OOS가 반대(과최적화 함정) →

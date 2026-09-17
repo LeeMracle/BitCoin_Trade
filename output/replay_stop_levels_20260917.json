@@ -1,0 +1,1327 @@
+[
+ {
+  "symbol": "ARB/KRW",
+  "entry_date": "2026-09-01 00:12",
+  "actual": 7.46,
+  "actual_reason": "tp2_full_exit",
+  "n_min": 1856,
+  "sl0.1": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -0.6578947368421018
+  },
+  "sl0.07": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -0.6578947368421018
+  },
+  "sl0.05": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -0.6578947368421018
+  }
+ },
+ {
+  "symbol": "BARD/KRW",
+  "entry_date": "2026-08-31 08:23",
+  "actual": -2.82,
+  "actual_reason": "trail_stop",
+  "n_min": 1473,
+  "sl0.1": {
+   "ret": -2.575870361810939,
+   "outcome": "stop_after_tp1",
+   "ambiguous": false,
+   "mae": -4.347826086956519
+  },
+  "sl0.07": {
+   "ret": -0.9169107130146736,
+   "outcome": "stop_after_tp1",
+   "ambiguous": false,
+   "mae": -4.347826086956519
+  },
+  "sl0.05": {
+   "ret": 0.08063365096739883,
+   "outcome": "stop_after_tp1",
+   "ambiguous": false,
+   "mae": -4.347826086956519
+  }
+ },
+ {
+  "symbol": "ELSA/KRW",
+  "entry_date": "2026-09-05 00:13",
+  "actual": 6.84,
+  "actual_reason": "tp2_full_exit",
+  "n_min": 94,
+  "sl0.1": {
+   "ret": 7.64230384807596,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -0.6802721088435382
+  },
+  "sl0.07": {
+   "ret": 7.64230384807596,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -0.6802721088435382
+  },
+  "sl0.05": {
+   "ret": 7.64230384807596,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -0.6802721088435382
+  }
+ },
+ {
+  "symbol": "DOOD/KRW",
+  "entry_date": "2026-09-06 08:25",
+  "actual": 7.28,
+  "actual_reason": "tp2_full_exit",
+  "n_min": 224,
+  "sl0.1": {
+   "ret": 7.642303848076004,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -2.3809523809523947
+  },
+  "sl0.07": {
+   "ret": 7.642303848076004,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -2.3809523809523947
+  },
+  "sl0.05": {
+   "ret": 7.642303848076004,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -2.3809523809523947
+  }
+ },
+ {
+  "symbol": "NEAR/KRW",
+  "entry_date": "2026-09-05 00:09",
+  "actual": 7.65,
+  "actual_reason": "tp2_full_exit",
+  "n_min": 2212,
+  "sl0.1": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -1.9920318725099584
+  },
+  "sl0.07": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -1.9920318725099584
+  },
+  "sl0.05": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -1.9920318725099584
+  }
+ },
+ {
+  "symbol": "SIGN/KRW",
+  "entry_date": "2026-09-04 23:09",
+  "actual": 6.99,
+  "actual_reason": "tp2_full_exit",
+  "n_min": 1405,
+  "sl0.1": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -2.23880597014926
+  },
+  "sl0.07": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -2.23880597014926
+  },
+  "sl0.05": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -2.23880597014926
+  }
+ },
+ {
+  "symbol": "TIA/KRW",
+  "entry_date": "2026-09-07 00:06",
+  "actual": 6.13,
+  "actual_reason": "tp2_full_exit",
+  "n_min": 79,
+  "sl0.1": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": 0.0
+  },
+  "sl0.07": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": 0.0
+  },
+  "sl0.05": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": 0.0
+  }
+ },
+ {
+  "symbol": "ORCA/KRW",
+  "entry_date": "2026-09-07 00:09",
+  "actual": 7.71,
+  "actual_reason": "tp2_full_exit",
+  "n_min": 158,
+  "sl0.1": {
+   "ret": 7.64230384807596,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -3.8352272727272707
+  },
+  "sl0.07": {
+   "ret": 7.64230384807596,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -3.8352272727272707
+  },
+  "sl0.05": {
+   "ret": 7.64230384807596,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -3.8352272727272707
+  }
+ },
+ {
+  "symbol": "DOOD/KRW",
+  "entry_date": "2026-09-07 04:09",
+  "actual": 7.41,
+  "actual_reason": "tp2_full_exit",
+  "n_min": 88,
+  "sl0.1": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -4.395604395604402
+  },
+  "sl0.07": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -4.395604395604402
+  },
+  "sl0.05": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -4.395604395604402
+  }
+ },
+ {
+  "symbol": "ICP/KRW",
+  "entry_date": "2026-09-06 01:24",
+  "actual": 7.47,
+  "actual_reason": "tp2_full_exit",
+  "n_min": 594,
+  "sl0.1": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -3.7862513426423217
+  },
+  "sl0.07": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -3.7862513426423217
+  },
+  "sl0.05": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -3.7862513426423217
+  }
+ },
+ {
+  "symbol": "IOST/KRW",
+  "entry_date": "2026-09-07 05:57",
+  "actual": 7.42,
+  "actual_reason": "tp2_full_exit",
+  "n_min": 101,
+  "sl0.1": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -3.539823008849541
+  },
+  "sl0.07": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -3.539823008849541
+  },
+  "sl0.05": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -3.539823008849541
+  }
+ },
+ {
+  "symbol": "IOST/KRW",
+  "entry_date": "2026-09-07 13:21",
+  "actual": 6.98,
+  "actual_reason": "tp2_full_exit",
+  "n_min": 159,
+  "sl0.1": {
+   "ret": 7.64230384807596,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -3.3333333333333326
+  },
+  "sl0.07": {
+   "ret": 7.64230384807596,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -3.3333333333333326
+  },
+  "sl0.05": {
+   "ret": 7.64230384807596,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -3.3333333333333326
+  }
+ },
+ {
+  "symbol": "DOT/KRW",
+  "entry_date": "2026-09-07 00:11",
+  "actual": 7.55,
+  "actual_reason": "tp2_full_exit",
+  "n_min": 763,
+  "sl0.1": {
+   "ret": 7.64230384807596,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -3.624260355029585
+  },
+  "sl0.07": {
+   "ret": 7.64230384807596,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -3.624260355029585
+  },
+  "sl0.05": {
+   "ret": 7.64230384807596,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -3.624260355029585
+  }
+ },
+ {
+  "symbol": "ORCA/KRW",
+  "entry_date": "2026-09-07 13:21",
+  "actual": -9.89,
+  "actual_reason": "trail_stop",
+  "n_min": 1102,
+  "sl0.1": {
+   "ret": -10.22100724161371,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -10.028116213683225
+  },
+  "sl0.07": {
+   "ret": -7.228374149667527,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -7.591377694470481
+  },
+  "sl0.05": {
+   "ret": -5.233285421703382,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -5.107778819119025
+  }
+ },
+ {
+  "symbol": "BLAST/KRW",
+  "entry_date": "2026-08-27 00:54",
+  "actual": 7.24,
+  "actual_reason": "tp2_full_exit",
+  "n_min": 5339,
+  "sl0.1": {
+   "ret": 7.64230384807596,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -4.028436018957338
+  },
+  "sl0.07": {
+   "ret": -0.9169107130146625,
+   "outcome": "stop_after_tp1",
+   "ambiguous": false,
+   "mae": -4.028436018957338
+  },
+  "sl0.05": {
+   "ret": 0.08063365096742103,
+   "outcome": "stop_after_tp1",
+   "ambiguous": false,
+   "mae": -4.028436018957338
+  }
+ },
+ {
+  "symbol": "VTHO/KRW",
+  "entry_date": "2026-08-26 22:23",
+  "actual": 7.16,
+  "actual_reason": "tp2_full_exit",
+  "n_min": 2589,
+  "sl0.1": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -6.633222881718548
+  },
+  "sl0.07": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -6.633222881718548
+  },
+  "sl0.05": {
+   "ret": -5.233285421703371,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -5.2077759028134825
+  }
+ },
+ {
+  "symbol": "TOSHI/KRW",
+  "entry_date": "2026-09-07 04:36",
+  "actual": -10.79,
+  "actual_reason": "trail_stop",
+  "n_min": 769,
+  "sl0.1": {
+   "ret": -10.221007241613723,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -10.6951871657754
+  },
+  "sl0.07": {
+   "ret": -7.228374149667516,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -7.4866310160427885
+  },
+  "sl0.05": {
+   "ret": -5.233285421703371,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -5.347593582887711
+  }
+ },
+ {
+  "symbol": "DOT/KRW",
+  "entry_date": "2026-09-07 16:19",
+  "actual": 7.62,
+  "actual_reason": "tp2_full_exit",
+  "n_min": 1203,
+  "sl0.1": {
+   "ret": 7.64230384807596,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -4.9026192075218304
+  },
+  "sl0.07": {
+   "ret": 7.64230384807596,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -4.9026192075218304
+  },
+  "sl0.05": {
+   "ret": 7.64230384807596,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -4.9026192075218304
+  }
+ },
+ {
+  "symbol": "LINK/KRW",
+  "entry_date": "2026-09-07 05:32",
+  "actual": -10.22,
+  "actual_reason": "trail_stop",
+  "n_min": 2726,
+  "sl0.1": {
+   "ret": -10.221007241613723,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -10.181618051733633
+  },
+  "sl0.07": {
+   "ret": -7.228374149667505,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -7.099614749587236
+  },
+  "sl0.05": {
+   "ret": -5.233285421703371,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -5.063291139240511
+  }
+ },
+ {
+  "symbol": "WLD/KRW",
+  "entry_date": "2026-09-08 09:58",
+  "actual": -10.14,
+  "actual_reason": "trail_stop",
+  "n_min": 1742,
+  "sl0.1": {
+   "ret": -10.221007241613723,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -10.197869101978696
+  },
+  "sl0.07": {
+   "ret": -7.228374149667516,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -7.30593607305936
+  },
+  "sl0.05": {
+   "ret": -5.233285421703371,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -5.327245053272456
+  }
+ },
+ {
+  "symbol": "IOST/KRW",
+  "entry_date": "2026-09-09 15:21",
+  "actual": 7.14,
+  "actual_reason": "tp2_full_exit",
+  "n_min": 79,
+  "sl0.1": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -3.3816425120772875
+  },
+  "sl0.07": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -3.3816425120772875
+  },
+  "sl0.05": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -3.3816425120772875
+  }
+ },
+ {
+  "symbol": "ASTR/KRW",
+  "entry_date": "2026-09-07 15:05",
+  "actual": -10.18,
+  "actual_reason": "trail_stop",
+  "n_min": 562,
+  "sl0.1": {
+   "ret": -10.221007241613723,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -10.088691796008876
+  },
+  "sl0.07": {
+   "ret": -7.228374149667527,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -7.317073170731714
+  },
+  "sl0.05": {
+   "ret": -5.233285421703382,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -5.099778270509969
+  }
+ },
+ {
+  "symbol": "SAHARA/KRW",
+  "entry_date": "2026-09-04 16:24",
+  "actual": 7.32,
+  "actual_reason": "tp2_full_exit",
+  "n_min": 4213,
+  "sl0.1": {
+   "ret": 7.64230384807596,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -3.90625
+  },
+  "sl0.07": {
+   "ret": 7.64230384807596,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -3.90625
+  },
+  "sl0.05": {
+   "ret": 7.64230384807596,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -3.90625
+  }
+ },
+ {
+  "symbol": "ZK/KRW",
+  "entry_date": "2026-09-06 10:37",
+  "actual": -10.76,
+  "actual_reason": "trail_stop",
+  "n_min": 1700,
+  "sl0.1": {
+   "ret": -10.2210072416137,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -9.999999999999998
+  },
+  "sl0.07": {
+   "ret": -7.228374149667505,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -7.333333333333336
+  },
+  "sl0.05": {
+   "ret": -5.565800209697391,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -5.333333333333334
+  }
+ },
+ {
+  "symbol": "KAT/KRW",
+  "entry_date": "2026-09-10 00:04",
+  "actual": -10.18,
+  "actual_reason": "trail_stop",
+  "n_min": 67,
+  "sl0.1": {
+   "ret": -10.2210072416137,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -10.526387004052584
+  },
+  "sl0.07": {
+   "ret": -7.228374149667505,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -7.747703370638071
+  },
+  "sl0.05": {
+   "ret": -5.23328542170336,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -5.08016708256015
+  }
+ },
+ {
+  "symbol": "MEW/KRW",
+  "entry_date": "2026-09-07 04:40",
+  "actual": -10.24,
+  "actual_reason": "trail_stop",
+  "n_min": 1167,
+  "sl0.1": {
+   "ret": -10.221007241613723,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -10.310965630114556
+  },
+  "sl0.07": {
+   "ret": -7.228374149667527,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -7.037643207855981
+  },
+  "sl0.05": {
+   "ret": -5.233285421703382,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -5.400981996726683
+  }
+ },
+ {
+  "symbol": "B3/KRW",
+  "entry_date": "2026-09-10 00:13",
+  "actual": 7.49,
+  "actual_reason": "tp2_full_exit",
+  "n_min": 85,
+  "sl0.1": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -3.4038950794321177
+  },
+  "sl0.07": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -3.4038950794321177
+  },
+  "sl0.05": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -3.4038950794321177
+  }
+ },
+ {
+  "symbol": "STRAX/KRW",
+  "entry_date": "2026-09-01 09:50",
+  "actual": 7.14,
+  "actual_reason": "tp2_full_exit",
+  "n_min": 3502,
+  "sl0.1": {
+   "ret": 7.64230384807596,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -2.898550724637683
+  },
+  "sl0.07": {
+   "ret": -0.9169107130146736,
+   "outcome": "stop_after_tp1",
+   "ambiguous": false,
+   "mae": -2.898550724637683
+  },
+  "sl0.05": {
+   "ret": 0.08063365096739883,
+   "outcome": "stop_after_tp1",
+   "ambiguous": false,
+   "mae": -2.898550724637683
+  }
+ },
+ {
+  "symbol": "ATOM/KRW",
+  "entry_date": "2026-09-09 10:18",
+  "actual": -10.17,
+  "actual_reason": "trail_stop",
+  "n_min": 919,
+  "sl0.1": {
+   "ret": -10.221007241613734,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -10.073800738007376
+  },
+  "sl0.07": {
+   "ret": -7.239417076206056,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -7.121771217712181
+  },
+  "sl0.05": {
+   "ret": -5.233285421703371,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -5.645756457564577
+  }
+ },
+ {
+  "symbol": "SENT/KRW",
+  "entry_date": "2026-09-08 10:45",
+  "actual": -10.99,
+  "actual_reason": "trail_stop",
+  "n_min": 644,
+  "sl0.1": {
+   "ret": -10.616074316458102,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -10.89108910891089
+  },
+  "sl0.07": {
+   "ret": -7.228374149667516,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -7.425742574257422
+  },
+  "sl0.05": {
+   "ret": -5.6777358809032785,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -6.435643564356441
+  }
+ },
+ {
+  "symbol": "PENDLE/KRW",
+  "entry_date": "2026-09-07 12:19",
+  "actual": -10.24,
+  "actual_reason": "trail_stop",
+  "n_min": 1680,
+  "sl0.1": {
+   "ret": -10.221007241613723,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -10.320163487738421
+  },
+  "sl0.07": {
+   "ret": -7.228374149667516,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -7.1185286103542245
+  },
+  "sl0.05": {
+   "ret": -5.233285421703371,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -5.0408719346049065
+  }
+ },
+ {
+  "symbol": "DOT/KRW",
+  "entry_date": "2026-09-08 17:11",
+  "actual": -2.44,
+  "actual_reason": "trail_stop",
+  "n_min": 1942,
+  "sl0.1": {
+   "ret": -2.41322725898776,
+   "outcome": "stop_after_tp1",
+   "ambiguous": false,
+   "mae": -1.2165450121654486
+  },
+  "sl0.07": {
+   "ret": -0.9169107130146625,
+   "outcome": "stop_after_tp1",
+   "ambiguous": false,
+   "mae": -1.2165450121654486
+  },
+  "sl0.05": {
+   "ret": 0.08063365096739883,
+   "outcome": "stop_after_tp1",
+   "ambiguous": false,
+   "mae": -1.2165450121654486
+  }
+ },
+ {
+  "symbol": "MIRA/KRW",
+  "entry_date": "2026-09-09 23:58",
+  "actual": -10.39,
+  "actual_reason": "trail_stop",
+  "n_min": 851,
+  "sl0.1": {
+   "ret": -10.22100724161371,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -10.292072322670387
+  },
+  "sl0.07": {
+   "ret": -7.228374149667516,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -7.6495132127955445
+  },
+  "sl0.05": {
+   "ret": -5.233285421703382,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -5.285118219749663
+  }
+ },
+ {
+  "symbol": "TAO/KRW",
+  "entry_date": "2026-09-06 19:12",
+  "actual": -10.18,
+  "actual_reason": "trail_stop",
+  "n_min": 3547,
+  "sl0.1": {
+   "ret": -10.221007241613723,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -10.116407982261643
+  },
+  "sl0.07": {
+   "ret": -7.228374149667516,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -7.788248337028825
+  },
+  "sl0.05": {
+   "ret": -5.233285421703371,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -5.09977827050998
+  }
+ },
+ {
+  "symbol": "NEAR/KRW",
+  "entry_date": "2026-09-06 13:44",
+  "actual": 7.63,
+  "actual_reason": "tp2_full_exit",
+  "n_min": 6645,
+  "sl0.1": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -8.077154912597951
+  },
+  "sl0.07": {
+   "ret": -7.228374149667516,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -7.082579867389994
+  },
+  "sl0.05": {
+   "ret": -5.233285421703371,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -5.123568414707657
+  }
+ },
+ {
+  "symbol": "POWR/KRW",
+  "entry_date": "2026-09-05 12:41",
+  "actual": 6.25,
+  "actual_reason": "tp2_full_exit",
+  "n_min": 2089,
+  "sl0.1": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -1.3452914798206317
+  },
+  "sl0.07": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -1.3452914798206317
+  },
+  "sl0.05": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -1.3452914798206317
+  }
+ },
+ {
+  "symbol": "KAVA/KRW",
+  "entry_date": "2026-09-09 20:18",
+  "actual": 7.41,
+  "actual_reason": "tp2_full_exit",
+  "n_min": 1245,
+  "sl0.1": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -1.5513126491646712
+  },
+  "sl0.07": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -1.5513126491646712
+  },
+  "sl0.05": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -1.5513126491646712
+  }
+ },
+ {
+  "symbol": "LSK/KRW",
+  "entry_date": "2026-09-13 00:29",
+  "actual": 7.75,
+  "actual_reason": "tp2_full_exit",
+  "n_min": 83,
+  "sl0.1": {
+   "ret": 7.64230384807596,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -1.2468827930174564
+  },
+  "sl0.07": {
+   "ret": 7.64230384807596,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -1.2468827930174564
+  },
+  "sl0.05": {
+   "ret": 7.64230384807596,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -1.2468827930174564
+  }
+ },
+ {
+  "symbol": "STEEM/KRW",
+  "entry_date": "2026-09-13 00:16",
+  "actual": 7.35,
+  "actual_reason": "tp2_full_exit",
+  "n_min": 126,
+  "sl0.1": {
+   "ret": 7.64230384807596,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -0.6711409395973145
+  },
+  "sl0.07": {
+   "ret": 7.64230384807596,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -0.6711409395973145
+  },
+  "sl0.05": {
+   "ret": 7.64230384807596,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -0.6711409395973145
+  }
+ },
+ {
+  "symbol": "POLYX/KRW",
+  "entry_date": "2026-09-09 17:56",
+  "actual": 7.58,
+  "actual_reason": "tp2_full_exit",
+  "n_min": 1280,
+  "sl0.1": {
+   "ret": 7.64230384807596,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -8.560311284046696
+  },
+  "sl0.07": {
+   "ret": -7.228374149667527,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -7.392996108949412
+  },
+  "sl0.05": {
+   "ret": -5.233285421703382,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -5.058365758754868
+  }
+ },
+ {
+  "symbol": "PUNDIX/KRW",
+  "entry_date": "2026-09-13 01:57",
+  "actual": 7.04,
+  "actual_reason": "tp2_full_exit",
+  "n_min": 87,
+  "sl0.1": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -4.968944099378881
+  },
+  "sl0.07": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -4.968944099378881
+  },
+  "sl0.05": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -4.968944099378881
+  }
+ },
+ {
+  "symbol": "MTL/KRW",
+  "entry_date": "2026-09-13 02:58",
+  "actual": -1.79,
+  "actual_reason": "trail_stop",
+  "n_min": 92,
+  "sl0.1": {
+   "ret": -2.41322725898776,
+   "outcome": "stop_after_tp1",
+   "ambiguous": false,
+   "mae": -0.6329113924050667
+  },
+  "sl0.07": {
+   "ret": -0.9169107130146514,
+   "outcome": "stop_after_tp1",
+   "ambiguous": false,
+   "mae": -0.6329113924050667
+  },
+  "sl0.05": {
+   "ret": 0.08063365096739883,
+   "outcome": "stop_after_tp1",
+   "ambiguous": false,
+   "mae": -0.6329113924050667
+  }
+ },
+ {
+  "symbol": "API3/KRW",
+  "entry_date": "2026-09-14 00:05",
+  "actual": -8.95,
+  "actual_reason": "trail_stop",
+  "n_min": 62,
+  "sl0.1": {
+   "ret": -10.221007241613734,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -14.35406698564593
+  },
+  "sl0.07": {
+   "ret": -7.2283741496675376,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -14.35406698564593
+  },
+  "sl0.05": {
+   "ret": -5.233285421703393,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -5.0239234449760755
+  }
+ },
+ {
+  "symbol": "CBK/KRW",
+  "entry_date": "2026-09-14 00:05",
+  "actual": -1.82,
+  "actual_reason": "trail_stop",
+  "n_min": 88,
+  "sl0.1": {
+   "ret": -2.41322725898776,
+   "outcome": "stop_after_tp1",
+   "ambiguous": false,
+   "mae": -3.125
+  },
+  "sl0.07": {
+   "ret": -0.9169107130146625,
+   "outcome": "stop_after_tp1",
+   "ambiguous": false,
+   "mae": -3.125
+  },
+  "sl0.05": {
+   "ret": 0.08063365096739883,
+   "outcome": "stop_after_tp1",
+   "ambiguous": false,
+   "mae": -3.125
+  }
+ },
+ {
+  "symbol": "MTL/KRW",
+  "entry_date": "2026-09-14 00:17",
+  "actual": -9.47,
+  "actual_reason": "trail_stop",
+  "n_min": 79,
+  "sl0.1": {
+   "ret": -10.2210072416137,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -12.5
+  },
+  "sl0.07": {
+   "ret": -7.228374149667505,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -8.333333333333337
+  },
+  "sl0.05": {
+   "ret": -5.23328542170336,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -6.25
+  }
+ },
+ {
+  "symbol": "TOKAMAK/KRW",
+  "entry_date": "2026-09-14 00:05",
+  "actual": -10.64,
+  "actual_reason": "trail_stop",
+  "n_min": 105,
+  "sl0.1": {
+   "ret": -10.221007241613723,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -10.72727272727273
+  },
+  "sl0.07": {
+   "ret": -7.228374149667527,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -7.272727272727275
+  },
+  "sl0.05": {
+   "ret": -5.233285421703371,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -7.272727272727275
+  }
+ },
+ {
+  "symbol": "AGLD/KRW",
+  "entry_date": "2026-09-14 00:06",
+  "actual": -10.36,
+  "actual_reason": "trail_stop",
+  "n_min": 400,
+  "sl0.1": {
+   "ret": -10.22100724161371,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -10.266159695817489
+  },
+  "sl0.07": {
+   "ret": -7.228374149667505,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -7.604562737642584
+  },
+  "sl0.05": {
+   "ret": -5.233285421703371,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -5.323193916349811
+  }
+ },
+ {
+  "symbol": "IQ/KRW",
+  "entry_date": "2026-09-13 22:34",
+  "actual": -10.4,
+  "actual_reason": "trail_stop",
+  "n_min": 708,
+  "sl0.1": {
+   "ret": -10.221007241613723,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -10.526315789473696
+  },
+  "sl0.07": {
+   "ret": -7.228374149667527,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -9.022556390977455
+  },
+  "sl0.05": {
+   "ret": -5.233285421703371,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -5.263157894736848
+  }
+ },
+ {
+  "symbol": "MLK/KRW",
+  "entry_date": "2026-09-14 00:14",
+  "actual": 7.13,
+  "actual_reason": "tp2_full_exit",
+  "n_min": 692,
+  "sl0.1": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -0.6968641114982521
+  },
+  "sl0.07": {
+   "ret": 7.642303848075982,
+   "outcome": "tp2",
+   "ambiguous": false,
+   "mae": -0.6968641114982521
+  },
+  "sl0.05": {
+   "ret": 0.08063365096742103,
+   "outcome": "stop_after_tp1",
+   "ambiguous": false,
+   "mae": -0.6968641114982521
+  }
+ },
+ {
+  "symbol": "BERA/KRW",
+  "entry_date": "2026-09-13 01:11",
+  "actual": -10.39,
+  "actual_reason": "trail_stop",
+  "n_min": 1883,
+  "sl0.1": {
+   "ret": -10.22100724161371,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -10.29411764705882
+  },
+  "sl0.07": {
+   "ret": -7.228374149667505,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -7.352941176470584
+  },
+  "sl0.05": {
+   "ret": -5.233285421703382,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -5.147058823529416
+  }
+ },
+ {
+  "symbol": "VET/KRW",
+  "entry_date": "2026-09-08 10:19",
+  "actual": -2.83,
+  "actual_reason": "trail_stop",
+  "n_min": 4388,
+  "sl0.1": {
+   "ret": -2.4132272589877712,
+   "outcome": "stop_after_tp1",
+   "ambiguous": false,
+   "mae": -4.716981132075471
+  },
+  "sl0.07": {
+   "ret": -0.9169107130146625,
+   "outcome": "stop_after_tp1",
+   "ambiguous": false,
+   "mae": -4.716981132075471
+  },
+  "sl0.05": {
+   "ret": 0.08063365096739883,
+   "outcome": "stop_after_tp1",
+   "ambiguous": false,
+   "mae": -4.716981132075471
+  }
+ },
+ {
+  "symbol": "DKA/KRW",
+  "entry_date": "2026-09-14 00:16",
+  "actual": -10.27,
+  "actual_reason": "trail_stop",
+  "n_min": 1229,
+  "sl0.1": {
+   "ret": -10.22100724161371,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -9.999999999999998
+  },
+  "sl0.07": {
+   "ret": -7.228374149667527,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -9.107142857142858
+  },
+  "sl0.05": {
+   "ret": -5.233285421703371,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -5.535714285714278
+  }
+ },
+ {
+  "symbol": "BIGTIME/KRW",
+  "entry_date": "2026-09-13 06:26",
+  "actual": -10.1,
+  "actual_reason": "trail_stop",
+  "n_min": 2300,
+  "sl0.1": {
+   "ret": -10.221007241613744,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -10.000000000000009
+  },
+  "sl0.07": {
+   "ret": -7.228374149667549,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -7.019230769230777
+  },
+  "sl0.05": {
+   "ret": -5.329203149009354,
+   "outcome": "stop",
+   "ambiguous": false,
+   "mae": -5.384615384615388
+  }
+ }
+]
