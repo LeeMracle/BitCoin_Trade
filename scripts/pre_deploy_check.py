@@ -3186,6 +3186,40 @@ def check_tick_lag_instrumented() -> None:
             errors.append(f"[틱지연] tick_lag.py 가 {const} 를 자체 정의 (교훈 #19)")
 
 
+def check_hard_stop_claude_md_sync(cfg_src: str | None = None, md_src: str | None = None) -> list[str]:
+    """config.HARD_STOP_LOSS_PCT ↔ CLAUDE.md 파라미터 표 동기화 (교훈 #4, ADR 20260930-1).
+
+    DC·MIN_VOLUME_KRW 는 동기화 룰이 있었는데 **하드손절만 없었다.** 09-30 에 0.10 → 0.06 으로
+    바꾸며 표를 같이 고쳤지만, 다음 변경 때 한쪽만 고치면 조용히 어긋난다(lessons #4 의 반복 패턴).
+    반환값은 역방향 테스트용 — 기본 호출은 errors 에 누적.
+    """
+    found: list[str] = []
+    cfg = cfg_src if cfg_src is not None else (
+        PROJECT_ROOT / "services" / "execution" / "config.py").read_text(encoding="utf-8")
+    md = md_src if md_src is not None else (
+        PROJECT_ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+    m = re.search(r"^HARD_STOP_LOSS_PCT\s*=\s*([\d.]+)", cfg, re.M)
+    if not m:
+        found.append("[하드캡-동기화] config.py 에서 HARD_STOP_LOSS_PCT 대입을 찾을 수 없음")
+    else:
+        pct = float(m.group(1)) * 100
+        # 손절 행에서 수치만 읽어 비교한다(굵게 표기 위치는 바뀔 수 있으므로 -N% 만 본다)
+        # `startswith("| 손절")` 는 `| 손절x` 도 통과시킨다(역방향 테스트에서 적발) — 셀 경계까지 본다
+        row = next((ln for ln in md.splitlines()
+                    if re.match(r"^\|\s*손절\s*\|", ln) and "하드 캡" in ln), None)
+        if row is None:
+            found.append("[하드캡-동기화] CLAUDE.md 파라미터 표에 `| 손절 ... 하드 캡` 행 없음")
+        else:
+            nums = re.findall(r"하드\s*캡[^|]*?-([\d.]+)\s*%", row)
+            if not nums:
+                found.append(f"[하드캡-동기화] CLAUDE.md 손절 행에서 수치를 읽을 수 없음: {row.strip()}")
+            elif abs(float(nums[0]) - pct) > 1e-9:
+                found.append(f"[하드캡-동기화] config {pct:g}% ≠ CLAUDE.md {nums[0]}% (교훈 #4)")
+    if cfg_src is None and md_src is None:
+        errors.extend(found)
+    return found
+
+
 def check_consec_loss_paths_aligned(src_path: Path | None = None) -> list[str]:
     """연패 쿨다운 부과 경로가 전부 config 상수 + 부과 지문을 쓰는지 (lessons #51).
 
@@ -3646,6 +3680,7 @@ def main() -> None:
     check_consec_loss_cooldown_invariant()
     check_consec_loss_floor_consistency()
     check_consec_loss_paths_aligned()
+    check_hard_stop_claude_md_sync()
     check_deploy_post_check_remote_cron()
     check_regime_notify_flag()
     check_morning_briefing_registered()
