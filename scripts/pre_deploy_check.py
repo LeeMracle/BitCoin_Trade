@@ -3220,35 +3220,134 @@ def check_hard_stop_claude_md_sync(cfg_src: str | None = None, md_src: str | Non
     return found
 
 
-def check_hard_floor_grandfathered(src: str | None = None) -> list[str]:
-    """하드 손절 바닥이 포지션별 캡을 거치는지 (ADR 20260930-1, 2026-10-05 적발).
+_HARD_CAP_NAME = "HARD_STOP_LOSS_PCT"
+# 현행 캡을 **읽어도 되는** 유일한 자리 — 신규 진입이 포지션에 hard_stop_pct 로 기록하는 곳.
+_HARD_CAP_ALLOWED = ("services/execution/realtime_monitor.py", "_execute_buy")
 
-    배경: ADR 은 "state 무변경 = 기존 포지션 소급 없음"을 전제했으나 realtime_monitor 의
-    레벨 갱신이 `max(merged, entry*(1-config캡))` 으로 **모든 보유 포지션**의 trail_stop 을
-    끌어올린다. 캡을 0.10→0.06 으로 바꾸면 -6% 아래 포지션이 재시작 직후 일괄 청산된다.
-    포지션에 진입 시점 캡(`hard_stop_pct`)을 기록하고 `_pos_hard_floor(pos)` 로만 읽게 했다.
 
-    존재 검사만으로는 부족하다(교훈 #51) — 틀린 형태가 **하나도 없음**을 묻는다:
-      (1) 보유 포지션 필드(`["entry_price"]`)에 config 캡을 직접 곱하는 식이 없어야 한다
-      (2) `_pos_hard_floor(` 호출이 갱신 경로 2곳 이상
-      (3) 신규 포지션 dict 가 `hard_stop_pct` 를 기록
+def _hard_floor_scan_files() -> list[str]:
+    """현행 캡 참조를 금지할 파일 — 라이브 모듈 + 포지션을 만지는 수동 도구.
+
+    백테스트·리플레이 스크립트는 '새 진입'을 모사하므로 현행 캡을 쓰는 게 맞다 → 제외.
     """
-    found: list[str] = []
-    text = src if src is not None else (
-        PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py").read_text(encoding="utf-8")
-    code = "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("#"))
+    root = PROJECT_ROOT
+    out = [f.relative_to(root).as_posix() for f in sorted((root / "services" / "execution").glob("*.py"))
+           if f.name not in ("config.py", "__init__.py")]
+    for pat in ("fix_*.py", "manual_*.py", "reset_*.py"):
+        out += [f.relative_to(root).as_posix() for f in sorted((root / "scripts").glob(pat))]
+    return out
 
-    bad = re.findall(
-        r"\[\s*[\"']entry_price[\"']\s*\]\s*\*\s*\(\s*1\s*-\s*HARD_STOP_LOSS_PCT", code)
-    if bad:
-        found.append(f"[하드캡-소급] 보유 포지션 entry_price 에 config 캡 직접 적용 {len(bad)}곳 "
-                     "— `_pos_hard_floor(pos)` 를 써야 한다(기존 포지션 소급 청산 위험)")
-    calls = re.findall(r"(?<!def )\b_pos_hard_floor\(", code)
-    if len(calls) < 2:
-        found.append(f"[하드캡-소급] `_pos_hard_floor(` 호출 {len(calls)}곳 (<2) — 레벨 갱신·고점 갱신 경로 누락")
-    if not re.search(r"[\"']hard_stop_pct[\"']\s*:\s*HARD_STOP_LOSS_PCT", code):
-        found.append("[하드캡-소급] 신규 포지션 dict 에 `\"hard_stop_pct\": HARD_STOP_LOSS_PCT` 기록 없음")
-    if src is None:
+
+def check_hard_floor_grandfathered(sources: dict[str, str] | None = None) -> list[str]:
+    """하드 손절 바닥이 포지션별 캡을 거치는지 — AST (ADR 20260930-1, 2026-10-05 독립 리뷰).
+
+    배경: ADR 은 "state 무변경 = 기존 포지션 소급 없음"을 전제했으나 레벨 갱신이
+    `max(merged, entry*(1-config캡))` 으로 **모든 보유 포지션**의 trail_stop 을 끌어올린다.
+    그래서 포지션이 진입 시점 캡(`hard_stop_pct`)을 기록하고, 바닥은
+    `hard_stop.pos_hard_floor` 로만 계산한다.
+
+    정규식 버전은 별칭(`cap = HARD_STOP_LOSS_PCT`)·`.get("entry_price")`·줄바꿈 식을 통과시켰고
+    realtime_monitor 한 파일만 봤다(독립 리뷰 적발, 메타교훈 #45·#49·#51). 이제 "옳은 식이 있다"가
+    아니라 **현행 캡 참조가 허용 자리 밖에 하나도 없다**를 AST 로 묻는다:
+
+      (1) 스캔 대상 파일에서 `HARD_STOP_LOSS_PCT` 의 모든 참조(Name / `x.HARD_STOP_LOSS_PCT` /
+          import 및 별칭)는 `realtime_monitor._execute_buy` 안(+ 그 import 한 줄)에만 있다
+      (2) realtime_monitor 의 `pos_hard_floor(` 호출은 `_execute_buy` 밖에서 2곳 이상
+          (레벨 갱신 · 고점 갱신)
+      (3) `_execute_buy` 가 만드는 포지션 dict 에 `"hard_stop_pct": HARD_STOP_LOSS_PCT`
+      (4) config 의 LEGACY_HARD_STOP_LOSS_PCT 는 0.10 (배포 이전 포지션이 가졌던 캡)
+
+    sources(상대경로→소스)를 주면 파일 대신 그것을 검사한다(역방향 테스트용).
+    """
+
+    found: list[str] = []
+    rm_path, rm_func = _HARD_CAP_ALLOWED
+
+    def load(rel: str) -> str | None:
+        if sources is not None:
+            return sources.get(rel)
+        f = PROJECT_ROOT / rel
+        return f.read_text(encoding="utf-8") if f.exists() else None
+
+    files = list(sources) if sources is not None else _hard_floor_scan_files()
+    files = [f for f in files if f != "services/execution/config.py"
+             and (f.startswith("services/execution/") or f.startswith("scripts/"))]
+
+    def walk(tree):
+        """(node, 가장 안쪽 함수명) 전수."""
+        stack = [(tree, None)]
+        while stack:
+            node, fn = stack.pop()
+            yield node, fn
+            nfn = node.name if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) else fn
+            for ch in ast.iter_child_nodes(node):
+                stack.append((ch, nfn))
+
+    for rel in files:
+        src = load(rel)
+        if src is None:
+            continue
+        try:
+            tree = ast.parse(src)
+        except SyntaxError as e:
+            found.append(f"[하드캡-소급] {rel} 파싱 실패: {e}")
+            continue
+        for node, fn in walk(tree):
+            hit = None
+            if isinstance(node, ast.Name) and node.id == _HARD_CAP_NAME:
+                hit = "참조"
+            elif isinstance(node, ast.Attribute) and node.attr == _HARD_CAP_NAME:
+                hit = "속성 참조"
+            elif isinstance(node, ast.ImportFrom) and any(a.name == _HARD_CAP_NAME for a in node.names):
+                # 허용 파일의 import 한 줄만 통과 (별칭은 금지)
+                if rel == rm_path and all(a.asname is None for a in node.names):
+                    continue
+                hit = "import"
+            if hit is None:
+                continue
+            if hit == "참조" and rel == rm_path and fn == rm_func:
+                continue
+            where = f"{fn}()" if fn else "모듈 수준"
+            found.append(f"[하드캡-소급] {rel}:{getattr(node, 'lineno', '?')} {where} 에서 현행 캡 "
+                         f"{_HARD_CAP_NAME} {hit} — 바닥은 hard_stop.pos_hard_floor(pos) 로만 "
+                         "계산해야 한다(기존 포지션 소급 청산 위험)")
+
+    # (2)(3) realtime_monitor 구조
+    rm_src = load(rm_path)
+    if rm_src is not None:
+        try:
+            tree = ast.parse(rm_src)
+            outside = inside = 0
+            has_field = False
+            for node, fn in walk(tree):
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)                         and node.func.id == "pos_hard_floor":
+                    if fn == rm_func:
+                        inside += 1
+                    else:
+                        outside += 1
+                if fn == rm_func and isinstance(node, ast.Dict):
+                    for k, v in zip(node.keys, node.values):
+                        if isinstance(k, ast.Constant) and k.value == "hard_stop_pct"                                 and isinstance(v, ast.Name) and v.id == _HARD_CAP_NAME:
+                            has_field = True
+            if outside < 2:
+                found.append(f"[하드캡-소급] {rm_path} 의 pos_hard_floor() 호출이 {_HARD_CAP_NAME} 진입 함수 밖에 "
+                             f"{outside}곳 (<2) — 레벨 갱신·고점 갱신 경로 누락")
+            if not has_field:
+                found.append(f"[하드캡-소급] {rm_path}:{rm_func} 의 포지션 dict 에 "
+                             f'"hard_stop_pct": {_HARD_CAP_NAME} 기록 없음')
+        except SyntaxError as e:
+            found.append(f"[하드캡-소급] {rm_path} 파싱 실패: {e}")
+    elif sources is None:
+        found.append(f"[하드캡-소급] {rm_path} 없음")
+
+    # (4) LEGACY 값
+    cfg = load("services/execution/config.py") if sources is None else sources.get("services/execution/config.py")
+    if cfg is not None:
+        m = re.search(r"^LEGACY_HARD_STOP_LOSS_PCT\s*=\s*([\d.]+)", cfg, re.M)
+        if not m or abs(float(m.group(1)) - 0.10) > 1e-12:
+            found.append("[하드캡-소급] config.LEGACY_HARD_STOP_LOSS_PCT 가 0.10 이 아니다 "
+                         "— 배포 이전 포지션이 가졌던 캡과 달라지면 소급 이동이 생긴다")
+    if sources is None:
         errors.extend(found)
     return found
 

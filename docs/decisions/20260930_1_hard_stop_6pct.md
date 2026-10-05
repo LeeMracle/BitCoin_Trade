@@ -59,7 +59,17 @@ ONDO -6.7%, 약 62,500원)이 재시작 직후 시장가 청산되고 연패 카
 
 - **수정**: 포지션에 진입 시점 캡 `hard_stop_pct` 를 기록, 바닥은 `_pos_hard_floor(pos)` 로만 계산.
   필드 없는 기존 포지션 = `config.LEGACY_HARD_STOP_LOSS_PCT`(0.10).
-- **룰**: `pre_deploy_check.check_hard_floor_grandfathered()` — 직접 곱셈의 **부재**를 검사, 역방향 5/5.
+- **룰**: `pre_deploy_check.check_hard_floor_grandfathered()` — 현행 캡 `HARD_STOP_LOSS_PCT` 의 모든 참조가
+  `realtime_monitor._execute_buy` 밖에 **하나도 없음**을 AST 로 검사(별칭·속성·import alias·줄바꿈 우회 포함).
+  역방향 테스트는 저장소에 있다: `py -m pytest tests/execution/test_hard_floor_grandfather.py -q` (37개).
 - **검증**: 재시작 후 4종목 모두 보유 유지, 청산 0건 (trail/entry=0.900 유지).
 - **교훈**: ADR 의 "~이므로 안전하다" 류 전제는 코드 경로로 확인한다(검증 가능한 주장은 재현 명령과 함께).
 - 계획서: [plan 20261005_1](../../workspace/plans/20261005_1_hard_stop6_grandfather_deploy.md)
+
+### 독립 교차검증 후속 (2026-10-05, [plan 20261005_3](../../workspace/plans/20261005_3_hard_floor_review_fixes.md))
+
+서브에이전트 리뷰(조건부 PASS, 이슈 4건)를 반영했다.
+- `scripts/fix_entry_price_from_fills.py` 가 현행 캡을 직접 곱해 **기존 포지션을 소급**하던 결함 → 공용 `hard_stop.pos_hard_floor(pos, 기준가)` 사용
+- 바닥 계산을 `services/execution/hard_stop.py` 한 곳으로 이동(비정상 캡 값은 LEGACY 로, 좁게 해석하지 않음)
+- `fix_state_balance_mismatch.py` 복원 포지션은 `hard_stop_pct=LEGACY` 를 명시 기록(stop·바닥 일관)
+- 정규식 룰 → AST 룰, 역방향 테스트 파일 커밋

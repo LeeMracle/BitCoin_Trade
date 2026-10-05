@@ -35,7 +35,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from services.execution.config import HARD_STOP_LOSS_PCT  # noqa: E402
+from services.execution.hard_stop import pos_hard_floor  # noqa: E402
 from services.execution.upbit_client import _create_exchange, order_exec_price  # noqa: E402
 
 STATE_PATH = ROOT / "workspace" / "multi_trading_state.json"
@@ -93,9 +93,12 @@ def main() -> int:
         old_qty = float(pos.get("entry_qty") or 0)
 
         # 하드 손절 캡을 확정 체결가 기준으로 재계산.
+        # 캡은 **그 포지션이 진입할 때 기록한 값**이다(없으면 LEGACY 10%). config 의 현행 캡을
+        # 곱하면 배포 이전 포지션의 손절선이 소급으로 올라가 -6~-10% 구간이 일괄 청산된다
+        # (2026-10-05 독립 리뷰 적발, ADR 20260930-1).
         # 기존 trail_stop 이 이미 더 높다면(고점 갱신으로 상승) 그대로 둔다 —
         # 보정이 손절선을 낮춰 확보한 보호를 되돌리는 일이 없도록 max 사용.
-        hard_floor = real_price * (1 - HARD_STOP_LOSS_PCT)
+        hard_floor = pos_hard_floor(pos, real_price)
         new_trail = max(float(pos.get("trail_stop") or 0), hard_floor)
 
         if abs(old_price - real_price) < 1e-9 and abs(old_qty - real_qty) < 1e-9:

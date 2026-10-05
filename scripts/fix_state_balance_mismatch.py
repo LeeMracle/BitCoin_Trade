@@ -30,7 +30,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 load_dotenv(ROOT / "services" / ".env")
 
-from services.execution.config import HARD_STOP_LOSS_PCT  # noqa: E402
+from services.execution.config import LEGACY_HARD_STOP_LOSS_PCT  # noqa: E402
 from services.execution.position_pnl import (  # noqa: E402
     position_return_pct,
     rebuild_realized_from_exchange,
@@ -168,17 +168,21 @@ def main() -> int:
             entry_date = today
             order_amount = exchange_coins[coin]["value"]
 
-        # 보수적 trail_stop = entry × (1 - HARD_STOP)
+        # 보수적 trail_stop = highest × (1 - LEGACY 캡)
         # 현재가가 entry보다 높으면 highest = 현재가
+        # 복원 포지션은 진입 시점을 알 수 없으므로(배포 이전 진입일 수 있다) 넓은 쪽(LEGACY 10%)을
+        # 명시 기록한다. 좁은 현행 캡을 쓰면 예기치 않은 즉시 청산이 날 수 있고, 필드를 비우면
+        # stop 은 6% / 바닥은 10% 로 어긋난다(2026-10-05 독립 리뷰).
         last = exchange_coins[coin]["last"]
         highest = max(avg_price, last)
-        trail_stop = highest * (1 - HARD_STOP_LOSS_PCT)
+        trail_stop = highest * (1 - LEGACY_HARD_STOP_LOSS_PCT)
 
         pos[sym] = {
             "entry_date": entry_date,
             "entry_price": avg_price,
             "highest": highest,
             "trail_stop": trail_stop,
+            "hard_stop_pct": LEGACY_HARD_STOP_LOSS_PCT,
             "order_amount": order_amount,
             "tp_sold_levels": [],  # 미발동 가정 (보수적)
         }

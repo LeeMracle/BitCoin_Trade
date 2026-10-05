@@ -29,11 +29,12 @@ import ccxt
 import numpy as np
 import pandas as pd
 
+from services.execution.hard_stop import pos_hard_floor
 from services.execution.tick_lag import TickLagTracker
 from services.execution.config import (
     STRATEGY, STRATEGY_KWARGS,
     DONCHIAN_PERIOD, ATR_PERIOD, ATR_MULTIPLIER,
-    HARD_STOP_LOSS_PCT, LEGACY_HARD_STOP_LOSS_PCT, MAX_ATR_PCT,
+    HARD_STOP_LOSS_PCT, MAX_ATR_PCT,
     TP_LEVELS, TP_ENABLED,
     VOL_FILTER_ENABLED, VOL_FILTER_MULTIPLIER,
     TICK_LAG_ENABLED,
@@ -124,19 +125,6 @@ WS_RECONNECT_MAX = 60          # 웹소켓 재연결 최대 대기 (초)
 # 웹소켓 끊김은 업비트 쪽 정기 종료로 **정상 발생**한다.
 # 1시간에 이 횟수를 넘어야 이상으로 본다.
 WS_DISCONNECT_ALERT_PER_HOUR = 10
-
-
-def _pos_hard_floor(pos: dict) -> float:
-    """보유 포지션의 하드 손절 바닥 = 진입가 × (1 - 그 포지션이 진입할 때의 캡).
-
-    캡을 포지션에 기록(`hard_stop_pct`)하므로 config 를 바꿔도 이미 열린 포지션의
-    손절선이 소급 이동하지 않는다(ADR 20260930-1). 필드가 없는 포지션은 배포 이전
-    진입분이므로 LEGACY 캡. 신규 진입(`_execute_buy`)은 현행 `HARD_STOP_LOSS_PCT` 사용.
-    """
-    cap = pos.get("hard_stop_pct")
-    if cap is None:
-        cap = LEGACY_HARD_STOP_LOSS_PCT
-    return pos["entry_price"] * (1 - cap)
 
 
 def is_benign_ws_error(exc: BaseException) -> bool:
@@ -799,7 +787,7 @@ class RealtimeMonitor:
         positions = self.state.get("positions", {})
         for symbol, pos in positions.items():
             old_stop = pos.get("trail_stop", 0)
-            hard_floor = _pos_hard_floor(pos)
+            hard_floor = pos_hard_floor(pos)
             if IS_DAYTRADING:
                 new_stop = pos["highest"] * (1 - _DT_TRAIL_PCT)
                 # 기존 스탑이 더 넓으면(낮으면) 보존 — 전략 전환 보호
@@ -1216,7 +1204,7 @@ class RealtimeMonitor:
             # 고점 갱신 (하드 손절 캡 적용 — lessons/20260408_5)
             if price > pos["highest"]:
                 pos["highest"] = price
-                hard_floor = _pos_hard_floor(pos)
+                hard_floor = pos_hard_floor(pos)
                 if IS_DAYTRADING:
                     new_stop = price * (1 - _DT_TRAIL_PCT)
                 elif symbol in self.levels:
@@ -2712,8 +2700,8 @@ class RealtimeMonitor:
             print(f"  [경고] {symbol} entry_qty 결정 불가 — order_amount/exec_price 모두 0", flush=True)
             entry_qty = 1e-9  # placeholder, 추후 fix_state_balance_mismatch.py로 보정
         # 손절선 재계산 (lessons/20260822_4) — 위에서 신호가(price) 기준으로 잡은
-        # trail_stop은 슬리피지만큼 어긋난다. 하드 손절 캡은 "진입가 대비 -10%"가
-        # 정책이므로 확정 체결가(exec_price) 기준으로 다시 계산해야 한다.
+        # trail_stop은 슬리피지만큼 어긋난다. 하드 손절 캡(config.HARD_STOP_LOSS_PCT,
+        # 현행 -6%)은 "진입가 대비" 정책이므로 확정 체결가(exec_price) 기준으로 다시 계산해야 한다.
         if not IS_DAYTRADING and exec_price > 0:
             _atr_stop = exec_price - level["atr"] * ATR_MULTIPLIER
             _hard_floor = exec_price * (1 - HARD_STOP_LOSS_PCT)
@@ -2735,7 +2723,7 @@ class RealtimeMonitor:
             "entry_price": exec_price,
             "highest": exec_price,
             "trail_stop": trail_stop,
-            "hard_stop_pct": HARD_STOP_LOSS_PCT,   # 불변 — 진입 시점 캡 (소급 방지, _pos_hard_floor)
+            "hard_stop_pct": HARD_STOP_LOSS_PCT,   # 불변 — 진입 시점 캡 (소급 방지, hard_stop.pos_hard_floor)
             "order_amount": order_amount,
             "entry_amount_krw": entry_amount_krw,  # 불변 (TP 잔량 회계 기준, 실제 체결 대금)
             "entry_qty": entry_qty,                # 불변 (부분 매도 수량 산정 기준)
