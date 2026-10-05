@@ -3220,6 +3220,39 @@ def check_hard_stop_claude_md_sync(cfg_src: str | None = None, md_src: str | Non
     return found
 
 
+def check_hard_floor_grandfathered(src: str | None = None) -> list[str]:
+    """하드 손절 바닥이 포지션별 캡을 거치는지 (ADR 20260930-1, 2026-10-05 적발).
+
+    배경: ADR 은 "state 무변경 = 기존 포지션 소급 없음"을 전제했으나 realtime_monitor 의
+    레벨 갱신이 `max(merged, entry*(1-config캡))` 으로 **모든 보유 포지션**의 trail_stop 을
+    끌어올린다. 캡을 0.10→0.06 으로 바꾸면 -6% 아래 포지션이 재시작 직후 일괄 청산된다.
+    포지션에 진입 시점 캡(`hard_stop_pct`)을 기록하고 `_pos_hard_floor(pos)` 로만 읽게 했다.
+
+    존재 검사만으로는 부족하다(교훈 #51) — 틀린 형태가 **하나도 없음**을 묻는다:
+      (1) 보유 포지션 필드(`["entry_price"]`)에 config 캡을 직접 곱하는 식이 없어야 한다
+      (2) `_pos_hard_floor(` 호출이 갱신 경로 2곳 이상
+      (3) 신규 포지션 dict 가 `hard_stop_pct` 를 기록
+    """
+    found: list[str] = []
+    text = src if src is not None else (
+        PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py").read_text(encoding="utf-8")
+    code = "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("#"))
+
+    bad = re.findall(
+        r"\[\s*[\"']entry_price[\"']\s*\]\s*\*\s*\(\s*1\s*-\s*HARD_STOP_LOSS_PCT", code)
+    if bad:
+        found.append(f"[하드캡-소급] 보유 포지션 entry_price 에 config 캡 직접 적용 {len(bad)}곳 "
+                     "— `_pos_hard_floor(pos)` 를 써야 한다(기존 포지션 소급 청산 위험)")
+    calls = re.findall(r"(?<!def )\b_pos_hard_floor\(", code)
+    if len(calls) < 2:
+        found.append(f"[하드캡-소급] `_pos_hard_floor(` 호출 {len(calls)}곳 (<2) — 레벨 갱신·고점 갱신 경로 누락")
+    if not re.search(r"[\"']hard_stop_pct[\"']\s*:\s*HARD_STOP_LOSS_PCT", code):
+        found.append("[하드캡-소급] 신규 포지션 dict 에 `\"hard_stop_pct\": HARD_STOP_LOSS_PCT` 기록 없음")
+    if src is None:
+        errors.extend(found)
+    return found
+
+
 def check_consec_loss_paths_aligned(src_path: Path | None = None) -> list[str]:
     """연패 쿨다운 부과 경로가 전부 config 상수 + 부과 지문을 쓰는지 (lessons #51).
 
@@ -3681,6 +3714,7 @@ def main() -> None:
     check_consec_loss_floor_consistency()
     check_consec_loss_paths_aligned()
     check_hard_stop_claude_md_sync()
+    check_hard_floor_grandfathered()
     check_deploy_post_check_remote_cron()
     check_regime_notify_flag()
     check_morning_briefing_registered()

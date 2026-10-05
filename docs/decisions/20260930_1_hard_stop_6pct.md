@@ -1,7 +1,7 @@
 # ADR 20260930-1 — 하드 손절 캡 -10% → -6%
 
 - **작성일(KST)**: 2026-09-30
-- **상태**: 🟡 **코드 준비 완료 / 배포 대기** — 브랜치 `feat/hard-stop-6pct`. 서버 SSH 차단 해소 후 배포
+- **상태**: 🟢 **배포 완료 (2026-10-05 01:49 UTC)** — 브랜치 `feat/hard-stop-6pct`. 신규 진입분부터 -6%, 기존 포지션은 -10% 유지(정정 참조)
 - **결정자**: 사용자 ("-6%로 조정하자", 2026-09-30) — 권고안 -6%/-5% 중 수익 우선 선택
 - **근거**: [research/20260917_1](../../workspace/research/20260917_1_live53_review_stop5.md) §6~7 · 실행계획 [plan 20260917_2](../../workspace/plans/20260917_2_stop5_validation.md)
 - **관련**: lessons #13(하드캡 도입) · #4(문서↔config 동기화) · ADR 20260824-1/2(TP 사다리)
@@ -48,3 +48,18 @@
 3. 서버 md5 일치 확인 + `systemctl is-active btc-trader`
 4. `strategy_start` 를 배포 시각으로 이동 (봇 정지 → state 편집 → 기동, 08-25 인수인계 §6 순서)
 5. ROADMAP·CLAUDE.md 파라미터 표 동기화 확인, 브랜치 병합
+
+
+## 정정 (2026-10-05, 배포 중 적발)
+
+위 "기존 보유 포지션" 절의 전제 — *"state 를 건드리지 않으면 소급되지 않는다"* — 는 **틀렸다.**
+`realtime_monitor` 레벨 갱신이 `trail_stop = max(merged, entry*(1-config캡))` 으로 모든 보유 포지션을
+재계산하므로, config 만 0.06 으로 바꿔 올리면 -6% 아래 포지션(당시 BSV -8.8% · QTUM -7.8% · CKB -7.3% ·
+ONDO -6.7%, 약 62,500원)이 재시작 직후 시장가 청산되고 연패 카운터가 한꺼번에 오른다.
+
+- **수정**: 포지션에 진입 시점 캡 `hard_stop_pct` 를 기록, 바닥은 `_pos_hard_floor(pos)` 로만 계산.
+  필드 없는 기존 포지션 = `config.LEGACY_HARD_STOP_LOSS_PCT`(0.10).
+- **룰**: `pre_deploy_check.check_hard_floor_grandfathered()` — 직접 곱셈의 **부재**를 검사, 역방향 5/5.
+- **검증**: 재시작 후 4종목 모두 보유 유지, 청산 0건 (trail/entry=0.900 유지).
+- **교훈**: ADR 의 "~이므로 안전하다" 류 전제는 코드 경로로 확인한다(검증 가능한 주장은 재현 명령과 함께).
+- 계획서: [plan 20261005_1](../../workspace/plans/20261005_1_hard_stop6_grandfather_deploy.md)
