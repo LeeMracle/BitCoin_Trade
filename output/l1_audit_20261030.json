@@ -1,0 +1,1913 @@
+{
+ "generated_utc": "2026-10-29 23:53",
+ "strategy_start": "2026-10-05 01:48",
+ "n": 52,
+ "log_start": "2026-10-20 23:25:01+00:00",
+ "summary": {
+  "C1": {
+   "PASS": 52,
+   "FAIL": 0,
+   "N/A": 0
+  },
+  "C2": {
+   "PASS": 52,
+   "FAIL": 0,
+   "N/A": 0
+  },
+  "C3": {
+   "PASS": 49,
+   "FAIL": 3,
+   "N/A": 0
+  },
+  "C4": {
+   "PASS": 48,
+   "FAIL": 4,
+   "N/A": 0
+  },
+  "C5": {
+   "PASS": 26,
+   "FAIL": 0,
+   "N/A": 26
+  },
+  "C6": {
+   "PASS": 26,
+   "FAIL": 0,
+   "N/A": 26
+  }
+ },
+ "rows_without_fail": 45,
+ "rows": [
+  {
+   "i": 1,
+   "symbol": "BSV/KRW",
+   "entry_date": "2026-09-23 14:13",
+   "exit_date": "2026-10-05 04:33",
+   "exit_reason": "trail_stop",
+   "return_pct": -10.22,
+   "legacy": true,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -10.22% / 실측 -10.22% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -10.12% (캡 -10%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "N/A",
+     "note": "레짐 OK; 로그 보존 구간 밖"
+    },
+    "C6": {
+     "verdict": "N/A",
+     "note": "총평가 미상 (동시 6)"
+    }
+   }
+  },
+  {
+   "i": 2,
+   "symbol": "FLUID/KRW",
+   "entry_date": "2026-10-05 09:19",
+   "exit_date": "2026-10-05 11:33",
+   "exit_reason": "tp2_full_exit",
+   "return_pct": 7.55,
+   "legacy": false,
+   "n_sells": 2,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 +7.55% / 실측 +7.55% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "손실 매도 없음"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP5.5:+5.54%×50% TP10:+9.78%×50%"
+    },
+    "C5": {
+     "verdict": "N/A",
+     "note": "레짐 OK; 로그 보존 구간 밖"
+    },
+    "C6": {
+     "verdict": "N/A",
+     "note": "총평가 미상 (동시 8)"
+    }
+   }
+  },
+  {
+   "i": 3,
+   "symbol": "AKT/KRW",
+   "entry_date": "2026-10-05 03:05",
+   "exit_date": "2026-10-05 14:31",
+   "exit_reason": "trail_stop",
+   "return_pct": -0.51,
+   "legacy": false,
+   "n_sells": 2,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -0.51% / 실측 -0.51% (Δ+0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -6.16% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP5.5:+5.33%×50%"
+    },
+    "C5": {
+     "verdict": "N/A",
+     "note": "레짐 OK; 로그 보존 구간 밖"
+    },
+    "C6": {
+     "verdict": "N/A",
+     "note": "총평가 미상 (동시 11)"
+    }
+   }
+  },
+  {
+   "i": 4,
+   "symbol": "ORCA/KRW",
+   "entry_date": "2026-10-05 18:49",
+   "exit_date": "2026-10-05 22:15",
+   "exit_reason": "tp2_full_exit",
+   "return_pct": 7.58,
+   "legacy": false,
+   "n_sells": 2,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 +7.58% / 실측 +7.58% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "손실 매도 없음"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP5.5:+5.50%×50% TP10:+9.87%×50%"
+    },
+    "C5": {
+     "verdict": "N/A",
+     "note": "레짐 OK; 로그 보존 구간 밖"
+    },
+    "C6": {
+     "verdict": "N/A",
+     "note": "총평가 미상 (동시 7)"
+    }
+   }
+  },
+  {
+   "i": 5,
+   "symbol": "ORCA/KRW",
+   "entry_date": "2026-10-06 00:19",
+   "exit_date": "2026-10-06 00:28",
+   "exit_reason": "trail_stop",
+   "return_pct": -6.05,
+   "legacy": false,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -6.05% / 실측 -6.05% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -5.95% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "N/A",
+     "note": "레짐 OK; 로그 보존 구간 밖"
+    },
+    "C6": {
+     "verdict": "N/A",
+     "note": "총평가 미상 (동시 8)"
+    }
+   }
+  },
+  {
+   "i": 6,
+   "symbol": "FLUID/KRW",
+   "entry_date": "2026-10-06 01:40",
+   "exit_date": "2026-10-06 02:41",
+   "exit_reason": "trail_stop",
+   "return_pct": -6.25,
+   "legacy": false,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -6.25% / 실측 -6.25% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -6.15% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "N/A",
+     "note": "레짐 OK; 로그 보존 구간 밖"
+    },
+    "C6": {
+     "verdict": "N/A",
+     "note": "총평가 미상 (동시 8)"
+    }
+   }
+  },
+  {
+   "i": 7,
+   "symbol": "QTUM/KRW",
+   "entry_date": "2026-09-26 00:04",
+   "exit_date": "2026-10-06 03:11",
+   "exit_reason": "trail_stop",
+   "return_pct": -9.94,
+   "legacy": true,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -9.94% / 실측 -9.94% (Δ+0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -9.85% (캡 -10%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "N/A",
+     "note": "레짐 OK; 로그 보존 구간 밖"
+    },
+    "C6": {
+     "verdict": "N/A",
+     "note": "총평가 미상 (동시 10)"
+    }
+   }
+  },
+  {
+   "i": 8,
+   "symbol": "API3/KRW",
+   "entry_date": "2026-10-06 05:22",
+   "exit_date": "2026-10-06 07:17",
+   "exit_reason": "tp2_full_exit",
+   "return_pct": 7.51,
+   "legacy": false,
+   "n_sells": 2,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 +7.51% / 실측 +7.51% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "손실 매도 없음"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP5.5:+5.30%×50% TP10:+9.93%×50%"
+    },
+    "C5": {
+     "verdict": "N/A",
+     "note": "레짐 OK; 로그 보존 구간 밖"
+    },
+    "C6": {
+     "verdict": "N/A",
+     "note": "총평가 미상 (동시 7)"
+    }
+   }
+  },
+  {
+   "i": 9,
+   "symbol": "API3/KRW",
+   "entry_date": "2026-10-06 07:17",
+   "exit_date": "2026-10-06 07:40",
+   "exit_reason": "tp2_full_exit",
+   "return_pct": 7.31,
+   "legacy": false,
+   "n_sells": 2,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 +7.31% / 실측 +7.31% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "손실 매도 없음"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP5.5:+5.21%×50% TP10:+9.62%×50%"
+    },
+    "C5": {
+     "verdict": "N/A",
+     "note": "레짐 OK; 로그 보존 구간 밖"
+    },
+    "C6": {
+     "verdict": "N/A",
+     "note": "총평가 미상 (동시 8)"
+    }
+   }
+  },
+  {
+   "i": 10,
+   "symbol": "ORCA/KRW",
+   "entry_date": "2026-10-06 06:30",
+   "exit_date": "2026-10-06 09:13",
+   "exit_reason": "tp2_full_exit",
+   "return_pct": 7.59,
+   "legacy": false,
+   "n_sells": 2,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 +7.59% / 실측 +7.59% (Δ+0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "손실 매도 없음"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP5.5:+5.47%×50% TP10:+9.91%×50%"
+    },
+    "C5": {
+     "verdict": "N/A",
+     "note": "레짐 OK; 로그 보존 구간 밖"
+    },
+    "C6": {
+     "verdict": "N/A",
+     "note": "총평가 미상 (동시 8)"
+    }
+   }
+  },
+  {
+   "i": 11,
+   "symbol": "ORCA/KRW",
+   "entry_date": "2026-10-07 00:38",
+   "exit_date": "2026-10-07 00:46",
+   "exit_reason": "trail_stop",
+   "return_pct": -6.17,
+   "legacy": false,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -6.17% / 실측 -6.17% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -6.07% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "N/A",
+     "note": "레짐 OK; 로그 보존 구간 밖"
+    },
+    "C6": {
+     "verdict": "N/A",
+     "note": "총평가 미상 (동시 10)"
+    }
+   }
+  },
+  {
+   "i": 12,
+   "symbol": "ADA/KRW",
+   "entry_date": "2026-10-06 09:10",
+   "exit_date": "2026-10-07 01:57",
+   "exit_reason": "trail_stop",
+   "return_pct": -6.18,
+   "legacy": false,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -6.18% / 실측 -6.18% (Δ+0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -6.08% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "N/A",
+     "note": "레짐 OK; 로그 보존 구간 밖"
+    },
+    "C6": {
+     "verdict": "N/A",
+     "note": "총평가 미상 (동시 9)"
+    }
+   }
+  },
+  {
+   "i": 13,
+   "symbol": "CKB/KRW",
+   "entry_date": "2026-09-25 01:01",
+   "exit_date": "2026-10-07 02:00",
+   "exit_reason": "trail_stop",
+   "return_pct": -10.46,
+   "legacy": true,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -10.46% / 실측 -10.46% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -10.36% (캡 -10%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "N/A",
+     "note": "레짐 OK; 로그 보존 구간 밖"
+    },
+    "C6": {
+     "verdict": "N/A",
+     "note": "총평가 미상 (동시 8)"
+    }
+   }
+  },
+  {
+   "i": 14,
+   "symbol": "LPT/KRW",
+   "entry_date": "2026-10-06 07:39",
+   "exit_date": "2026-10-07 02:00",
+   "exit_reason": "trail_stop",
+   "return_pct": -6.17,
+   "legacy": false,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -6.17% / 실측 -6.17% (Δ+0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -6.08% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "N/A",
+     "note": "레짐 OK; 로그 보존 구간 밖"
+    },
+    "C6": {
+     "verdict": "N/A",
+     "note": "총평가 미상 (동시 9)"
+    }
+   }
+  },
+  {
+   "i": 15,
+   "symbol": "A/KRW",
+   "entry_date": "2026-10-06 12:17",
+   "exit_date": "2026-10-07 02:01",
+   "exit_reason": "trail_stop",
+   "return_pct": -6.3,
+   "legacy": false,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -6.30% / 실측 -6.30% (Δ+0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -6.21% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "N/A",
+     "note": "레짐 OK; 로그 보존 구간 밖"
+    },
+    "C6": {
+     "verdict": "N/A",
+     "note": "총평가 미상 (동시 9)"
+    }
+   }
+  },
+  {
+   "i": 16,
+   "symbol": "ONDO/KRW",
+   "entry_date": "2026-09-25 00:05",
+   "exit_date": "2026-10-07 02:01",
+   "exit_reason": "trail_stop",
+   "return_pct": -2.39,
+   "legacy": true,
+   "n_sells": 2,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -2.39% / 실측 -2.39% (Δ+0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -10.00% (캡 -10%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP5.5:+5.42%×50%"
+    },
+    "C5": {
+     "verdict": "N/A",
+     "note": "레짐 OK; 로그 보존 구간 밖"
+    },
+    "C6": {
+     "verdict": "N/A",
+     "note": "총평가 미상 (동시 7)"
+    }
+   }
+  },
+  {
+   "i": 17,
+   "symbol": "XRP/KRW",
+   "entry_date": "2026-09-22 14:01",
+   "exit_date": "2026-10-08 04:19",
+   "exit_reason": "trail_stop",
+   "return_pct": -10.14,
+   "legacy": true,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -10.14% / 실측 -10.14% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -10.04% (캡 -10%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "N/A",
+     "note": "레짐 OK; 로그 보존 구간 밖"
+    },
+    "C6": {
+     "verdict": "N/A",
+     "note": "총평가 미상 (동시 4)"
+    }
+   }
+  },
+  {
+   "i": 18,
+   "symbol": "SENT/KRW",
+   "entry_date": "2026-10-05 22:05",
+   "exit_date": "2026-10-09 10:33",
+   "exit_reason": "trail_stop",
+   "return_pct": -0.69,
+   "legacy": false,
+   "n_sells": 2,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -0.69% / 실측 -0.69% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -6.18% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP5.5:+5.00%×50%"
+    },
+    "C5": {
+     "verdict": "N/A",
+     "note": "레짐 OK; 로그 보존 구간 밖"
+    },
+    "C6": {
+     "verdict": "N/A",
+     "note": "총평가 미상 (동시 8)"
+    }
+   }
+  },
+  {
+   "i": 19,
+   "symbol": "BAT/KRW",
+   "entry_date": "2026-10-10 09:12",
+   "exit_date": "2026-10-10 09:48",
+   "exit_reason": "trail_stop",
+   "return_pct": -6.38,
+   "legacy": false,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -6.38% / 실측 -6.38% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -6.28% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "N/A",
+     "note": "레짐 OK; 로그 보존 구간 밖"
+    },
+    "C6": {
+     "verdict": "N/A",
+     "note": "총평가 미상 (동시 4)"
+    }
+   }
+  },
+  {
+   "i": 20,
+   "symbol": "DOT/KRW",
+   "entry_date": "2026-10-10 02:01",
+   "exit_date": "2026-10-12 17:38",
+   "exit_reason": "trail_stop",
+   "return_pct": -6.12,
+   "legacy": false,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -6.12% / 실측 -6.12% (Δ+0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -6.03% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "N/A",
+     "note": "레짐 OK; 로그 보존 구간 밖"
+    },
+    "C6": {
+     "verdict": "N/A",
+     "note": "총평가 미상 (동시 3)"
+    }
+   }
+  },
+  {
+   "i": 21,
+   "symbol": "THETA/KRW",
+   "entry_date": "2026-09-19 19:08",
+   "exit_date": "2026-10-13 00:07",
+   "exit_reason": "trail_stop",
+   "return_pct": -2.71,
+   "legacy": true,
+   "n_sells": 2,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -2.71% / 실측 -2.71% (Δ+0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -10.13% (캡 -10%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP5.5:+4.90%×50%"
+    },
+    "C5": {
+     "verdict": "N/A",
+     "note": "레짐 OK; 로그 보존 구간 밖"
+    },
+    "C6": {
+     "verdict": "N/A",
+     "note": "총평가 미상 (동시 3)"
+    }
+   }
+  },
+  {
+   "i": 22,
+   "symbol": "XTZ/KRW",
+   "entry_date": "2026-10-13 14:11",
+   "exit_date": "2026-10-13 15:36",
+   "exit_reason": "trail_stop",
+   "return_pct": -6.11,
+   "legacy": false,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -6.11% / 실측 -6.11% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -6.01% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "N/A",
+     "note": "레짐 OK; 로그 보존 구간 밖"
+    },
+    "C6": {
+     "verdict": "N/A",
+     "note": "총평가 미상 (동시 2)"
+    }
+   }
+  },
+  {
+   "i": 23,
+   "symbol": "A/KRW",
+   "entry_date": "2026-10-17 06:44",
+   "exit_date": "2026-10-17 11:30",
+   "exit_reason": "trail_stop",
+   "return_pct": -6.59,
+   "legacy": false,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -6.59% / 실측 -6.59% (Δ+0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -6.49% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "N/A",
+     "note": "레짐 OK; 로그 보존 구간 밖"
+    },
+    "C6": {
+     "verdict": "N/A",
+     "note": "총평가 미상 (동시 2)"
+    }
+   }
+  },
+  {
+   "i": 24,
+   "symbol": "ORBS/KRW",
+   "entry_date": "2026-09-22 23:07",
+   "exit_date": "2026-10-19 20:34",
+   "exit_reason": "trail_stop",
+   "return_pct": -9.9,
+   "legacy": true,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=+0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -9.90% / 실측 -9.90% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -9.80% (캡 -10%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "N/A",
+     "note": "레짐 OK; 로그 보존 구간 밖"
+    },
+    "C6": {
+     "verdict": "N/A",
+     "note": "총평가 미상 (동시 5)"
+    }
+   }
+  },
+  {
+   "i": 25,
+   "symbol": "ELSA/KRW",
+   "entry_date": "2026-10-19 16:57",
+   "exit_date": "2026-10-20 00:35",
+   "exit_reason": "trail_stop",
+   "return_pct": -6.39,
+   "legacy": false,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -6.39% / 실측 -6.39% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -6.29% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "N/A",
+     "note": "레짐 OK; 로그 보존 구간 밖"
+    },
+    "C6": {
+     "verdict": "N/A",
+     "note": "총평가 미상 (동시 2)"
+    }
+   }
+  },
+  {
+   "i": 26,
+   "symbol": "MEW/KRW",
+   "entry_date": "2026-10-21 00:04",
+   "exit_date": "2026-10-21 00:40",
+   "exit_reason": "trail_stop",
+   "return_pct": -6.28,
+   "legacy": false,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -6.28% / 실측 -6.28% (Δ+0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -6.18% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "PASS",
+     "note": "레짐 OK; 돌파 로그 확인"
+    },
+    "C6": {
+     "verdict": "PASS",
+     "note": "비중 6.3% (동시 3)"
+    }
+   }
+  },
+  {
+   "i": 27,
+   "symbol": "DOOD/KRW",
+   "entry_date": "2026-10-21 00:54",
+   "exit_date": "2026-10-21 01:03",
+   "exit_reason": "trail_stop",
+   "return_pct": -7.18,
+   "legacy": false,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -7.18% / 실측 -7.18% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "FAIL",
+     "note": "최저 매도 -7.08% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "PASS",
+     "note": "레짐 OK; 돌파 로그 확인"
+    },
+    "C6": {
+     "verdict": "PASS",
+     "note": "비중 6.3% (동시 3)"
+    }
+   }
+  },
+  {
+   "i": 28,
+   "symbol": "GRVT/KRW",
+   "entry_date": "2026-10-20 01:39",
+   "exit_date": "2026-10-21 08:45",
+   "exit_reason": "tp2_full_exit",
+   "return_pct": 7.13,
+   "legacy": false,
+   "n_sells": 2,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 +7.13% / 실측 +7.13% (Δ+0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "손실 매도 없음"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP5.5:+4.62%×50% TP10:+9.85%×50%"
+    },
+    "C5": {
+     "verdict": "N/A",
+     "note": "레짐 OK; 로그 보존 구간 밖"
+    },
+    "C6": {
+     "verdict": "N/A",
+     "note": "총평가 미상 (동시 1)"
+    }
+   }
+  },
+  {
+   "i": 29,
+   "symbol": "TOSHI/KRW",
+   "entry_date": "2026-10-21 00:03",
+   "exit_date": "2026-10-22 02:28",
+   "exit_reason": "trail_stop",
+   "return_pct": -1.33,
+   "legacy": false,
+   "n_sells": 2,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -1.33% / 실측 -1.33% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -6.13% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "FAIL",
+     "note": "TP5.5:+3.68%×50%"
+    },
+    "C5": {
+     "verdict": "PASS",
+     "note": "레짐 OK; 돌파 로그 확인"
+    },
+    "C6": {
+     "verdict": "PASS",
+     "note": "비중 6.3% (동시 2)"
+    }
+   }
+  },
+  {
+   "i": 30,
+   "symbol": "IN/KRW",
+   "entry_date": "2026-10-24 01:03",
+   "exit_date": "2026-10-24 01:11",
+   "exit_reason": "trail_stop",
+   "return_pct": -7.25,
+   "legacy": false,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -7.25% / 실측 -7.25% (Δ+0.00p)"
+    },
+    "C3": {
+     "verdict": "FAIL",
+     "note": "최저 매도 -7.16% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "PASS",
+     "note": "레짐 OK; 돌파 로그 확인"
+    },
+    "C6": {
+     "verdict": "PASS",
+     "note": "비중 6.1% (동시 2)"
+    }
+   }
+  },
+  {
+   "i": 31,
+   "symbol": "BIRB/KRW",
+   "entry_date": "2026-10-24 01:03",
+   "exit_date": "2026-10-24 01:14",
+   "exit_reason": "trail_stop",
+   "return_pct": -6.79,
+   "legacy": false,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -6.79% / 실측 -6.79% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -6.69% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "PASS",
+     "note": "레짐 OK; 돌파 로그 확인"
+    },
+    "C6": {
+     "verdict": "PASS",
+     "note": "비중 6.1% (동시 2)"
+    }
+   }
+  },
+  {
+   "i": 32,
+   "symbol": "TREE/KRW",
+   "entry_date": "2026-10-24 02:31",
+   "exit_date": "2026-10-24 02:42",
+   "exit_reason": "trail_stop",
+   "return_pct": -5.97,
+   "legacy": false,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -5.97% / 실측 -5.97% (Δ+0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -5.87% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "PASS",
+     "note": "레짐 OK; 돌파 로그 확인"
+    },
+    "C6": {
+     "verdict": "PASS",
+     "note": "비중 6.1% (동시 1)"
+    }
+   }
+  },
+  {
+   "i": 33,
+   "symbol": "ORDER/KRW",
+   "entry_date": "2026-10-24 07:57",
+   "exit_date": "2026-10-24 08:00",
+   "exit_reason": "tp2_full_exit",
+   "return_pct": 7.48,
+   "legacy": false,
+   "n_sells": 2,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 +7.48% / 실측 +7.48% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "손실 매도 없음"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP5.5:+5.45%×50% TP10:+9.73%×50%"
+    },
+    "C5": {
+     "verdict": "PASS",
+     "note": "레짐 OK; 돌파 로그 확인"
+    },
+    "C6": {
+     "verdict": "PASS",
+     "note": "비중 6.0% (동시 1)"
+    }
+   }
+  },
+  {
+   "i": 34,
+   "symbol": "ZORA/KRW",
+   "entry_date": "2026-10-24 08:08",
+   "exit_date": "2026-10-24 08:33",
+   "exit_reason": "trail_stop",
+   "return_pct": -6.27,
+   "legacy": false,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -6.27% / 실측 -6.27% (Δ+0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -6.18% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "PASS",
+     "note": "레짐 OK; 돌파 로그 확인"
+    },
+    "C6": {
+     "verdict": "PASS",
+     "note": "비중 6.3% (동시 2)"
+    }
+   }
+  },
+  {
+   "i": 35,
+   "symbol": "BLEND/KRW",
+   "entry_date": "2026-10-24 08:38",
+   "exit_date": "2026-10-24 08:46",
+   "exit_reason": "trail_stop",
+   "return_pct": -0.62,
+   "legacy": false,
+   "n_sells": 2,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -0.62% / 실측 -0.62% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -5.92% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP5.5:+4.88%×50%"
+    },
+    "C5": {
+     "verdict": "PASS",
+     "note": "레짐 OK; 돌파 로그 확인"
+    },
+    "C6": {
+     "verdict": "PASS",
+     "note": "비중 6.3% (동시 3)"
+    }
+   }
+  },
+  {
+   "i": 36,
+   "symbol": "WET/KRW",
+   "entry_date": "2026-10-24 08:50",
+   "exit_date": "2026-10-24 09:10",
+   "exit_reason": "tp2_full_exit",
+   "return_pct": 7.73,
+   "legacy": false,
+   "n_sells": 2,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 +7.73% / 실측 +7.73% (Δ+0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "손실 매도 없음"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP5.5:+5.63%×50% TP10:+10.04%×50%"
+    },
+    "C5": {
+     "verdict": "PASS",
+     "note": "레짐 OK; 돌파 로그 확인"
+    },
+    "C6": {
+     "verdict": "PASS",
+     "note": "비중 6.3% (동시 3)"
+    }
+   }
+  },
+  {
+   "i": 37,
+   "symbol": "TRUST/KRW",
+   "entry_date": "2026-10-24 08:01",
+   "exit_date": "2026-10-24 09:20",
+   "exit_reason": "tp2_full_exit",
+   "return_pct": 7.35,
+   "legacy": false,
+   "n_sells": 2,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 +7.35% / 실측 +7.35% (Δ+0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "손실 매도 없음"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP5.5:+5.10%×50% TP10:+9.80%×50%"
+    },
+    "C5": {
+     "verdict": "PASS",
+     "note": "레짐 OK; 돌파 로그 확인"
+    },
+    "C6": {
+     "verdict": "PASS",
+     "note": "비중 6.1% (동시 1)"
+    }
+   }
+  },
+  {
+   "i": 38,
+   "symbol": "KERNEL/KRW",
+   "entry_date": "2026-10-24 08:28",
+   "exit_date": "2026-10-24 09:47",
+   "exit_reason": "tp2_full_exit",
+   "return_pct": 7.86,
+   "legacy": false,
+   "n_sells": 2,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 +7.86% / 실측 +7.86% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "손실 매도 없음"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP5.5:+5.50%×50% TP10:+10.43%×50%"
+    },
+    "C5": {
+     "verdict": "PASS",
+     "note": "레짐 OK; 돌파 로그 확인"
+    },
+    "C6": {
+     "verdict": "PASS",
+     "note": "비중 6.3% (동시 3)"
+    }
+   }
+  },
+  {
+   "i": 39,
+   "symbol": "LA/KRW",
+   "entry_date": "2026-10-24 10:15",
+   "exit_date": "2026-10-24 10:24",
+   "exit_reason": "trail_stop",
+   "return_pct": -6.14,
+   "legacy": false,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -6.14% / 실측 -6.14% (Δ+0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -6.05% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "PASS",
+     "note": "레짐 OK; 돌파 로그 확인"
+    },
+    "C6": {
+     "verdict": "PASS",
+     "note": "비중 6.1% (동시 3)"
+    }
+   }
+  },
+  {
+   "i": 40,
+   "symbol": "BREV/KRW",
+   "entry_date": "2026-10-24 09:46",
+   "exit_date": "2026-10-24 11:08",
+   "exit_reason": "tp2_full_exit",
+   "return_pct": 6.98,
+   "legacy": false,
+   "n_sells": 2,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 +6.98% / 실측 +6.98% (Δ+0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "손실 매도 없음"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP5.5:+5.00%×50% TP10:+9.17%×50%"
+    },
+    "C5": {
+     "verdict": "PASS",
+     "note": "레짐 OK; 돌파 로그 확인"
+    },
+    "C6": {
+     "verdict": "PASS",
+     "note": "비중 6.3% (동시 3)"
+    }
+   }
+  },
+  {
+   "i": 41,
+   "symbol": "ZKC/KRW",
+   "entry_date": "2026-10-24 11:34",
+   "exit_date": "2026-10-24 11:35",
+   "exit_reason": "trail_stop",
+   "return_pct": -1.26,
+   "legacy": false,
+   "n_sells": 2,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -1.26% / 실측 -1.26% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "FAIL",
+     "note": "최저 매도 -7.47% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP5.5:+5.16%×50%"
+    },
+    "C5": {
+     "verdict": "PASS",
+     "note": "레짐 OK; 돌파 로그 확인"
+    },
+    "C6": {
+     "verdict": "PASS",
+     "note": "비중 6.1% (동시 2)"
+    }
+   }
+  },
+  {
+   "i": 42,
+   "symbol": "BABY/KRW",
+   "entry_date": "2026-10-24 08:58",
+   "exit_date": "2026-10-24 11:55",
+   "exit_reason": "tp2_full_exit",
+   "return_pct": 7.38,
+   "legacy": false,
+   "n_sells": 2,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 +7.38% / 실측 +7.38% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "손실 매도 없음"
+    },
+    "C4": {
+     "verdict": "FAIL",
+     "note": "TP5.5:+6.95%×50% TP10:+8.02%×50%"
+    },
+    "C5": {
+     "verdict": "PASS",
+     "note": "레짐 OK; 돌파 로그 확인"
+    },
+    "C6": {
+     "verdict": "PASS",
+     "note": "비중 6.3% (동시 4)"
+    }
+   }
+  },
+  {
+   "i": 43,
+   "symbol": "ZBT/KRW",
+   "entry_date": "2026-10-24 17:51",
+   "exit_date": "2026-10-24 18:13",
+   "exit_reason": "trail_stop",
+   "return_pct": -6.35,
+   "legacy": false,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -6.35% / 실측 -6.35% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -6.25% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "PASS",
+     "note": "레짐 OK; 돌파 로그 확인"
+    },
+    "C6": {
+     "verdict": "PASS",
+     "note": "비중 6.1% (동시 1)"
+    }
+   }
+  },
+  {
+   "i": 44,
+   "symbol": "STEEM/KRW",
+   "entry_date": "2026-10-25 00:26",
+   "exit_date": "2026-10-25 00:32",
+   "exit_reason": "trail_stop",
+   "return_pct": -6.13,
+   "legacy": false,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -6.13% / 실측 -6.13% (Δ+0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -6.04% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "PASS",
+     "note": "레짐 OK; 돌파 로그 확인"
+    },
+    "C6": {
+     "verdict": "PASS",
+     "note": "비중 6.1% (동시 1)"
+    }
+   }
+  },
+  {
+   "i": 45,
+   "symbol": "POLYX/KRW",
+   "entry_date": "2026-10-25 10:28",
+   "exit_date": "2026-10-25 10:40",
+   "exit_reason": "trail_stop",
+   "return_pct": -6.23,
+   "legacy": false,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -6.23% / 실측 -6.23% (Δ+0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -6.13% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "PASS",
+     "note": "레짐 OK; 돌파 로그 확인"
+    },
+    "C6": {
+     "verdict": "PASS",
+     "note": "비중 6.1% (동시 1)"
+    }
+   }
+  },
+  {
+   "i": 46,
+   "symbol": "BABY/KRW",
+   "entry_date": "2026-10-25 10:47",
+   "exit_date": "2026-10-25 10:48",
+   "exit_reason": "tp2_full_exit",
+   "return_pct": 6.71,
+   "legacy": false,
+   "n_sells": 2,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 +6.71% / 실측 +6.71% (Δ+0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "손실 매도 없음"
+    },
+    "C4": {
+     "verdict": "FAIL",
+     "note": "TP5.5:+4.68%×50% TP10:+8.94%×50%"
+    },
+    "C5": {
+     "verdict": "PASS",
+     "note": "레짐 OK; 돌파 로그 확인"
+    },
+    "C6": {
+     "verdict": "PASS",
+     "note": "비중 6.1% (동시 1)"
+    }
+   }
+  },
+  {
+   "i": 47,
+   "symbol": "MOC/KRW",
+   "entry_date": "2026-10-25 12:25",
+   "exit_date": "2026-10-25 12:27",
+   "exit_reason": "trail_stop",
+   "return_pct": 1.17,
+   "legacy": false,
+   "n_sells": 2,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 +1.17% / 실측 +1.17% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -3.18% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP5.5:+5.73%×50%"
+    },
+    "C5": {
+     "verdict": "PASS",
+     "note": "레짐 OK; 돌파 로그 확인"
+    },
+    "C6": {
+     "verdict": "PASS",
+     "note": "비중 6.1% (동시 1)"
+    }
+   }
+  },
+  {
+   "i": 48,
+   "symbol": "AI/KRW",
+   "entry_date": "2026-10-25 13:05",
+   "exit_date": "2026-10-25 13:06",
+   "exit_reason": "tp2_full_exit",
+   "return_pct": 5.45,
+   "legacy": false,
+   "n_sells": 2,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 +5.45% / 실측 +5.45% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "손실 매도 없음"
+    },
+    "C4": {
+     "verdict": "FAIL",
+     "note": "TP5.5:+1.11%×50% TP10:+10.00%×50%"
+    },
+    "C5": {
+     "verdict": "PASS",
+     "note": "레짐 OK; 돌파 로그 확인"
+    },
+    "C6": {
+     "verdict": "PASS",
+     "note": "비중 6.1% (동시 1)"
+    }
+   }
+  },
+  {
+   "i": 49,
+   "symbol": "HOLO/KRW",
+   "entry_date": "2026-10-25 13:09",
+   "exit_date": "2026-10-25 13:25",
+   "exit_reason": "trail_stop",
+   "return_pct": -5.76,
+   "legacy": false,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -5.76% / 실측 -5.76% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -5.66% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "PASS",
+     "note": "레짐 OK; 돌파 로그 확인"
+    },
+    "C6": {
+     "verdict": "PASS",
+     "note": "비중 6.1% (동시 1)"
+    }
+   }
+  },
+  {
+   "i": 50,
+   "symbol": "POKT/KRW",
+   "entry_date": "2026-10-27 02:07",
+   "exit_date": "2026-10-27 03:32",
+   "exit_reason": "tp2_full_exit",
+   "return_pct": 7.27,
+   "legacy": false,
+   "n_sells": 2,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 +7.27% / 실측 +7.27% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "손실 매도 없음"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP5.5:+4.92%×50% TP10:+9.84%×50%"
+    },
+    "C5": {
+     "verdict": "PASS",
+     "note": "레짐 OK; 돌파 로그 확인"
+    },
+    "C6": {
+     "verdict": "PASS",
+     "note": "비중 6.1% (동시 1)"
+    }
+   }
+  },
+  {
+   "i": 51,
+   "symbol": "CTC/KRW",
+   "entry_date": "2026-10-27 09:46",
+   "exit_date": "2026-10-27 09:50",
+   "exit_reason": "trail_stop",
+   "return_pct": -6.48,
+   "legacy": false,
+   "n_sells": 1,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -6.48% / 실측 -6.48% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -6.38% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP 체결 없음"
+    },
+    "C5": {
+     "verdict": "PASS",
+     "note": "레짐 OK; 돌파 로그 확인"
+    },
+    "C6": {
+     "verdict": "PASS",
+     "note": "비중 6.1% (동시 1)"
+    }
+   }
+  },
+  {
+   "i": 52,
+   "symbol": "PEPE/KRW",
+   "entry_date": "2026-10-29 15:41",
+   "exit_date": "2026-10-29 20:37",
+   "exit_reason": "trail_stop",
+   "return_pct": -0.39,
+   "legacy": false,
+   "n_sells": 2,
+   "checks": {
+    "C1": {
+     "verdict": "PASS",
+     "note": "entry/fill-1=-0.00%"
+    },
+    "C2": {
+     "verdict": "PASS",
+     "note": "기록 -0.39% / 실측 -0.39% (Δ-0.00p)"
+    },
+    "C3": {
+     "verdict": "PASS",
+     "note": "최저 매도 -5.99% (캡 -6%)"
+    },
+    "C4": {
+     "verdict": "PASS",
+     "note": "TP5.5:+5.42%×50%"
+    },
+    "C5": {
+     "verdict": "PASS",
+     "note": "레짐 OK; 돌파 로그 확인"
+    },
+    "C6": {
+     "verdict": "PASS",
+     "note": "비중 6.1% (동시 1)"
+    }
+   }
+  }
+ ]
+}
