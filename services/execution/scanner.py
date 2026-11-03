@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -52,26 +53,34 @@ def fetch_fg_value() -> "float | None":
         return None
 
 
-def fetch_btc_above_ema() -> bool:
+def fetch_btc_above_ema(retries: int = 3, backoff_sec: float = 2.0) -> bool:
     """BTC/KRW 현재 종가가 EMA(REGIME_FILTER_EMA_PERIOD) 위에 있으면 True.
 
     - REGIME_FILTER_ENABLED=False 이면 항상 True 반환 (필터 비활성).
-    - 데이터 조회 실패 시 True 반환하여 기존 매수 동작 유지 (보수적 폴백).
+    - **fail-closed** (lessons #21): 조회 실패·데이터 부족이면 False — 레짐을 모르면 매수하지 않는다.
+      과거에는 True(BULL)를 반환해 조회가 실패한 날 BEAR 에서도 매수가 열렸다
+      (research/20261030_1 F1). 일시 오류로 하루를 통째로 닫지 않도록 짧게 재시도한다.
     - EMA 계산: pandas ewm(span=N, adjust=False).mean()
     """
     if not REGIME_FILTER_ENABLED:
         return True  # 필터 비활성 — 기존 동작과 100% 동일
-    try:
-        exchange = ccxt.upbit({"enableRateLimit": True})
-        candles = exchange.fetch_ohlcv("BTC/KRW", "1d", limit=_BTC_EMA_FETCH_LIMIT)
-        if len(candles) < REGIME_FILTER_EMA_PERIOD:
-            return True  # 데이터 부족 → 폴백
-        closes = pd.Series([c[4] for c in candles])
-        ema = closes.ewm(span=REGIME_FILTER_EMA_PERIOD, adjust=False).mean()
-        current_close = closes.iloc[-1]
-        return float(current_close) > float(ema.iloc[-1])
-    except Exception:
-        return True  # 조회 실패 → 기존 동작 유지
+    last_err = "unknown"
+    for attempt in range(1, retries + 1):
+        try:
+            exchange = ccxt.upbit({"enableRateLimit": True})
+            candles = exchange.fetch_ohlcv("BTC/KRW", "1d", limit=_BTC_EMA_FETCH_LIMIT)
+            if len(candles) < REGIME_FILTER_EMA_PERIOD:
+                last_err = f"데이터 부족 {len(candles)} < {REGIME_FILTER_EMA_PERIOD}"
+            else:
+                closes = pd.Series([c[4] for c in candles])
+                ema = closes.ewm(span=REGIME_FILTER_EMA_PERIOD, adjust=False).mean()
+                return float(closes.iloc[-1]) > float(ema.iloc[-1])
+        except Exception as e:
+            last_err = f"{type(e).__name__}: {e}"
+        if attempt < retries:
+            time.sleep(backoff_sec * attempt)
+    print(f"  [레짐] BTC EMA 조회 실패 {retries}회 ({last_err}) — fail-closed: 매수 차단", flush=True)
+    return False
 
 
 
@@ -123,7 +132,7 @@ async def scan_entry_signals(coins: list[dict]) -> list[dict]:
     strategy_kwargs = dict(STRATEGY_KWARGS)
     if STRATEGY == "composite":
         fg_value = fetch_fg_value()          # None이면 폴백 (게이트 비활성)
-        btc_above = fetch_btc_above_ema()    # 실패 시 True (기존 동작 유지)
+        btc_above = fetch_btc_above_ema()    # 실패 시 False (fail-closed)
         strategy_kwargs["fg_gate"] = fg_value
         strategy_kwargs["btc_above_sma"] = btc_above
         ema_label = f"EMA{REGIME_FILTER_EMA_PERIOD}" if REGIME_FILTER_ENABLED else "EMA(비활성)"

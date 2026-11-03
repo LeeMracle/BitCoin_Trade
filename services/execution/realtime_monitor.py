@@ -180,7 +180,8 @@ class RealtimeMonitor:
         self._ws_stale_alert_until = 0.0
         # v2 필터 캐시 (레벨 갱신 시 1회 조회)
         self._fg_value: "float | None" = None
-        self._btc_above_ema: bool = True
+        # fail-closed: 첫 레벨 갱신에서 레짐을 확인하기 전에는 매수하지 않는다 (research/20261030_1 F1)
+        self._btc_above_ema: bool = False
         self.error_cooldown: dict[str, float] = {}   # {symbol: timestamp}
         self.last_alert_time: dict[str, float] = {}   # {error_key: timestamp}
         self._cb_log_ts: float = 0.0  # 서킷브레이커 로그 throttle (초)
