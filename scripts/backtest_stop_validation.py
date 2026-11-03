@@ -160,12 +160,17 @@ class Guards:
 
 
 def simulate(ctx: dict, days: list[int], p: P, hard: float, guards_on: bool, seed: int,
-             rank_fn=None) -> dict:
+             rank_fn=None, entry_bar: str = "close") -> dict:
     """rank_fn(cands, rng) -> cands : 같은 시간(hour)에 돌파한 후보의 진입 순서를 정한다.
 
     None(기본) 이면 기존대로 무작위 셔플 — 기존 연구 결과와 비트 단위로 동일해야 한다
     (tests/scripts/test_study_candidate_ranking.py). plan 20261005_5 가 추가.
     반환의 n_cand/n_skip 은 경쟁 진단용: 후보 수 / 슬롯·안전장치 때문에 못 들어간 후보 수.
+
+    entry_bar : 진입 봉 안의 손절 처리. 시간봉으로는 돌파와 저가의 선후를 모른다.
+        "close"(기본) — 종가가 손절선 아래일 때만 손절 (낙관 상한, 기존 결과와 동일)
+        "low"         — 저가가 손절선에 닿으면 손절가로 손절 (비관 하한)
+        실거래 -6% 손절 23건 중 13건이 진입 시간봉 안에서 났다 (research/20261103_1).
     """
     O, Hh, L, Cc = ctx["O"], ctx["H"], ctx["L"], ctx["C"]
     syms, sigs = ctx["syms"], ctx["sigs"]
@@ -249,8 +254,10 @@ def simulate(ctx: dict, days: list[int], p: P, hard: float, guards_on: bool, see
                      "cost": amt, "proceeds": 0.0, "atrp": a / e}
                 pos[si] = q
                 last_px[si] = Cc[si, t]
-                # 진입 봉: 내부 순서 불명 — 종가가 선 너머일 때만 확정 처리 (정책 공통)
-                if Cc[si, t] <= q["trail"]:
+                # 진입 봉: 내부 순서 불명 — entry_bar 로 낙관/비관 경계를 고른다
+                if entry_bar == "low" and L[si, t] <= q["trail"]:
+                    close(si, q, q["trail"] * (1 - STOP_SLIP), t)
+                elif Cc[si, t] <= q["trail"]:
                     close(si, q, Cc[si, t] * (1 - STOP_SLIP), t)
         held = sum(q["qty"] * last_px.get(si, q["entry"]) for si, q in pos.items())
         curve.append(cash + held)
