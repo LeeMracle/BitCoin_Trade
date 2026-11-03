@@ -159,7 +159,14 @@ class Guards:
         return not self.on or (t >= self.cd_until and not self.day_blocked and not self.cb)
 
 
-def simulate(ctx: dict, days: list[int], p: P, hard: float, guards_on: bool, seed: int) -> dict:
+def simulate(ctx: dict, days: list[int], p: P, hard: float, guards_on: bool, seed: int,
+             rank_fn=None) -> dict:
+    """rank_fn(cands, rng) -> cands : 같은 시간(hour)에 돌파한 후보의 진입 순서를 정한다.
+
+    None(기본) 이면 기존대로 무작위 셔플 — 기존 연구 결과와 비트 단위로 동일해야 한다
+    (tests/scripts/test_study_candidate_ranking.py). plan 20261005_5 가 추가.
+    반환의 n_cand/n_skip 은 경쟁 진단용: 후보 수 / 슬롯·안전장치 때문에 못 들어간 후보 수.
+    """
     O, Hh, L, Cc = ctx["O"], ctx["H"], ctx["L"], ctx["C"]
     syms, sigs = ctx["syms"], ctx["sigs"]
     rng = np.random.default_rng(seed)
@@ -168,6 +175,7 @@ def simulate(ctx: dict, days: list[int], p: P, hard: float, guards_on: bool, see
     last_px = {}
     curve, trades = [], []
     tid = 0
+    n_cand = n_skip = 0
 
     def close(si: int, q: dict, px: float, t: int) -> None:
         nonlocal cash, tid
@@ -217,9 +225,14 @@ def simulate(ctx: dict, days: list[int], p: P, hard: float, guards_on: bool, see
                     q["trail"] = max(q["trail"], h - q["atr"] * p.atr_mult, e * (1 - hard))
             # 2) 이 시간에 돌파한 신호 진입
             cands = [s for s in by_hour.get(t, []) if s["si"] not in pos]
-            rng.shuffle(cands)
-            for s in cands:
+            if rank_fn is None:
+                rng.shuffle(cands)
+            else:
+                cands = rank_fn(cands, rng)
+            n_cand += len(cands)
+            for i_c, s in enumerate(cands):
                 if len(pos) >= p.slots or not g.can_buy(t):
+                    n_skip += len(cands) - i_c
                     break
                 si = s["si"]
                 held = sum(q["qty"] * last_px.get(k, q["entry"]) for k, q in pos.items())
@@ -247,7 +260,8 @@ def simulate(ctx: dict, days: list[int], p: P, hard: float, guards_on: bool, see
     r = np.array([x["ret"] for x in trades]) if trades else np.array([0.0])
     return {"ret": (eq.iloc[-1] / INIT - 1) * 100, "mdd": mdd, "n": len(trades),
             "wr": float((r > 0).mean() * 100) if trades else 0.0, "tmean": float(r.mean()),
-            "n_cd": g.n_cd, "cd_h": g.cd_hours, "trades": trades}
+            "n_cd": g.n_cd, "cd_h": g.cd_hours, "trades": trades,
+            "n_cand": n_cand, "n_skip": n_skip}
 
 
 def build_ctx(raw: dict, regime: dict) -> dict:
