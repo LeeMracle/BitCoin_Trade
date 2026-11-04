@@ -72,7 +72,15 @@ async def _fetch_range(
                 symbol, timeframe, since=since, limit=_MAX_CANDLES_PER_REQUEST
             )
             if not candles:
-                break
+                # 빈 페이지 = 데이터 끝 이거나 **상장 전 구간**. since 부터 앞으로 넘기는 방식이라
+                # 조회 시작일 이후 상장한 코인은 첫 페이지가 비어 0봉이 반환됐다
+                # (plan 20261103_1 — 모든 백테스트에서 최근 상장 코인이 빠진 원인).
+                # 아직 한 봉도 못 받았으면 한 페이지만큼 건너뛰고 계속 찾는다.
+                if all_rows:
+                    break
+                since += exchange.parse_timeframe(timeframe) * 1000 * _MAX_CANDLES_PER_REQUEST
+                await asyncio.sleep(_REQUEST_INTERVAL)
+                continue
 
             for c in candles:
                 ts = c[0]
