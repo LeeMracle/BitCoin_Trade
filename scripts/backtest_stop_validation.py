@@ -271,8 +271,15 @@ def simulate(ctx: dict, days: list[int], p: P, hard: float, guards_on: bool, see
             "n_cand": n_cand, "n_skip": n_skip}
 
 
-def build_ctx(raw: dict, regime: dict) -> dict:
-    p = P()
+def build_ctx(raw: dict, regime: dict, allow=None, confirm_close: bool = False, p=None) -> dict:
+    """allow(sym, ts) -> bool : 그날 그 종목이 거래 대상이었는가 (시점 일치 종목군).
+
+    None 이면 raw 의 전 종목·전 일자를 대상으로 한다 (기존 동작). plan 20261103_1 이 추가.
+    confirm_close : True 면 시간봉 종가가 돌파선 위에서 마감한 다음 시간봉에 진입한다
+        (고가 터치 즉시 진입 대신 — 꼬리 매수 회피 후보 C).
+    p : 신호 필터 파라미터(P). None 이면 운영 config 기본값.
+    """
+    p = p or P()
     panel = build_panel(raw, regime, p)
     syms = sorted(raw)
     t0 = int(min(df.index.min() for df in raw.values()).timestamp() // 3600)
@@ -291,9 +298,14 @@ def build_ctx(raw: dict, regime: dict) -> dict:
     for i, sym in enumerate(syms):
         df = panel[sym]
         for ts, row in df[df["signal"]].iterrows():
+            if allow is not None and not allow(sym, ts):
+                continue
             d = int(ts.timestamp() // 3600) - t0
             px = float(row["entry_px"])
-            hit = np.where(Hh[i, d:d + 24] >= px)[0]
+            if confirm_close:
+                hit = np.where(Cc[i, d:d + 23] >= px)[0] + 1   # 마감 확인 → 다음 봉 진입
+            else:
+                hit = np.where(Hh[i, d:d + 24] >= px)[0]
             if len(hit) == 0:
                 miss += 1
                 continue
