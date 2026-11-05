@@ -26,6 +26,14 @@ log = logging.getLogger(__name__)
 
 _write_lock = threading.Lock()
 
+# ── ADR 20261105-1: ML 학습 오염 방지 블랙리스트 ─────────────────
+# EMA-TREND 전략이 실측 175건 승률 0.57% / 누적 net -22.64% 구조적 결함으로
+# 영구 비활성화됨. shadow 로그 자체는 분석 가치 보존 위해 유지하되,
+# 집계/학습 파이프라인(ml_shadow_to_features, ml_shadow_count, ml_weekly_review)
+# 은 이 상수를 참조하여 명시적 블랙리스트 제외. 신규 비활성 전략이 생기면
+# 이 집합에 추가 (allowlist 반전 금지 — 기존 전략들은 묵시 허용).
+EXCLUDED_SIGNAL_TYPES = frozenset({"EMA_TREND_breakout"})
+
 # ── 중복 로깅 억제 (2026-08-25) ───────────────────────────────
 # 봇은 돌파 감지마다 게이트를 호출하므로 같은 종목이 하루에 수백 번 기록된다
 # (실측 2026-05-14: 2종목이 855회씩 = 1,711행). 이 복제는 분석을 통째로 무의미하게

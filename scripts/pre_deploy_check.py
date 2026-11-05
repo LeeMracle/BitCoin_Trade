@@ -2007,40 +2007,189 @@ def check_consec_loss_floor_consistency() -> None:
 # ═══════════════════════════════════════════════════════════════════
 
 def check_deploy_post_check_remote_cron() -> None:
-    """deploy_to_aws.sh에 사후 SSH 실측 검증(BitCoin_Trade cron ≥ 8) 라인이 있는지.
+    """deploy_to_aws.sh 사후 SSH 실측 게이트 — timer 기반이어야 하고, cron 기반이면 회귀.
 
-    배경 (lessons #36, 2026-08-01):
-        Stock_Trade deploy_aws.sh가 crontab을 파일 원자 갱신 방식으로 통째 덮어써서
-        BitCoin_Trade cron 8개 전면 소실. 로컬 정적 검사(check_btc_cron_count_baseline)는
-        PASS였음 — 스크립트 소스는 정상. 배포 성공 = 서버 반영 확인까지.
-        deploy_to_aws.sh 마지막에 ssh "crontab -l | grep -c BitCoin_Trade" 실측 게이트 필수.
+    배경 (lessons #36-08, #44, #53):
+        - #36-08 (2026-08-01): Stock_Trade deploy_aws.sh가 crontab을 파일 원자 교체로
+          덮어써 BitCoin_Trade cron 8개 소실. 당시 대응으로 사후 실측 게이트를 추가
+          ("crontab -l | grep -c BitCoin_Trade" + -lt baseline + exit 1).
+        - #44 (2026-08-22): 스케줄 작업 9개를 crontab → systemd timer로 전면 이전.
+          deploy_to_aws.sh의 사후 게이트도 BTC_REMOTE_TIMERS(systemctl list-timers) 기반
+          + -lt 9 + exit 1로 전환됨.
+        - #53 (2026-11-05): 이 룰이 "crontab -l + grep BitCoin_Trade 라인 존재"만
+          검사했기에, deploy_to_aws.sh:146의 **잔재 경고용 WARN 라인** (timer와 중복
+          방지 목적)을 보고 PASS였다. 실질 검증은 0. 사문화된 룰이 통과 상태를
+          유지시켜 동일 사문화가 restore_cron.sh·운영 체크리스트에 번졌다.
+
+    현행 규칙 (반전 후):
+        1. 사후 게이트는 **timer 기반**이어야 한다
+           — BTC_REMOTE_TIMERS 또는 "bata-" + systemctl list-timers 패턴.
+           baseline 비교(-lt 9) + exit 1 가드 필수.
+        2. **cron baseline 게이트 금지**: deploy_to_aws.sh 비주석 라인에서
+           "grep -c BitCoin_Trade" + ("-lt" 숫자) 조합이 같은 라인·근접 라인에
+           있으면 lessons #44 회귀 (ERROR).
+           단, "crontab 잔재 경고용"(-ne 0 + WARN 안내)은 예외.
     """
     d_path = PROJECT_ROOT / "scripts" / "deploy_to_aws.sh"
     if not d_path.exists():
         return
     txt = d_path.read_text(encoding="utf-8")
-    # 사후 실측 라인: 한 줄 안에 'crontab -l' + 'grep -c BitCoin_Trade' 동시 포함되어야 함
-    # (전체 파일 존재만으로는 주석·PROJECT_DIR 등에 문자열이 흩어져 있어 방어 불가)
-    line_matched = False
-    for raw_line in txt.splitlines():
-        # 주석 라인은 실측 라인이 아님
-        if raw_line.lstrip().startswith("#"):
-            continue
-        if "crontab -l" in raw_line and "grep -c BitCoin_Trade" in raw_line:
-            line_matched = True
-            break
-    # 사후 게이트 exit 1 분기도 함께 존재하는지 확인 (검증만 하고 exit 안 하면 무의미)
-    # lessons #38 (2026-08-01): 아침 브리핑 신설로 baseline 8→9 상향 — 정규식은 8 이상 정수 허용
-    has_exit_guard = re.search(
-        r'if\s+\[\s+"\$[A-Z_]+"\s+-lt\s+\d+\s+\];\s+then[\s\S]{0,300}?exit\s+1',
+    lines = txt.splitlines()
+
+    # ── (A) timer 기반 사후 게이트 존재 확인 ──────────────────────────
+    #     BTC_REMOTE_TIMERS 또는 "bata-" + list-timers 라인이 있고,
+    #     그 값에 대한 -lt N + exit 1 가드가 있어야 한다.
+    timer_measure_present = any(
+        (("BTC_REMOTE_TIMERS" in ln) or ("systemctl list-timers" in ln and "bata-" in ln))
+        and not ln.lstrip().startswith("#")
+        for ln in lines
+    )
+    timer_gate_present = re.search(
+        r'if\s+\[\s+"\$BTC_REMOTE_TIMERS"\s+-lt\s+\d+\s+\];\s+then[\s\S]{0,300}?exit\s+1',
         txt,
     ) is not None
-    if not (line_matched and has_exit_guard):
+
+    # ── (B) cron baseline 게이트 금지 (lessons #44 회귀) ─────────────
+    #     "grep -c BitCoin_Trade" 라인 뒤 10줄 안에 "-lt <정수>" + "exit 1"이
+    #     나오면 cron 기반 baseline 게이트로 판단.
+    cron_baseline_gate_found = False
+    for i, ln in enumerate(lines):
+        if ln.lstrip().startswith("#"):
+            continue
+        if "grep -c BitCoin_Trade" not in ln and 'grep -c "BitCoin_Trade"' not in ln:
+            continue
+        window = "\n".join(lines[i : i + 12])
+        # 잔재 경고(-ne 0, WARN) 패턴은 예외
+        is_leftover_warn = ("-ne 0" in window) and ("WARN" in window or "잔재" in window)
+        if is_leftover_warn:
+            continue
+        # baseline 게이트 (-lt 숫자 + exit 1) 패턴이면 회귀
+        if re.search(r"-lt\s+\d+", window) and "exit 1" in window:
+            cron_baseline_gate_found = True
+            break
+
+    if not (timer_measure_present and timer_gate_present):
         errors.append(
-            "[lessons #36] deploy_to_aws.sh에 사후 SSH 실측 검증 게이트 부재 — "
-            f"실측라인={line_matched}, exit1가드={has_exit_guard}. "
-            "'ssh ... crontab -l | grep -c BitCoin_Trade' + baseline 미만 시 exit 1 게이트 필수 "
-            "(로컬 정적 검사만으로는 다중 프로젝트 crontab 덮어쓰기 방어 불가, 2026-08-01 소실 재발)"
+            "[lessons #44] deploy_to_aws.sh 사후 timer 실측 게이트 부재 — "
+            f"timer계측={timer_measure_present}, timer가드={timer_gate_present}. "
+            "systemd timer baseline(9) 검증 + exit 1 필수 "
+            "(crontab 라인 카운트는 #44 이전 사문화 기준)"
+        )
+    if cron_baseline_gate_found:
+        errors.append(
+            "[lessons #53] deploy_to_aws.sh에 cron baseline 게이트 회귀 — "
+            "'grep -c BitCoin_Trade' + '-lt N' + 'exit 1' 조합은 #44 timer 이전 후 사문화. "
+            "timer 기반(BTC_REMOTE_TIMERS)으로만 baseline 가드하라"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 검증: 사문화된 cron 감시 지점이 운영 지침·스크립트에 남지 않았는가
+# (lessons #53, 2026-11-05)
+# ═══════════════════════════════════════════════════════════════════
+
+# lessons #44 이전의 cron 감시 기준을 **역사적 기록**으로 보관해야 하는 파일들.
+# 이 파일들은 과거 사고의 증언이므로 cron 문구를 그대로 유지한다 (재현성 보존).
+# 그 밖의 운영 체크리스트에서는 cron 기준을 사용하면 안 된다 — subagent·operator가
+# 사문화된 기준으로 판정해 false alarm을 만들기 때문.
+_SCHEDULER_WATCHPOINT_ALLOWLIST = {
+    # 사고 발생·대응 당시의 기록 (lessons 20260524_2, 20260801_1, 20260801_3, 20260822_5)
+    "docs/lessons/20260524_2_state_qty_zero_and_cron_loss.md",
+    "docs/lessons/20260801_1_cron_baseline_relapse.md",
+    "docs/lessons/20260801_3_morning_briefing_missing.md",
+    "docs/lessons/20260822_5_cron_wipe_detector_in_cron.md",
+    # 본 lessons 자체도 "사문화된 cron 기준"을 예시로 서술하므로 예외
+    "docs/lessons/20261105_1_stale_cron_watchpoints_false_alarm.md",
+    # lessons INDEX는 각 사고의 요약을 원문 그대로 보존하므로 예외
+    "docs/lessons/INDEX.md",
+}
+
+
+def check_scheduler_watchpoint_not_cron() -> None:
+    """docs/ 하위 운영 체크리스트에서 "crontab + baseline 숫자" 공존 라인을 금지.
+
+    배경 (lessons #53, 2026-11-05):
+        lessons #44로 스케줄 작업 9개를 crontab → systemd timer 이전 완료했는데,
+        사문화된 체크리스트("crontab -l | grep -c BitCoin_Trade ≥ 9 확인")가
+        docs/lessons/.../morning_briefing_missing.md 등에 남아있어 operator가
+        이를 보고 timer가 정상임에도 cron=0을 "baseline 미달"로 판정 → P1 false alarm.
+        감시 기준 리팩터링은 **구 감시 지점의 사문화 처리**가 동반되어야 한다.
+
+    검증:
+        docs/ 하위 .md 파일(allowlist 제외)에서 같은 라인에 아래 조건이 동시 존재 시 ERROR:
+          - "crontab -l" 또는 "crontab에"
+          - "grep" (BitCoin_Trade 매칭)
+          - "baseline" 또는 "≥ 9" 또는 ">= 9" 또는 "라인 카운트"
+    """
+    docs_dir = PROJECT_ROOT / "docs"
+    if not docs_dir.exists():
+        return
+
+    cron_re = re.compile(r"crontab\s+(-l|에)")
+    grep_re = re.compile(r"grep[^|]*BitCoin_Trade")
+    baseline_tokens = ("baseline", "≥ 9", ">= 9", "라인 카운트", "카운트 9")
+
+    offenders: list[str] = []
+    for md in docs_dir.rglob("*.md"):
+        rel = md.relative_to(PROJECT_ROOT).as_posix()
+        if rel in _SCHEDULER_WATCHPOINT_ALLOWLIST:
+            continue
+        try:
+            txt = md.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        for line_no, ln in enumerate(txt.splitlines(), start=1):
+            if not cron_re.search(ln):
+                continue
+            if not grep_re.search(ln):
+                continue
+            if not any(tok in ln for tok in baseline_tokens):
+                continue
+            offenders.append(f"{rel}:{line_no}")
+            break  # 파일당 1건만 보고
+
+    if offenders:
+        errors.append(
+            "[lessons #53] 사문화된 cron 기반 스케줄 감시 지침 — "
+            f"위치: {offenders}. lessons #44로 crontab → systemd timer 이전 완료됨. "
+            "운영 지침은 'systemctl list-timers | grep -c bata-' 기준으로 갱신하라 "
+            "(또는 역사적 기록이면 allowlist에 추가)"
+        )
+
+
+def check_restore_cron_deprecated() -> None:
+    """scripts/restore_cron.sh — lessons #44 timer 이전 후 사문화, DEPRECATED 가드 필수.
+
+    배경 (lessons #53, 2026-11-05):
+        lessons #36-08 당시(2026-08-01) 긴급 복구 도구로 작성된 restore_cron.sh가
+        #44 timer 이전 후에도 그대로 남아 있었다. 2026-11-05 false alarm 대응 중에
+        무심코 --apply를 실행해 timer 9개와 **중복되는 cron 9줄을 등록**하는
+        사고를 만들 뻔했다(2분 안에 롤백). 완전 삭제하지 않는 이유는 과거 복구
+        기법의 역사적 가치 — 대신 **실행 즉시 거부**하는 DEPRECATED 가드가 있어야 한다.
+
+    검증:
+        scripts/restore_cron.sh 존재 시, 파일 상단 20줄 안에 "DEPRECATED" 또는
+        "사문화" 키워드가 없으면 ERROR. 실행 가드(exit 1 + install_timers.sh 안내)도
+        함께 있어야 ERROR 회피.
+    """
+    s_path = PROJECT_ROOT / "scripts" / "restore_cron.sh"
+    if not s_path.exists():
+        return  # 삭제돼 있으면 통과 (사문화 도구가 아예 사라진 것이므로)
+    txt = s_path.read_text(encoding="utf-8")
+    head = "\n".join(txt.splitlines()[:25])
+
+    has_deprecated_marker = "DEPRECATED" in head or "사문화" in head
+    has_exit_guard = bool(
+        re.search(r"install_timers\.sh[\s\S]{0,200}?exit\s+1", txt)
+        or re.search(r"exit\s+1[\s\S]{0,200}?install_timers\.sh", txt)
+    )
+
+    if not (has_deprecated_marker and has_exit_guard):
+        errors.append(
+            "[lessons #53] scripts/restore_cron.sh에 DEPRECATED 가드 부재 — "
+            f"상단마커={has_deprecated_marker}, 실행차단={has_exit_guard}. "
+            "lessons #44 timer 이전 후 사용 금지 — 실행 시 install_timers.sh 안내 후 exit 1 필요 "
+            "(2026-11-05 false alarm RCA 중 중복 등록 사고 재발 방지)"
         )
 
 
@@ -3755,6 +3904,316 @@ def check_ml_shadow_count_basis() -> None:
                 break
 
 
+# ═══════════════════════════════════════════════════════════════════
+# 검증: EMA-TREND 알림 throttle wrapper 경유 (lessons #14 + #30 계열)
+# ref: docs/lessons/20261105_2_ema_trend_dry_alert_chop.md
+# ═══════════════════════════════════════════════════════════════════
+
+def check_ema_trend_alert_throttle() -> None:
+    """realtime_monitor._check_ema_trend 의 알림 호출이 throttle wrapper 를 경유하는지 AST 검증.
+
+    배경 (lessons #46, 2026-11-05):
+        EMA-TREND DRY-RUN 전략에서 가격이 EMA50에 걸치는 chop 상황이 발생하면
+        진입→즉시 청산이 수초 단위로 반복된다. 2026-11-05 09:03~09:09 KST 사이
+        6분 동안 BTC/KRW가 EMA50=108,492,115에 걸려 23쌍(진입+청산)이
+        텔레그램으로 폭주 발사됨 (평균 -0.07%, DRY라 손실은 0). 09:57 KST에
+        1쌍 재발하여 알림 피로가 누적됨.
+
+    설계:
+        _check_ema_trend 안의 알림은 `await self._ema_trend_send_throttled(...)` 를
+        거쳐야 하며, 날것 `await send(...)` 를 호출해서는 안 된다.
+        wrapper 는 EMA_TREND_DRY_RUN=True 일 때만 5분 쿨다운 창 안 중복 알림을
+        압축한다. LIVE 체결 알림은 손실 금지라 압축에서 제외된다 (lessons #3 호환).
+
+    검증규칙 (AST 기반 — 주석/문자열 포함 검사에 속지 않음, 메타교훈 #45/#49):
+        1) `_ema_trend_send_throttled` 메서드 정의 존재.
+        2) `_check_ema_trend` 메서드 본문에 날것 `send(...)` 호출 없음
+           (identifier 로 `send` 인 Call 노드 금지).
+        3) `_check_ema_trend` 본문에 `self._ema_trend_send_throttled(...)` 호출
+           ≥ 2 개 존재 (진입 1 + 청산 1 쌍).
+    """
+    p = PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py"
+    if not p.exists():
+        errors.append("[lessons #46] realtime_monitor.py 없음 — EMA-TREND throttle 검증 불가")
+        return
+
+    try:
+        tree = ast.parse(p.read_text(encoding="utf-8"))
+    except SyntaxError as e:
+        errors.append(f"[lessons #46] realtime_monitor.py 파싱 실패: {e}")
+        return
+
+    wrapper_fn = None
+    check_fn = None
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.name == "_ema_trend_send_throttled":
+                wrapper_fn = node
+            elif node.name == "_check_ema_trend":
+                check_fn = node
+
+    # 1) wrapper 정의 존재
+    if wrapper_fn is None:
+        errors.append(
+            "[lessons #46] realtime_monitor 에 _ema_trend_send_throttled 정의 없음 — "
+            "EMA-TREND chop 폭주 방지 wrapper 미구현 (2026-11-05 23건/6분 재발 위험)"
+        )
+        return
+
+    # 2) _check_ema_trend 존재
+    if check_fn is None:
+        errors.append(
+            "[lessons #46] realtime_monitor 에 _check_ema_trend 정의 없음 — "
+            "함수명 변경 시 이 검증규칙도 함께 갱신 필요"
+        )
+        return
+
+    # 3) 본문에 날것 send(...) 호출 금지
+    raw_send_lines: list[int] = []
+    for sub in ast.walk(check_fn):
+        if isinstance(sub, ast.Call):
+            fn = sub.func
+            # `send(...)` identifier 호출 (bare name)
+            if isinstance(fn, ast.Name) and fn.id == "send":
+                raw_send_lines.append(sub.lineno)
+    if raw_send_lines:
+        errors.append(
+            f"[lessons #46] _check_ema_trend 안에서 날것 `send(...)` 호출 발견 "
+            f"(line {raw_send_lines}) — _ema_trend_send_throttled 를 경유해야 함. "
+            "wrapper 를 거치지 않으면 DRY 모드 chop 때 5분에 20건↑ 알림 폭주 재발"
+        )
+
+    # 4) wrapper 호출 ≥ 2 개 (진입+청산 쌍)
+    wrapper_calls = 0
+    for sub in ast.walk(check_fn):
+        if isinstance(sub, ast.Call) and isinstance(sub.func, ast.Attribute):
+            if sub.func.attr == "_ema_trend_send_throttled":
+                wrapper_calls += 1
+    if wrapper_calls < 2:
+        errors.append(
+            f"[lessons #46] _check_ema_trend 의 _ema_trend_send_throttled 호출 수 "
+            f"= {wrapper_calls} (기대 ≥ 2: 진입 1 + 청산 1). "
+            "일부 경로 누락 시 lessons #6 (모든 경로 커버) 위배"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 검증: EMA-TREND 영구 비활성화 (ADR 20261105-1)
+# ref: docs/decisions/20261105_1_ema_trend_disable.md
+# ═══════════════════════════════════════════════════════════════════
+
+def check_ema_trend_disabled() -> None:
+    """ADR 20261105-1 — EMA_TREND_ENABLED=False + 가드 존재 AST 검증.
+
+    배경:
+        EMA-TREND DRY-RUN 전략이 175건 실측에서 승률 0.57%, 누적 net -22.64%,
+        trail stop 작동 0건으로 구조적 결함 확정 (lessons #1 정면 재현).
+        플래그가 True로 되돌아가거나 가드가 삭제되면 재발 즉시.
+
+    검증규칙 (AST 기반, 메타교훈 #45/#49):
+        1) `services/execution/config.py::EMA_TREND_ENABLED == False` (상수 정의).
+        2) `services/execution/realtime_monitor.py::_check_ema_trend` 본문 최상단
+           (첫 3개 statement 내)에 `if not EMA_TREND_ENABLED: return` 가드 존재.
+    """
+    # 1) config.py 상수 검증
+    cfg = PROJECT_ROOT / "services" / "execution" / "config.py"
+    if not cfg.exists():
+        errors.append("[ADR 20261105-1] config.py 없음 — EMA_TREND 비활성화 검증 불가")
+        return
+    try:
+        cfg_tree = ast.parse(cfg.read_text(encoding="utf-8"))
+    except SyntaxError as e:
+        errors.append(f"[ADR 20261105-1] config.py 파싱 실패: {e}")
+        return
+
+    ema_trend_enabled_value = None
+    for node in cfg_tree.body:
+        if isinstance(node, ast.Assign):
+            for tgt in node.targets:
+                if isinstance(tgt, ast.Name) and tgt.id == "EMA_TREND_ENABLED":
+                    if isinstance(node.value, ast.Constant):
+                        ema_trend_enabled_value = node.value.value
+
+    if ema_trend_enabled_value is None:
+        errors.append(
+            "[ADR 20261105-1] config.py 에 EMA_TREND_ENABLED 상수 정의 없음 — "
+            "폐기 플래그 누락"
+        )
+        return
+    if ema_trend_enabled_value is not False:
+        errors.append(
+            f"[ADR 20261105-1] EMA_TREND_ENABLED = {ema_trend_enabled_value} "
+            "(기대: False). ADR 재검토 없이 되돌리면 안 됨 — "
+            "175건 실측 승률 0.57% / 누적 -22.64%"
+        )
+
+    # 2) realtime_monitor.py 가드 검증
+    rtm = PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py"
+    if not rtm.exists():
+        errors.append("[ADR 20261105-1] realtime_monitor.py 없음 — 가드 검증 불가")
+        return
+    try:
+        rtm_tree = ast.parse(rtm.read_text(encoding="utf-8"))
+    except SyntaxError as e:
+        errors.append(f"[ADR 20261105-1] realtime_monitor.py 파싱 실패: {e}")
+        return
+
+    check_fn = None
+    for node in ast.walk(rtm_tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.name == "_check_ema_trend":
+                check_fn = node
+                break
+
+    if check_fn is None:
+        errors.append(
+            "[ADR 20261105-1] _check_ema_trend 함수 없음 — "
+            "함수명 변경 시 본 검증규칙도 갱신 필요"
+        )
+        return
+
+    # 첫 3개 statement 안에서 `if not EMA_TREND_ENABLED: return` 패턴 탐색
+    guard_found = False
+    for stmt in check_fn.body[:3]:
+        if isinstance(stmt, ast.If):
+            test = stmt.test
+            # `not EMA_TREND_ENABLED` 패턴
+            if isinstance(test, ast.UnaryOp) and isinstance(test.op, ast.Not):
+                if isinstance(test.operand, ast.Name) and test.operand.id == "EMA_TREND_ENABLED":
+                    # body 에 Return 존재
+                    for sub in stmt.body:
+                        if isinstance(sub, ast.Return):
+                            guard_found = True
+                            break
+        if guard_found:
+            break
+
+    if not guard_found:
+        errors.append(
+            "[ADR 20261105-1] _check_ema_trend 최상단(첫 3 statement)에 "
+            "`if not EMA_TREND_ENABLED: return` 가드 없음. "
+            "플래그를 우회해 신호가 발사될 위험 (lessons #6 모든 경로 커버 위배)"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 검증: ML shadow 학습 데이터에서 EMA_TREND_breakout 제외 (ADR 20261105-1)
+# ═══════════════════════════════════════════════════════════════════
+
+def check_ml_shadow_ema_trend_exclude() -> None:
+    """ML shadow 집계/학습 파이프라인이 EXCLUDED_SIGNAL_TYPES 를 참조하는지 AST 검증.
+
+    배경 (ADR 20261105-1):
+        EMA-TREND 폐기 후, 174건 과거 shadow 로그 + 향후 로그가 ML 재학습 시
+        음수 패턴으로 과적합될 위험. shadow log 자체는 분석 가치 보존 위해 유지,
+        집계/학습 파이프라인에서만 블랙리스트 제외.
+
+    대상 파일:
+        - services/ml/shadow.py (EXCLUDED_SIGNAL_TYPES 상수 정의)
+        - scripts/ml_shadow_to_features.py (학습 변환)
+        - scripts/ml_shadow_count.py (독립표본 계수)
+        - scripts/ml_weekly_review.py (주간 리뷰)
+
+    검증규칙 (AST 기반, 메타교훈 #45/#49 — 주석 포함 검사 금지):
+        1) services/ml/shadow.py 에 EXCLUDED_SIGNAL_TYPES 상수 정의 존재
+           + "EMA_TREND_breakout" 문자열 포함.
+        2) 3개 스크립트(ml_shadow_to_features, ml_shadow_count, ml_weekly_review)
+           모두 EXCLUDED_SIGNAL_TYPES 를 ImportFrom 으로 로드.
+        3) 각 스크립트 본문에 EXCLUDED_SIGNAL_TYPES identifier 사용 (name 참조).
+    """
+    # 1) 상수 정의 + "EMA_TREND_breakout" 멤버 검증
+    shadow_mod = PROJECT_ROOT / "services" / "ml" / "shadow.py"
+    if not shadow_mod.exists():
+        errors.append("[ADR 20261105-1] services/ml/shadow.py 없음 — 블랙리스트 상수 검증 불가")
+        return
+    try:
+        shadow_tree = ast.parse(shadow_mod.read_text(encoding="utf-8"))
+    except SyntaxError as e:
+        errors.append(f"[ADR 20261105-1] shadow.py 파싱 실패: {e}")
+        return
+
+    excluded_const_node = None
+    for node in shadow_tree.body:
+        if isinstance(node, ast.Assign):
+            for tgt in node.targets:
+                if isinstance(tgt, ast.Name) and tgt.id == "EXCLUDED_SIGNAL_TYPES":
+                    excluded_const_node = node.value
+                    break
+        if excluded_const_node is not None:
+            break
+
+    if excluded_const_node is None:
+        errors.append(
+            "[ADR 20261105-1] services/ml/shadow.py 에 EXCLUDED_SIGNAL_TYPES 상수 없음 — "
+            "ML 학습 블랙리스트 미구현"
+        )
+        return
+
+    # frozenset({"EMA_TREND_breakout", ...}) 또는 Set literal {"..."} 에서
+    # "EMA_TREND_breakout" 문자열 상수 노드 추출
+    excluded_members: list[str] = []
+    for sub in ast.walk(excluded_const_node):
+        if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+            excluded_members.append(sub.value)
+
+    if "EMA_TREND_breakout" not in excluded_members:
+        errors.append(
+            f"[ADR 20261105-1] EXCLUDED_SIGNAL_TYPES 에 'EMA_TREND_breakout' 없음 "
+            f"(현재 멤버: {excluded_members}) — 폐기 전략이 ML 학습에 유입됨"
+        )
+
+    # 2) + 3) 3개 스크립트 import + 사용 검증
+    targets = [
+        ("scripts/ml_shadow_to_features.py", "ml_shadow_to_features"),
+        ("scripts/ml_shadow_count.py", "ml_shadow_count"),
+        ("scripts/ml_weekly_review.py", "ml_weekly_review"),
+    ]
+    for rel_path, label in targets:
+        p = PROJECT_ROOT / rel_path
+        if not p.exists():
+            errors.append(f"[ADR 20261105-1] {rel_path} 없음 — 블랙리스트 필터 검증 불가")
+            continue
+        try:
+            tree = ast.parse(p.read_text(encoding="utf-8"))
+        except SyntaxError as e:
+            errors.append(f"[ADR 20261105-1] {rel_path} 파싱 실패: {e}")
+            continue
+
+        # ImportFrom: `from services.ml.shadow import ... EXCLUDED_SIGNAL_TYPES ...`
+        imported = False
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                mod = node.module or ""
+                if mod == "services.ml.shadow":
+                    for alias in node.names:
+                        if alias.name == "EXCLUDED_SIGNAL_TYPES":
+                            imported = True
+                            break
+            if imported:
+                break
+
+        if not imported:
+            errors.append(
+                f"[ADR 20261105-1] {rel_path} 가 EXCLUDED_SIGNAL_TYPES 를 "
+                f"services.ml.shadow 에서 import 하지 않음 — 폐기 전략 필터 미적용"
+            )
+            continue
+
+        # Name 사용 검증 (import 외에서 실제 참조)
+        usage_count = 0
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name) and node.id == "EXCLUDED_SIGNAL_TYPES":
+                usage_count += 1
+
+        # import 1회 + 최소 1회 이상 참조 (총 ≥ 2) 기대
+        if usage_count < 2:
+            errors.append(
+                f"[ADR 20261105-1] {rel_path} 에서 EXCLUDED_SIGNAL_TYPES 참조 수 "
+                f"= {usage_count} (기대 ≥ 2: import + 필터 사용). "
+                "import만 하고 사용 안 하면 사문화"
+            )
+
+
 def main() -> None:
     print("=" * 50)
     print("배포 전 검증 (pre-deploy check)")
@@ -3815,6 +4274,8 @@ def main() -> None:
     check_hard_stop_claude_md_sync()
     check_hard_floor_grandfathered()
     check_deploy_post_check_remote_cron()
+    check_scheduler_watchpoint_not_cron()
+    check_restore_cron_deprecated()
     check_regime_notify_flag()
     check_morning_briefing_registered()
     check_telegram_send_status_verified()
@@ -3836,6 +4297,9 @@ def main() -> None:
     check_tick_lag_instrumented()
     check_ws_freshness_guard()
     check_consec_cooldown_releases()
+    check_ema_trend_alert_throttle()
+    check_ema_trend_disabled()
+    check_ml_shadow_ema_trend_exclude()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")

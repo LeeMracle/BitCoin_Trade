@@ -1,0 +1,1591 @@
+{
+  "position": {
+    "entry_date": "2026-11-05 01:42",
+    "entry_price": 108500000.0,
+    "highest": 108800000.0
+  },
+  "level": {
+    "ema50": 108492115.48420328,
+    "ema50_prev": 108492242.64682382,
+    "ema200": 104698451.91454287,
+    "close": 108489000.0,
+    "prev_close": 108327000.0
+  },
+  "history": [
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-10-28 08:36",
+      "entry_price": 109547000.0,
+      "exit_date": "2026-10-28 08:36",
+      "exit_price": 109525000.0,
+      "return_pct": -0.02,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-10-28 08:36",
+      "entry_price": 109560000.0,
+      "exit_date": "2026-10-28 08:36",
+      "exit_price": 109525000.0,
+      "return_pct": -0.03,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-10-28 08:36",
+      "entry_price": 109673000.0,
+      "exit_date": "2026-10-28 08:36",
+      "exit_price": 109546000.0,
+      "return_pct": -0.12,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-10-28 08:36",
+      "entry_price": 109561000.0,
+      "exit_date": "2026-10-28 08:36",
+      "exit_price": 109546000.0,
+      "return_pct": -0.01,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-10-28 08:36",
+      "entry_price": 109569000.0,
+      "exit_date": "2026-10-28 08:36",
+      "exit_price": 109525000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-10-28 08:40",
+      "entry_price": 109547000.0,
+      "exit_date": "2026-10-28 08:40",
+      "exit_price": 109429000.0,
+      "return_pct": -0.11,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-10-28 08:40",
+      "entry_price": 109548000.0,
+      "exit_date": "2026-10-28 08:40",
+      "exit_price": 109501000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-10-28 08:40",
+      "entry_price": 109548000.0,
+      "exit_date": "2026-10-28 08:41",
+      "exit_price": 109503000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-10-28 08:41",
+      "entry_price": 109566000.0,
+      "exit_date": "2026-10-28 08:41",
+      "exit_price": 109503000.0,
+      "return_pct": -0.06,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-10-28 08:41",
+      "entry_price": 109566000.0,
+      "exit_date": "2026-10-28 08:41",
+      "exit_price": 109503000.0,
+      "return_pct": -0.06,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-10-28 20:01",
+      "entry_price": 109548000.0,
+      "exit_date": "2026-10-28 20:01",
+      "exit_price": 109535000.0,
+      "return_pct": -0.01,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-10-28 20:01",
+      "entry_price": 109599000.0,
+      "exit_date": "2026-10-28 20:01",
+      "exit_price": 109526000.0,
+      "return_pct": -0.07,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-10-28 20:01",
+      "entry_price": 109585000.0,
+      "exit_date": "2026-10-28 20:01",
+      "exit_price": 109546000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-10-28 20:02",
+      "entry_price": 109603000.0,
+      "exit_date": "2026-10-28 20:02",
+      "exit_price": 109532000.0,
+      "return_pct": -0.06,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-10-28 20:02",
+      "entry_price": 109604000.0,
+      "exit_date": "2026-10-28 20:02",
+      "exit_price": 109541000.0,
+      "return_pct": -0.06,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-10-28 20:02",
+      "entry_price": 109610000.0,
+      "exit_date": "2026-10-28 20:02",
+      "exit_price": 109541000.0,
+      "return_pct": -0.06,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-10-28 20:02",
+      "entry_price": 109610000.0,
+      "exit_date": "2026-10-28 20:02",
+      "exit_price": 109541000.0,
+      "return_pct": -0.06,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-10-28 20:02",
+      "entry_price": 109556000.0,
+      "exit_date": "2026-10-28 20:02",
+      "exit_price": 109541000.0,
+      "return_pct": -0.01,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-10-28 20:02",
+      "entry_price": 109556000.0,
+      "exit_date": "2026-10-28 20:03",
+      "exit_price": 109541000.0,
+      "return_pct": -0.01,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-10-28 20:03",
+      "entry_price": 109597000.0,
+      "exit_date": "2026-10-28 20:03",
+      "exit_price": 109536000.0,
+      "return_pct": -0.06,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-10-28 20:03",
+      "entry_price": 109597000.0,
+      "exit_date": "2026-10-28 20:03",
+      "exit_price": 109536000.0,
+      "return_pct": -0.06,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-10-28 20:03",
+      "entry_price": 109556000.0,
+      "exit_date": "2026-10-28 20:03",
+      "exit_price": 109539000.0,
+      "return_pct": -0.02,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-10-28 20:04",
+      "entry_price": 109576000.0,
+      "exit_date": "2026-10-28 20:04",
+      "exit_price": 109536000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-10-28 20:04",
+      "entry_price": 109575000.0,
+      "exit_date": "2026-10-28 20:04",
+      "exit_price": 109536000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-10-28 20:04",
+      "entry_price": 109574000.0,
+      "exit_date": "2026-10-28 20:04",
+      "exit_price": 109536000.0,
+      "return_pct": -0.03,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-10-29 15:46",
+      "entry_price": 109575000.0,
+      "exit_date": "2026-10-29 15:46",
+      "exit_price": 109563000.0,
+      "return_pct": -0.01,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:10",
+      "entry_price": 108335000.0,
+      "exit_date": "2026-11-04 15:10",
+      "exit_price": 108294000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:10",
+      "entry_price": 108336000.0,
+      "exit_date": "2026-11-04 15:10",
+      "exit_price": 108295000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:10",
+      "entry_price": 108337000.0,
+      "exit_date": "2026-11-04 15:10",
+      "exit_price": 108333000.0,
+      "return_pct": -0.0,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:13",
+      "entry_price": 108335000.0,
+      "exit_date": "2026-11-04 15:15",
+      "exit_price": 108334000.0,
+      "return_pct": -0.0,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:15",
+      "entry_price": 108354000.0,
+      "exit_date": "2026-11-04 15:15",
+      "exit_price": 108323000.0,
+      "return_pct": -0.03,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:15",
+      "entry_price": 108347000.0,
+      "exit_date": "2026-11-04 15:15",
+      "exit_price": 108325000.0,
+      "return_pct": -0.02,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:15",
+      "entry_price": 108352000.0,
+      "exit_date": "2026-11-04 15:19",
+      "exit_price": 108331000.0,
+      "return_pct": -0.02,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:19",
+      "entry_price": 108365000.0,
+      "exit_date": "2026-11-04 15:19",
+      "exit_price": 108330000.0,
+      "return_pct": -0.03,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:19",
+      "entry_price": 108335000.0,
+      "exit_date": "2026-11-04 15:19",
+      "exit_price": 108334000.0,
+      "return_pct": -0.0,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:19",
+      "entry_price": 108409000.0,
+      "exit_date": "2026-11-04 15:19",
+      "exit_price": 108303000.0,
+      "return_pct": -0.1,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:19",
+      "entry_price": 108360000.0,
+      "exit_date": "2026-11-04 15:19",
+      "exit_price": 108303000.0,
+      "return_pct": -0.05,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:21",
+      "entry_price": 108350000.0,
+      "exit_date": "2026-11-04 15:21",
+      "exit_price": 108331000.0,
+      "return_pct": -0.02,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:21",
+      "entry_price": 108361000.0,
+      "exit_date": "2026-11-04 15:22",
+      "exit_price": 108334000.0,
+      "return_pct": -0.02,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:22",
+      "entry_price": 108368000.0,
+      "exit_date": "2026-11-04 15:22",
+      "exit_price": 108300000.0,
+      "return_pct": -0.06,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:22",
+      "entry_price": 108340000.0,
+      "exit_date": "2026-11-04 15:22",
+      "exit_price": 108330000.0,
+      "return_pct": -0.01,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:22",
+      "entry_price": 108340000.0,
+      "exit_date": "2026-11-04 15:22",
+      "exit_price": 108300000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:22",
+      "entry_price": 108340000.0,
+      "exit_date": "2026-11-04 15:22",
+      "exit_price": 108300000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:22",
+      "entry_price": 108340000.0,
+      "exit_date": "2026-11-04 15:23",
+      "exit_price": 108300000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:23",
+      "entry_price": 108340000.0,
+      "exit_date": "2026-11-04 15:23",
+      "exit_price": 108301000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:23",
+      "entry_price": 108364000.0,
+      "exit_date": "2026-11-04 15:24",
+      "exit_price": 108325000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:24",
+      "entry_price": 108341000.0,
+      "exit_date": "2026-11-04 15:24",
+      "exit_price": 108303000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:24",
+      "entry_price": 108335000.0,
+      "exit_date": "2026-11-04 15:24",
+      "exit_price": 108303000.0,
+      "return_pct": -0.03,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:24",
+      "entry_price": 108335000.0,
+      "exit_date": "2026-11-04 15:24",
+      "exit_price": 108303000.0,
+      "return_pct": -0.03,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:33",
+      "entry_price": 108335000.0,
+      "exit_date": "2026-11-04 15:34",
+      "exit_price": 108298000.0,
+      "return_pct": -0.03,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:34",
+      "entry_price": 108393000.0,
+      "exit_date": "2026-11-04 15:34",
+      "exit_price": 108279000.0,
+      "return_pct": -0.11,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:34",
+      "entry_price": 108341000.0,
+      "exit_date": "2026-11-04 15:35",
+      "exit_price": 108312000.0,
+      "return_pct": -0.03,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:35",
+      "entry_price": 108358000.0,
+      "exit_date": "2026-11-04 15:35",
+      "exit_price": 108312000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:36",
+      "entry_price": 108352000.0,
+      "exit_date": "2026-11-04 15:36",
+      "exit_price": 108312000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:36",
+      "entry_price": 108371000.0,
+      "exit_date": "2026-11-04 15:36",
+      "exit_price": 108308000.0,
+      "return_pct": -0.06,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:36",
+      "entry_price": 108380000.0,
+      "exit_date": "2026-11-04 15:39",
+      "exit_price": 108333000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 15:39",
+      "entry_price": 108346000.0,
+      "exit_date": "2026-11-04 15:39",
+      "exit_price": 108240000.0,
+      "return_pct": -0.1,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 16:39",
+      "entry_price": 108337000.0,
+      "exit_date": "2026-11-04 16:40",
+      "exit_price": 108334000.0,
+      "return_pct": -0.0,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 16:40",
+      "entry_price": 108337000.0,
+      "exit_date": "2026-11-04 16:40",
+      "exit_price": 108334000.0,
+      "return_pct": -0.0,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 16:40",
+      "entry_price": 108337000.0,
+      "exit_date": "2026-11-04 16:40",
+      "exit_price": 108334000.0,
+      "return_pct": -0.0,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 16:40",
+      "entry_price": 108337000.0,
+      "exit_date": "2026-11-04 16:41",
+      "exit_price": 108334000.0,
+      "return_pct": -0.0,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 16:42",
+      "entry_price": 108335000.0,
+      "exit_date": "2026-11-04 16:42",
+      "exit_price": 108244000.0,
+      "return_pct": -0.08,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 16:42",
+      "entry_price": 108349000.0,
+      "exit_date": "2026-11-04 16:42",
+      "exit_price": 108246000.0,
+      "return_pct": -0.1,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 16:42",
+      "entry_price": 108350000.0,
+      "exit_date": "2026-11-04 16:42",
+      "exit_price": 108289000.0,
+      "return_pct": -0.06,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 16:42",
+      "entry_price": 108350000.0,
+      "exit_date": "2026-11-04 16:42",
+      "exit_price": 108260000.0,
+      "return_pct": -0.08,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 16:42",
+      "entry_price": 108350000.0,
+      "exit_date": "2026-11-04 16:42",
+      "exit_price": 108268000.0,
+      "return_pct": -0.08,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 16:42",
+      "entry_price": 108347000.0,
+      "exit_date": "2026-11-04 16:43",
+      "exit_price": 108292000.0,
+      "return_pct": -0.05,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 16:43",
+      "entry_price": 108337000.0,
+      "exit_date": "2026-11-04 16:43",
+      "exit_price": 108259000.0,
+      "return_pct": -0.07,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 16:43",
+      "entry_price": 108338000.0,
+      "exit_date": "2026-11-04 16:43",
+      "exit_price": 108259000.0,
+      "return_pct": -0.07,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 18:07",
+      "entry_price": 108339000.0,
+      "exit_date": "2026-11-04 18:07",
+      "exit_price": 108324000.0,
+      "return_pct": -0.01,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 18:07",
+      "entry_price": 108343000.0,
+      "exit_date": "2026-11-04 18:09",
+      "exit_price": 108324000.0,
+      "return_pct": -0.02,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 18:09",
+      "entry_price": 108341000.0,
+      "exit_date": "2026-11-04 18:09",
+      "exit_price": 108194000.0,
+      "return_pct": -0.14,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 18:14",
+      "entry_price": 108336000.0,
+      "exit_date": "2026-11-04 18:14",
+      "exit_price": 108330000.0,
+      "return_pct": -0.01,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 18:14",
+      "entry_price": 108335000.0,
+      "exit_date": "2026-11-04 18:14",
+      "exit_price": 108330000.0,
+      "return_pct": -0.0,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 18:21",
+      "entry_price": 108337000.0,
+      "exit_date": "2026-11-04 18:21",
+      "exit_price": 108252000.0,
+      "return_pct": -0.08,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 18:21",
+      "entry_price": 108336000.0,
+      "exit_date": "2026-11-04 18:21",
+      "exit_price": 108251000.0,
+      "return_pct": -0.08,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 22:16",
+      "entry_price": 108337000.0,
+      "exit_date": "2026-11-04 22:16",
+      "exit_price": 108325000.0,
+      "return_pct": -0.01,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 22:16",
+      "entry_price": 108347000.0,
+      "exit_date": "2026-11-04 23:07",
+      "exit_price": 108330000.0,
+      "return_pct": -0.02,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:07",
+      "entry_price": 108335000.0,
+      "exit_date": "2026-11-04 23:07",
+      "exit_price": 108319000.0,
+      "return_pct": -0.01,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:07",
+      "entry_price": 108337000.0,
+      "exit_date": "2026-11-04 23:08",
+      "exit_price": 108300000.0,
+      "return_pct": -0.03,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:08",
+      "entry_price": 108338000.0,
+      "exit_date": "2026-11-04 23:08",
+      "exit_price": 108300000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:14",
+      "entry_price": 108338000.0,
+      "exit_date": "2026-11-04 23:14",
+      "exit_price": 108312000.0,
+      "return_pct": -0.02,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:14",
+      "entry_price": 108362000.0,
+      "exit_date": "2026-11-04 23:15",
+      "exit_price": 108316000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:15",
+      "entry_price": 108399000.0,
+      "exit_date": "2026-11-04 23:15",
+      "exit_price": 108316000.0,
+      "return_pct": -0.08,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:15",
+      "entry_price": 108398000.0,
+      "exit_date": "2026-11-04 23:15",
+      "exit_price": 108324000.0,
+      "return_pct": -0.07,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:15",
+      "entry_price": 108398000.0,
+      "exit_date": "2026-11-04 23:15",
+      "exit_price": 108320000.0,
+      "return_pct": -0.07,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:15",
+      "entry_price": 108398000.0,
+      "exit_date": "2026-11-04 23:15",
+      "exit_price": 108322000.0,
+      "return_pct": -0.07,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:16",
+      "entry_price": 108398000.0,
+      "exit_date": "2026-11-04 23:16",
+      "exit_price": 108325000.0,
+      "return_pct": -0.07,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:16",
+      "entry_price": 108397000.0,
+      "exit_date": "2026-11-04 23:16",
+      "exit_price": 108326000.0,
+      "return_pct": -0.07,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:16",
+      "entry_price": 108398000.0,
+      "exit_date": "2026-11-04 23:16",
+      "exit_price": 108330000.0,
+      "return_pct": -0.06,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:16",
+      "entry_price": 108397000.0,
+      "exit_date": "2026-11-04 23:16",
+      "exit_price": 108331000.0,
+      "return_pct": -0.06,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:16",
+      "entry_price": 108397000.0,
+      "exit_date": "2026-11-04 23:17",
+      "exit_price": 108331000.0,
+      "return_pct": -0.06,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:17",
+      "entry_price": 108397000.0,
+      "exit_date": "2026-11-04 23:17",
+      "exit_price": 108331000.0,
+      "return_pct": -0.06,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:17",
+      "entry_price": 108337000.0,
+      "exit_date": "2026-11-04 23:17",
+      "exit_price": 108331000.0,
+      "return_pct": -0.01,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:17",
+      "entry_price": 108397000.0,
+      "exit_date": "2026-11-04 23:17",
+      "exit_price": 108332000.0,
+      "return_pct": -0.06,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:17",
+      "entry_price": 108397000.0,
+      "exit_date": "2026-11-04 23:18",
+      "exit_price": 108332000.0,
+      "return_pct": -0.06,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:18",
+      "entry_price": 108357000.0,
+      "exit_date": "2026-11-04 23:18",
+      "exit_price": 108332000.0,
+      "return_pct": -0.02,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:18",
+      "entry_price": 108363000.0,
+      "exit_date": "2026-11-04 23:18",
+      "exit_price": 108320000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:18",
+      "entry_price": 108363000.0,
+      "exit_date": "2026-11-04 23:18",
+      "exit_price": 108320000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:18",
+      "entry_price": 108363000.0,
+      "exit_date": "2026-11-04 23:18",
+      "exit_price": 108319000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:19",
+      "entry_price": 108378000.0,
+      "exit_date": "2026-11-04 23:19",
+      "exit_price": 108321000.0,
+      "return_pct": -0.05,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:19",
+      "entry_price": 108378000.0,
+      "exit_date": "2026-11-04 23:19",
+      "exit_price": 108321000.0,
+      "return_pct": -0.05,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:19",
+      "entry_price": 108377000.0,
+      "exit_date": "2026-11-04 23:20",
+      "exit_price": 108319000.0,
+      "return_pct": -0.05,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:20",
+      "entry_price": 108377000.0,
+      "exit_date": "2026-11-04 23:20",
+      "exit_price": 108308000.0,
+      "return_pct": -0.06,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:20",
+      "entry_price": 108377000.0,
+      "exit_date": "2026-11-04 23:21",
+      "exit_price": 108309000.0,
+      "return_pct": -0.06,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:21",
+      "entry_price": 108377000.0,
+      "exit_date": "2026-11-04 23:21",
+      "exit_price": 108310000.0,
+      "return_pct": -0.06,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:21",
+      "entry_price": 108350000.0,
+      "exit_date": "2026-11-04 23:21",
+      "exit_price": 108330000.0,
+      "return_pct": -0.02,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:26",
+      "entry_price": 108349000.0,
+      "exit_date": "2026-11-04 23:26",
+      "exit_price": 108323000.0,
+      "return_pct": -0.02,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:26",
+      "entry_price": 108352000.0,
+      "exit_date": "2026-11-04 23:26",
+      "exit_price": 108329000.0,
+      "return_pct": -0.02,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:26",
+      "entry_price": 108350000.0,
+      "exit_date": "2026-11-04 23:26",
+      "exit_price": 108327000.0,
+      "return_pct": -0.02,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:26",
+      "entry_price": 108369000.0,
+      "exit_date": "2026-11-04 23:29",
+      "exit_price": 108327000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:30",
+      "entry_price": 108366000.0,
+      "exit_date": "2026-11-04 23:30",
+      "exit_price": 108327000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:30",
+      "entry_price": 108366000.0,
+      "exit_date": "2026-11-04 23:30",
+      "exit_price": 108327000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:30",
+      "entry_price": 108359000.0,
+      "exit_date": "2026-11-04 23:30",
+      "exit_price": 108327000.0,
+      "return_pct": -0.03,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:30",
+      "entry_price": 108365000.0,
+      "exit_date": "2026-11-04 23:30",
+      "exit_price": 108327000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:30",
+      "entry_price": 108365000.0,
+      "exit_date": "2026-11-04 23:30",
+      "exit_price": 108327000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:30",
+      "entry_price": 108365000.0,
+      "exit_date": "2026-11-04 23:30",
+      "exit_price": 108327000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:30",
+      "entry_price": 108365000.0,
+      "exit_date": "2026-11-04 23:32",
+      "exit_price": 108327000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:32",
+      "entry_price": 108392000.0,
+      "exit_date": "2026-11-04 23:33",
+      "exit_price": 108327000.0,
+      "return_pct": -0.06,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:33",
+      "entry_price": 108359000.0,
+      "exit_date": "2026-11-04 23:33",
+      "exit_price": 108327000.0,
+      "return_pct": -0.03,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:33",
+      "entry_price": 108359000.0,
+      "exit_date": "2026-11-04 23:33",
+      "exit_price": 108327000.0,
+      "return_pct": -0.03,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:33",
+      "entry_price": 108359000.0,
+      "exit_date": "2026-11-04 23:33",
+      "exit_price": 108327000.0,
+      "return_pct": -0.03,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:33",
+      "entry_price": 108380000.0,
+      "exit_date": "2026-11-04 23:33",
+      "exit_price": 108327000.0,
+      "return_pct": -0.05,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:33",
+      "entry_price": 108366000.0,
+      "exit_date": "2026-11-04 23:33",
+      "exit_price": 108327000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:33",
+      "entry_price": 108367000.0,
+      "exit_date": "2026-11-04 23:33",
+      "exit_price": 108327000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:34",
+      "entry_price": 108336000.0,
+      "exit_date": "2026-11-04 23:34",
+      "exit_price": 108327000.0,
+      "return_pct": -0.01,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:34",
+      "entry_price": 108379000.0,
+      "exit_date": "2026-11-04 23:34",
+      "exit_price": 108327000.0,
+      "return_pct": -0.05,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:34",
+      "entry_price": 108379000.0,
+      "exit_date": "2026-11-04 23:34",
+      "exit_price": 108328000.0,
+      "return_pct": -0.05,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:34",
+      "entry_price": 108384000.0,
+      "exit_date": "2026-11-04 23:34",
+      "exit_price": 108329000.0,
+      "return_pct": -0.05,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:34",
+      "entry_price": 108383000.0,
+      "exit_date": "2026-11-04 23:34",
+      "exit_price": 108329000.0,
+      "return_pct": -0.05,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:34",
+      "entry_price": 108383000.0,
+      "exit_date": "2026-11-04 23:34",
+      "exit_price": 108329000.0,
+      "return_pct": -0.05,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:34",
+      "entry_price": 108383000.0,
+      "exit_date": "2026-11-04 23:35",
+      "exit_price": 108331000.0,
+      "return_pct": -0.05,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-04 23:35",
+      "entry_price": 108345000.0,
+      "exit_date": "2026-11-04 23:50",
+      "exit_price": 108487000.0,
+      "return_pct": 0.13,
+      "reason": "EMA50 하향이탈 +0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:02",
+      "entry_price": 108499000.0,
+      "exit_date": "2026-11-05 00:02",
+      "exit_price": 108491000.0,
+      "return_pct": -0.01,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:03",
+      "entry_price": 108503000.0,
+      "exit_date": "2026-11-05 00:03",
+      "exit_price": 108491000.0,
+      "return_pct": -0.01,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:03",
+      "entry_price": 108531000.0,
+      "exit_date": "2026-11-05 00:03",
+      "exit_price": 108424000.0,
+      "return_pct": -0.1,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:03",
+      "entry_price": 108523000.0,
+      "exit_date": "2026-11-05 00:03",
+      "exit_price": 108424000.0,
+      "return_pct": -0.09,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:03",
+      "entry_price": 108523000.0,
+      "exit_date": "2026-11-05 00:03",
+      "exit_price": 108489000.0,
+      "return_pct": -0.03,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:03",
+      "entry_price": 108523000.0,
+      "exit_date": "2026-11-05 00:03",
+      "exit_price": 108425000.0,
+      "return_pct": -0.09,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:03",
+      "entry_price": 108516000.0,
+      "exit_date": "2026-11-05 00:03",
+      "exit_price": 108490000.0,
+      "return_pct": -0.02,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:03",
+      "entry_price": 108510000.0,
+      "exit_date": "2026-11-05 00:03",
+      "exit_price": 108427000.0,
+      "return_pct": -0.08,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:03",
+      "entry_price": 108513000.0,
+      "exit_date": "2026-11-05 00:03",
+      "exit_price": 108428000.0,
+      "return_pct": -0.08,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:03",
+      "entry_price": 108510000.0,
+      "exit_date": "2026-11-05 00:03",
+      "exit_price": 108428000.0,
+      "return_pct": -0.08,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:03",
+      "entry_price": 108510000.0,
+      "exit_date": "2026-11-05 00:03",
+      "exit_price": 108429000.0,
+      "return_pct": -0.07,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:03",
+      "entry_price": 108510000.0,
+      "exit_date": "2026-11-05 00:03",
+      "exit_price": 108429000.0,
+      "return_pct": -0.07,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:03",
+      "entry_price": 108519000.0,
+      "exit_date": "2026-11-05 00:04",
+      "exit_price": 108432000.0,
+      "return_pct": -0.08,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:04",
+      "entry_price": 108509000.0,
+      "exit_date": "2026-11-05 00:04",
+      "exit_price": 108436000.0,
+      "return_pct": -0.07,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:04",
+      "entry_price": 108502000.0,
+      "exit_date": "2026-11-05 00:04",
+      "exit_price": 108432000.0,
+      "return_pct": -0.06,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:04",
+      "entry_price": 108522000.0,
+      "exit_date": "2026-11-05 00:04",
+      "exit_price": 108432000.0,
+      "return_pct": -0.08,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:04",
+      "entry_price": 108519000.0,
+      "exit_date": "2026-11-05 00:04",
+      "exit_price": 108438000.0,
+      "return_pct": -0.07,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:04",
+      "entry_price": 108523000.0,
+      "exit_date": "2026-11-05 00:04",
+      "exit_price": 108440000.0,
+      "return_pct": -0.08,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:04",
+      "entry_price": 108540000.0,
+      "exit_date": "2026-11-05 00:04",
+      "exit_price": 108447000.0,
+      "return_pct": -0.09,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:04",
+      "entry_price": 108537000.0,
+      "exit_date": "2026-11-05 00:04",
+      "exit_price": 108447000.0,
+      "return_pct": -0.08,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:04",
+      "entry_price": 108537000.0,
+      "exit_date": "2026-11-05 00:05",
+      "exit_price": 108484000.0,
+      "return_pct": -0.05,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:05",
+      "entry_price": 108607000.0,
+      "exit_date": "2026-11-05 00:05",
+      "exit_price": 108467000.0,
+      "return_pct": -0.13,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:05",
+      "entry_price": 108589000.0,
+      "exit_date": "2026-11-05 00:05",
+      "exit_price": 108453000.0,
+      "return_pct": -0.13,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:05",
+      "entry_price": 108587000.0,
+      "exit_date": "2026-11-05 00:05",
+      "exit_price": 108452000.0,
+      "return_pct": -0.12,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:05",
+      "entry_price": 108579000.0,
+      "exit_date": "2026-11-05 00:05",
+      "exit_price": 108476000.0,
+      "return_pct": -0.09,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:05",
+      "entry_price": 108591000.0,
+      "exit_date": "2026-11-05 00:07",
+      "exit_price": 108487000.0,
+      "return_pct": -0.1,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:07",
+      "entry_price": 108583000.0,
+      "exit_date": "2026-11-05 00:07",
+      "exit_price": 108487000.0,
+      "return_pct": -0.09,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:07",
+      "entry_price": 108525000.0,
+      "exit_date": "2026-11-05 00:07",
+      "exit_price": 108486000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:08",
+      "entry_price": 108522000.0,
+      "exit_date": "2026-11-05 00:08",
+      "exit_price": 108486000.0,
+      "return_pct": -0.03,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:09",
+      "entry_price": 108500000.0,
+      "exit_date": "2026-11-05 00:09",
+      "exit_price": 108447000.0,
+      "return_pct": -0.05,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:09",
+      "entry_price": 108521000.0,
+      "exit_date": "2026-11-05 00:09",
+      "exit_price": 108466000.0,
+      "return_pct": -0.05,
+      "reason": "EMA50 하향이탈 -0.1%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:09",
+      "entry_price": 108521000.0,
+      "exit_date": "2026-11-05 00:57",
+      "exit_price": 108480000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 00:57",
+      "entry_price": 108525000.0,
+      "exit_date": "2026-11-05 00:57",
+      "exit_price": 108480000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 01:41",
+      "entry_price": 108495000.0,
+      "exit_date": "2026-11-05 01:41",
+      "exit_price": 108468000.0,
+      "return_pct": -0.02,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 01:41",
+      "entry_price": 108499000.0,
+      "exit_date": "2026-11-05 01:41",
+      "exit_price": 108468000.0,
+      "return_pct": -0.03,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 01:41",
+      "entry_price": 108499000.0,
+      "exit_date": "2026-11-05 01:41",
+      "exit_price": 108454000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 01:41",
+      "entry_price": 108498000.0,
+      "exit_date": "2026-11-05 01:41",
+      "exit_price": 108466000.0,
+      "return_pct": -0.03,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 01:41",
+      "entry_price": 108498000.0,
+      "exit_date": "2026-11-05 01:41",
+      "exit_price": 108490000.0,
+      "return_pct": -0.01,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 01:42",
+      "entry_price": 108498000.0,
+      "exit_date": "2026-11-05 01:42",
+      "exit_price": 108450000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 01:42",
+      "entry_price": 108498000.0,
+      "exit_date": "2026-11-05 01:42",
+      "exit_price": 108452000.0,
+      "return_pct": -0.04,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 01:42",
+      "entry_price": 108499000.0,
+      "exit_date": "2026-11-05 01:42",
+      "exit_price": 108448000.0,
+      "return_pct": -0.05,
+      "reason": "EMA50 하향이탈 -0.0%"
+    },
+    {
+      "symbol": "BTC/KRW",
+      "entry_date": "2026-11-05 01:42",
+      "entry_price": 108499000.0,
+      "exit_date": "2026-11-05 01:42",
+      "exit_price": 108485000.0,
+      "return_pct": -0.01,
+      "reason": "EMA50 하향이탈 -0.0%"
+    }
+  ]
+}

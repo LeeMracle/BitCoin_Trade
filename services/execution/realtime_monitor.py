@@ -148,6 +148,11 @@ def is_benign_ws_error(exc: BaseException) -> bool:
 VR_STATE_FILE = Path(__file__).resolve().parents[2] / "workspace" / "vol_reversal_dryrun_state.json"
 VB_STATE_FILE = Path(__file__).resolve().parents[2] / "workspace" / "vb_state.json"
 EMA_TREND_STATE_FILE = Path(__file__).resolve().parents[2] / "workspace" / "ema_trend_state.json"
+# EMA-TREND 알림 throttle (lessons #14 + #30 + 2026-11-05 chop 실측 23건/6분)
+# - DRY 모드 chop 폭주 방지 전용. LIVE 체결 알림은 손실 없어야 하므로 압축 제외.
+# - 쌍(진입+청산) 단위로 동일 심볼 쿨다운 창 안에 들어온 알림을 메모리에서 skip한다.
+# - 쿨다운 창 종료 후 다음 알림이 오면 "(최근 Ns 내 압축 N건)" 접미사로 발사한다.
+EMA_TREND_ALERT_COOLDOWN_SEC = 300  # 5분
 VR_TP = 0.03     # vol_reversal 익절 +3%
 VR_TRAIL = 0.015  # vol_reversal 트레일링 1.5%
 VR_SL = 0.02      # vol_reversal 손절 -2%
@@ -168,6 +173,11 @@ class RealtimeMonitor:
         self._ema_trend_level: dict = {}   # {ema50, ema200, prev_close, close}
         self._ema_trend_position: "dict | None" = None  # 보유 중이면 dict
         self._load_ema_trend_state()
+        # EMA-TREND 알림 throttle (lessons #14 + #30, 2026-11-05 chop 23건/6분)
+        #   _ema_trend_alert_last_ts[symbol] = 마지막 발사 time.time()
+        #   _ema_trend_alert_suppressed[symbol] = 쿨다운 창 동안 skip된 알림 건수
+        self._ema_trend_alert_last_ts: dict[str, float] = {}
+        self._ema_trend_alert_suppressed: dict[str, int] = {}
         # 안전장치
         self.consecutive_errors = 0
         # 웹소켓 끊김 추적 (2026-08-25) — 정상 끊김을 봇 오류로 세지 않도록
@@ -1391,6 +1401,46 @@ class RealtimeMonitor:
         except Exception as e:
             print(f"  [EMA-TREND] 상태 저장 오류: {e}", flush=True)
 
+    async def _ema_trend_send_throttled(self, symbol: str, msg: str) -> None:
+        """EMA-TREND 전용 알림 throttle (lessons #14 + #30, 2026-11-05 lessons 추가 예정).
+
+        chop 상황(가격이 EMA50에 걸쳐 진입/청산 반복)에서 DRY-RUN 알림이
+        6분에 23건까지 폭주한 사례 (2026-11-05 09:03~09:09 KST, 평균 -0.07% 손실).
+        LIVE 체결 알림은 손실 없어야 하므로 압축 제외 — DRY-RUN에서만 압축.
+
+        규칙:
+          1) 마지막 발사 후 EMA_TREND_ALERT_COOLDOWN_SEC 이내면 skip.
+          2) skip 건수를 _ema_trend_alert_suppressed[symbol] 에 누적.
+          3) 쿨다운 창 이후 첫 알림은 압축 접미사와 함께 발사
+             ("최근 Ns 내 압축 N건 — chop 가능성").
+          4) LIVE 모드(EMA_TREND_DRY_RUN=False)는 쿨다운 미적용 — 실체결 보고 손실 금지.
+
+        반환: None. 호출부는 압축 여부와 무관하게 동일 코드 경로 유지.
+        """
+        # LIVE 모드는 쿨다운 미적용 (실매매 체결 알림 — lessons #3, #30 적용 대상 아님)
+        if not EMA_TREND_DRY_RUN:
+            await send(msg)
+            return
+
+        now = _time.time()
+        last = self._ema_trend_alert_last_ts.get(symbol, 0.0)
+        suppressed = self._ema_trend_alert_suppressed.get(symbol, 0)
+
+        # 쿨다운 창 안 → skip (console 로그는 호출부에서 이미 출력)
+        if (now - last) < EMA_TREND_ALERT_COOLDOWN_SEC:
+            self._ema_trend_alert_suppressed[symbol] = suppressed + 1
+            return
+
+        # 쿨다운 창 종료 — 압축 접미사 포함 발사
+        if suppressed > 0:
+            msg = (
+                f"{msg}\n"
+                f"_(최근 {EMA_TREND_ALERT_COOLDOWN_SEC}s 내 압축 {suppressed}건 — chop 가능성)_"
+            )
+        await send(msg)
+        self._ema_trend_alert_last_ts[symbol] = now
+        self._ema_trend_alert_suppressed[symbol] = 0
+
     async def _ema_trend_refresh_level(self):
         """BTC/KRW 일봉 EMA(50), EMA(200) 재계산 (매일 09:05 KST = UTC 00:05)."""
         try:
@@ -1449,6 +1499,14 @@ class RealtimeMonitor:
               (봉 마감 기반 돌파를 실시간 틱으로 근사 — lessons #1 주의)
         청산: 실시간가 < trail_stop  OR  실시간가 < EMA50
         """
+        # ADR 20261105-1: EMA-TREND 영구 비활성화 가드 (lessons #47 신설 예정).
+        # 실측 175건 승률 0.57% / 누적 net -22.64% / trail stop 작동 0건으로
+        # 구조적 결함 확정 — 신규 시그널 발사를 전면 차단.
+        # 보유 포지션은 ADR 기준 0 (DRY-RUN만 운용했음) — 레거시 포지션 발생 시
+        # state 파일(workspace/ema_trend_state.json) 수동 정리 전제.
+        if not EMA_TREND_ENABLED:
+            return
+
         if not self._ema_trend_level:
             return  # 레벨 아직 미계산
 
@@ -1518,11 +1576,13 @@ class RealtimeMonitor:
                     f"  [EMA-TREND-{mode}] {emoji} BTC/KRW 청산 — {reason} @ {price:,.0f}",
                     flush=True,
                 )
-                await send(
+                # lessons #14 + #30 + 2026-11-05 chop throttle — DRY 모드만 압축
+                await self._ema_trend_send_throttled(
+                    "BTC/KRW",
                     f"[EMA-TREND {mode}] {emoji} *청산* BTC/KRW\n"
                     f"사유: {reason}\n"
                     f"가격: {price:,.0f} (진입 {entry_price:,.0f})\n"
-                    f"수익: {ret_pct_val:+.1f}%"
+                    f"수익: {ret_pct_val:+.1f}%",
                 )
             return
 
@@ -1546,13 +1606,15 @@ class RealtimeMonitor:
                 f" 가격={price:,.0f} EMA50={ema50:,.0f} EMA200={ema200:,.0f}",
                 flush=True,
             )
-            await send(
+            # lessons #14 + #30 + 2026-11-05 chop throttle — DRY 모드만 압축
+            await self._ema_trend_send_throttled(
+                "BTC/KRW",
                 f"[EMA-TREND {mode}] 📈 *진입 신호* BTC/KRW\n"
                 f"가격: {price:,.0f}\n"
                 f"EMA{EMA_TREND_EMA_PERIOD}: {ema50:,.0f}\n"
                 f"EMA{EMA_TREND_FILTER_PERIOD}: {ema200:,.0f}\n"
                 f"트레일링스탑: {EMA_TREND_TRAIL_PCT*100:.0f}%\n"
-                f"{'[실제 매수 없음 — DRY-RUN]' if EMA_TREND_DRY_RUN else '[실전 매수]'}"
+                f"{'[실제 매수 없음 — DRY-RUN]' if EMA_TREND_DRY_RUN else '[실전 매수]'}",
             )
 
             if not EMA_TREND_DRY_RUN:

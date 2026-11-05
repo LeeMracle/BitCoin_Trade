@@ -27,6 +27,7 @@ from services.ml.config import (  # noqa: E402
     SHADOW_SAMPLE_START,
     SHADOW_SAMPLE_TARGET,
 )
+from services.ml.shadow import EXCLUDED_SIGNAL_TYPES  # noqa: E402 — ADR 20261105-1
 
 OUTCOME_KIND = "outcome"
 
@@ -64,13 +65,17 @@ def count(log_dir: Path = SHADOW_LOG_DIR) -> dict:
     outcomes = {r.get("signal_ts"): r for r in rows if r.get("kind") == OUTCOME_KIND}
 
     # (1) 신호행  (2) 실제 추론  (3) 기준일 이후
-    signals = [
+    # ADR 20261105-1: 폐기 전략(EMA_TREND_breakout 등) 명시적 블랙리스트 제외
+    signals_raw = [
         r
         for r in rows
         if r.get("kind") is None
         and r.get("ml_active") is True
         and r["_date"] >= SHADOW_SAMPLE_START
     ]
+    signals = [r for r in signals_raw if r.get("signal_type") not in EXCLUDED_SIGNAL_TYPES]
+    dropped_excluded = len(signals_raw) - len(signals)
+
     # (4) outcome 라벨 존재
     labeled = [r for r in signals if r.get("signal_ts") in outcomes]
 
@@ -104,6 +109,8 @@ def count(log_dir: Path = SHADOW_LOG_DIR) -> dict:
             "labeled": len(labeled),
             "dropped_unlabeled": len(signals) - len(labeled),
             "dropped_duplicate": len(labeled) - len(sample),
+            "dropped_excluded": dropped_excluded,
+            "excluded_types": sorted(EXCLUDED_SIGNAL_TYPES),
         },
         "dedup_key": list(SHADOW_DEDUP_KEY),
         "sample_start": SHADOW_SAMPLE_START,
@@ -142,10 +149,12 @@ def main() -> int:
     print(f"ML shadow 독립표본  {res['sample_n']} / {res['target']}"
           f"  (잔여 {res['remaining']})")
     print(f"  기준일 {res['sample_start']} 이후 · 중복키 {tuple(res['dedup_key'])}")
+    print(f"  제외 전략(ADR 20261105-1): {b['excluded_types']}")
     print()
     print("  산출 과정")
     print(f"    로그 전체 행           {b['rows_total']:>6}")
     print(f"    ├ outcome 라벨행       {b['rows_outcome']:>6}  (분모 아님)")
+    print(f"    ├ 폐기 전략 제외       {b['dropped_excluded']:>6}  (EMA_TREND_breakout 등)")
     print(f"    └ 기준일 이후 추론신호 {b['signals_after_start']:>6}")
     print(f"        ├ 미라벨 제외      {b['dropped_unlabeled']:>6}")
     print(f"        ├ 중복 제외        {b['dropped_duplicate']:>6}")

@@ -280,7 +280,10 @@ REGIME_FILTER_EMA_PERIOD = 200
 # 매일 09:05 KST에 EMA 재계산, 실시간 체결가로 돌파 감지
 # DRY_RUN=True 시 실제 주문 없이 텔레그램 "DRY-RUN 신호" 알림만 발송
 
-EMA_TREND_ENABLED = True
+# ADR 20261105-1: 영구 비활성화 (실측 175건 승률 0.57%, 누적 net -22.64%).
+# 구조적 결함(진입/청산 조건 대칭 반대)로 chop 자가유발 — lessons #1 정면 재현.
+# True로 되돌리기 전에 반드시 재검토 필요. 과거 매매 데이터는 ML 학습에서도 제외.
+EMA_TREND_ENABLED = False
 EMA_TREND_DRY_RUN = True          # True: 가상매매만 (로그+알림, 실주문 없음)
 EMA_TREND_EMA_PERIOD = 50         # 진입 EMA 기간 (돌파 감지용)
 EMA_TREND_FILTER_PERIOD = 200     # 필터 EMA 기간 (하락장 진입 차단용)

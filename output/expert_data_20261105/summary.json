@@ -1,0 +1,17 @@
+{
+  "n_trades": 175,
+  "win_rate_pct": 0.5714285714285714,
+  "mean_gross_pct": -0.04657142857142857,
+  "mean_net_pct": -0.14657142857142857,
+  "cum_compound_gross_pct": -7.8292995447306275,
+  "cum_compound_net_pct": -22.63974853314513,
+  "mdd_net_pct": -22.63974853314513,
+  "trail_triggered": 0,
+  "ema_exit": 175,
+  "bear_trades": 149,
+  "bull_trades": 26,
+  "insta_exit_bear_ratio_pct": 97.98657718120806,
+  "insta_exit_bull_ratio_pct": 100.0,
+  "bull_only_cum_net_pct": -3.702552626060429,
+  "bull_only_mdd_pct": -3.702552626060429
+}

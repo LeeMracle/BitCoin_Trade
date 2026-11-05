@@ -30,6 +30,7 @@ sys.path.insert(0, str(ROOT))
 
 from services.alerting.notifier import send  # noqa: E402
 from services.ml.config import SHADOW_LOG_DIR  # noqa: E402
+from services.ml.shadow import EXCLUDED_SIGNAL_TYPES  # noqa: E402 — ADR 20261105-1
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s: %(message)s")
 log = logging.getLogger("ml_weekly")
@@ -78,12 +79,18 @@ def _trade_metrics(trades: list[dict]) -> dict:
 
 
 def _shadow_stats(start: datetime, end: datetime) -> dict:
-    """shadow JSONL에서 결정 분포 + outcome 매칭 결과."""
+    """shadow JSONL에서 결정 분포 + outcome 매칭 결과.
+
+    ADR 20261105-1: signal_type in EXCLUDED_SIGNAL_TYPES 는 폐기 전략이므로
+    통계에서 제외 (주간 리뷰 결론 왜곡 방지).
+    """
     decisions = []
     outcomes = []
+    raw_decisions = 0
+    excluded_count = 0
     shadow_dir = PROJECT / "workspace" / "ml_shadow"
     if not shadow_dir.exists():
-        return {"decisions": 0, "outcomes": 0}
+        return {"decisions": 0, "outcomes": 0, "excluded": 0}
     for path in sorted(shadow_dir.glob("*.jsonl")):
         try:
             stamp = datetime.strptime(path.stem.split(".")[0], "%Y%m%d").replace(tzinfo=timezone.utc)
@@ -102,9 +109,21 @@ def _shadow_stats(start: datetime, end: datetime) -> dict:
                 try:
                     ts = datetime.fromisoformat(rec.get("ts_utc", "").replace("Z", "+00:00"))
                     if start <= ts <= end:
+                        raw_decisions += 1
+                        # ADR 20261105-1: 폐기 전략 제외
+                        if rec.get("signal_type") in EXCLUDED_SIGNAL_TYPES:
+                            excluded_count += 1
+                            continue
                         decisions.append(rec)
                 except Exception:
                     continue
+
+    if excluded_count > 0:
+        log.info(
+            "  [filter] raw=%d → 제외(%s)=%d → 유효=%d",
+            raw_decisions, sorted(EXCLUDED_SIGNAL_TYPES),
+            excluded_count, len(decisions),
+        )
 
     n = len(decisions)
     if n == 0:

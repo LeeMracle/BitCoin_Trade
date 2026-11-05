@@ -47,6 +47,7 @@ sys.path.insert(0, str(ROOT))
 from services.ml import feature_store  # noqa: E402
 from services.ml.config import LABEL_HORIZON_BARS, SHADOW_LOG_DIR, ensure_dirs  # noqa: E402
 from services.ml.features import MarketContext, compute_features  # noqa: E402
+from services.ml.shadow import EXCLUDED_SIGNAL_TYPES  # noqa: E402 — ADR 20261105-1
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("ml_shadow_to_features")
@@ -60,12 +61,17 @@ def _load_decisions_with_outcome(path: Path) -> list[dict]:
     """단일 JSONL에서 decision + outcome을 (signal_ts, symbol)로 join.
 
     outcome 없는 decision은 skip (학습에 라벨 필요).
+    ADR 20261105-1: signal_type in EXCLUDED_SIGNAL_TYPES 는 학습 데이터 오염
+    방지를 위해 제외 (명시적 블랙리스트).
+
     Returns: [{symbol, signal_ts(str), reached_target, outcome_pct, ...}, ...]
     """
     if not path.exists():
         return []
     decisions: dict[tuple[str, str], dict] = {}
     outcomes: dict[tuple[str, str], dict] = {}
+    raw_decisions = 0
+    excluded_count = 0
     for line in path.read_text(encoding="utf-8").splitlines():
         try:
             rec = json.loads(line)
@@ -75,7 +81,19 @@ def _load_decisions_with_outcome(path: Path) -> list[dict]:
         if rec.get("kind") == "outcome":
             outcomes[key] = rec
         else:
+            raw_decisions += 1
+            # ADR 20261105-1: 폐기 전략 제외 (EMA_TREND_breakout 등)
+            if rec.get("signal_type") in EXCLUDED_SIGNAL_TYPES:
+                excluded_count += 1
+                continue
             decisions[key] = rec
+
+    if excluded_count > 0:
+        log.info(
+            "  [filter] %s: raw=%d → 제외(%s)=%d → 유효=%d",
+            path.name, raw_decisions, sorted(EXCLUDED_SIGNAL_TYPES),
+            excluded_count, len(decisions),
+        )
 
     joined: list[dict] = []
     for key, dec in decisions.items():

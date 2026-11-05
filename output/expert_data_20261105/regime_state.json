@@ -1,0 +1,14 @@
+{
+  "current": "BEAR",
+  "since_ts": 1793493019,
+  "prev": "BULL",
+  "last_decided_ts": 1793838604,
+  "recent_signals": [
+    "BEAR",
+    "BEAR",
+    "BEAR",
+    "BEAR",
+    "BULL"
+  ],
+  "enabled": false
+}
