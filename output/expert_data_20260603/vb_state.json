@@ -1,0 +1,418 @@
+{
+  "positions": {},
+  "history": [
+    {
+      "symbol": "KERNEL/KRW",
+      "entry_date": "2026-03-31 23:59",
+      "entry_price": 155.0,
+      "exit_date": "2026-04-01 00:03",
+      "exit_price": 155.0,
+      "return_pct": 0.0,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "ALGO/KRW",
+      "entry_date": "2026-03-31 23:59",
+      "entry_price": 143.0,
+      "exit_date": "2026-04-01 00:03",
+      "exit_price": 143.0,
+      "return_pct": 0.0,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "RAY/KRW",
+      "entry_date": "2026-03-31 23:59",
+      "entry_price": 950.0,
+      "exit_date": "2026-04-01 00:03",
+      "exit_price": 952.0,
+      "return_pct": 0.21,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "BLUR/KRW",
+      "entry_date": "2026-04-01 00:29",
+      "entry_price": 31.1,
+      "exit_date": "2026-04-02 00:02",
+      "exit_price": 34.9,
+      "return_pct": 12.22,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "MINA/KRW",
+      "entry_date": "2026-04-01 00:29",
+      "entry_price": 90.9,
+      "exit_date": "2026-04-02 00:02",
+      "exit_price": 90.5,
+      "return_pct": -0.44,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "IP/KRW",
+      "entry_date": "2026-04-01 00:29",
+      "entry_price": 816.0,
+      "exit_date": "2026-04-02 00:02",
+      "exit_price": 769.0,
+      "return_pct": -5.76,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "POLYX/KRW",
+      "entry_date": "2026-04-04 00:02",
+      "entry_price": 71.7,
+      "exit_date": "2026-04-04 02:57",
+      "exit_price": 82.4,
+      "return_pct": 14.92,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "NEAR/KRW",
+      "entry_date": "2026-04-04 00:02",
+      "entry_price": 1834.0,
+      "exit_date": "2026-04-04 02:57",
+      "exit_price": 1841.0,
+      "return_pct": 0.38,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "POLYX/KRW",
+      "entry_date": "2026-04-04 02:57",
+      "entry_price": 82.4,
+      "exit_date": "2026-04-04 05:09",
+      "exit_price": 87.2,
+      "return_pct": 5.83,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "ELF/KRW",
+      "entry_date": "2026-04-04 02:57",
+      "entry_price": 121.0,
+      "exit_date": "2026-04-04 05:09",
+      "exit_price": 121.0,
+      "return_pct": 0.0,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "CPOOL/KRW",
+      "entry_date": "2026-04-04 02:57",
+      "entry_price": 35.9,
+      "exit_date": "2026-04-04 05:09",
+      "exit_price": 35.6,
+      "return_pct": -0.84,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "POLYX/KRW",
+      "entry_date": "2026-04-04 05:09",
+      "entry_price": 87.2,
+      "exit_date": "2026-04-04 05:13",
+      "exit_price": 85.5,
+      "return_pct": -1.95,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "THETA/KRW",
+      "entry_date": "2026-04-04 05:09",
+      "entry_price": 245.0,
+      "exit_date": "2026-04-04 05:13",
+      "exit_price": 255.0,
+      "return_pct": 4.08,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "ELF/KRW",
+      "entry_date": "2026-04-04 05:09",
+      "entry_price": 121.0,
+      "exit_date": "2026-04-04 05:13",
+      "exit_price": 121.0,
+      "return_pct": 0.0,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "POLYX/KRW",
+      "entry_date": "2026-04-04 05:13",
+      "entry_price": 85.5,
+      "exit_date": "2026-04-04 06:03",
+      "exit_price": 82.7,
+      "return_pct": -3.27,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "THETA/KRW",
+      "entry_date": "2026-04-04 05:13",
+      "entry_price": 255.0,
+      "exit_date": "2026-04-04 06:03",
+      "exit_price": 254.0,
+      "return_pct": -0.39,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "ELF/KRW",
+      "entry_date": "2026-04-04 05:13",
+      "entry_price": 121.0,
+      "exit_date": "2026-04-04 06:03",
+      "exit_price": 121.0,
+      "return_pct": 0.0,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "POLYX/KRW",
+      "entry_date": "2026-04-04 06:03",
+      "entry_price": 82.7,
+      "exit_date": "2026-04-05 00:02",
+      "exit_price": 79.6,
+      "return_pct": -3.75,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "THETA/KRW",
+      "entry_date": "2026-04-04 06:03",
+      "entry_price": 254.0,
+      "exit_date": "2026-04-05 00:02",
+      "exit_price": 240.0,
+      "return_pct": -5.51,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "SAHARA/KRW",
+      "entry_date": "2026-04-04 06:03",
+      "entry_price": 34.1,
+      "exit_date": "2026-04-05 00:02",
+      "exit_price": 36.3,
+      "return_pct": 6.45,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "MOODENG/KRW",
+      "entry_date": "2026-04-06 00:04",
+      "entry_price": 77.1,
+      "exit_date": "2026-04-06 00:04",
+      "exit_price": 75.5,
+      "return_pct": -2.08,
+      "reason": "손절 -2.1%"
+    },
+    {
+      "symbol": "CELO/KRW",
+      "entry_date": "2026-04-07 00:03",
+      "entry_price": 130.0,
+      "exit_date": "2026-04-07 00:04",
+      "exit_price": 127.0,
+      "return_pct": -2.31,
+      "reason": "손절 -2.3%"
+    },
+    {
+      "symbol": "ANIME/KRW",
+      "entry_date": "2026-04-07 00:03",
+      "entry_price": 7.28,
+      "exit_date": "2026-04-07 00:11",
+      "exit_price": 7.13,
+      "return_pct": -2.06,
+      "reason": "손절 -2.1%"
+    },
+    {
+      "symbol": "F/KRW",
+      "entry_date": "2026-04-07 00:03",
+      "entry_price": 8.7,
+      "exit_date": "2026-04-07 01:17",
+      "exit_price": 8.52,
+      "return_pct": -2.07,
+      "reason": "손절 -2.1%"
+    },
+    {
+      "symbol": "MINA/KRW",
+      "entry_date": "2026-05-04 00:02",
+      "entry_price": 94.9,
+      "exit_date": "2026-05-04 02:32",
+      "exit_price": 93.0,
+      "return_pct": -2.0,
+      "reason": "손절 -2.0%"
+    },
+    {
+      "symbol": "MINA/KRW",
+      "entry_date": "2026-05-04 00:02",
+      "entry_price": 94.9,
+      "exit_date": "2026-05-04 02:41",
+      "exit_price": 93.0,
+      "return_pct": -2.0,
+      "reason": "손절 -2.0%"
+    },
+    {
+      "symbol": "DOOD/KRW",
+      "entry_date": "2026-05-06 00:02",
+      "entry_price": 4.8,
+      "exit_date": "2026-05-07 00:04",
+      "exit_price": 4.8,
+      "return_pct": 0.0,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "VET/KRW",
+      "entry_date": "2026-05-06 00:02",
+      "entry_price": 11.0,
+      "exit_date": "2026-05-07 00:04",
+      "exit_price": 11.3,
+      "return_pct": 2.73,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "1INCH/KRW",
+      "entry_date": "2026-05-06 00:02",
+      "entry_price": 144.0,
+      "exit_date": "2026-05-07 00:04",
+      "exit_price": 145.0,
+      "return_pct": 0.69,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "SONIC/KRW",
+      "entry_date": "2026-05-07 00:04",
+      "entry_price": 59.4,
+      "exit_date": "2026-05-07 00:08",
+      "exit_price": 58.2,
+      "return_pct": -2.02,
+      "reason": "손절 -2.0%"
+    },
+    {
+      "symbol": "SONIC/KRW",
+      "entry_date": "2026-05-07 00:04",
+      "entry_price": 59.4,
+      "exit_date": "2026-05-07 00:54",
+      "exit_price": 58.2,
+      "return_pct": -2.02,
+      "reason": "손절 -2.0%"
+    },
+    {
+      "symbol": "G/KRW",
+      "entry_date": "2026-05-08 00:00",
+      "entry_price": 5.62,
+      "exit_date": "2026-05-09 00:00",
+      "exit_price": 5.62,
+      "return_pct": 0.0,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "ERA/KRW",
+      "entry_date": "2026-05-08 00:00",
+      "entry_price": 209.0,
+      "exit_date": "2026-05-09 00:00",
+      "exit_price": 209.0,
+      "return_pct": 0.0,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "G/KRW",
+      "entry_date": "2026-05-08 00:00",
+      "entry_price": 5.62,
+      "exit_date": "2026-05-09 00:01",
+      "exit_price": 5.62,
+      "return_pct": 0.0,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "STORJ/KRW",
+      "entry_date": "2026-05-09 00:00",
+      "entry_price": 178.0,
+      "exit_date": "2026-05-09 06:37",
+      "exit_price": 174.0,
+      "return_pct": -2.25,
+      "reason": "손절 -2.2%"
+    },
+    {
+      "symbol": "POLYX/KRW",
+      "entry_date": "2026-05-09 00:01",
+      "entry_price": 81.0,
+      "exit_date": "2026-05-09 07:10",
+      "exit_price": 79.3,
+      "return_pct": -2.1,
+      "reason": "손절 -2.1%"
+    },
+    {
+      "symbol": "PENDLE/KRW",
+      "entry_date": "2026-05-09 00:00",
+      "entry_price": 3050.0,
+      "exit_date": "2026-05-09 14:01",
+      "exit_price": 2988.0,
+      "return_pct": -2.03,
+      "reason": "손절 -2.0%"
+    },
+    {
+      "symbol": "XTZ/KRW",
+      "entry_date": "2026-05-09 00:01",
+      "entry_price": 583.0,
+      "exit_date": "2026-05-09 22:06",
+      "exit_price": 571.0,
+      "return_pct": -2.06,
+      "reason": "손절 -2.1%"
+    },
+    {
+      "symbol": "1INCH/KRW",
+      "entry_date": "2026-05-09 00:01",
+      "entry_price": 148.0,
+      "exit_date": "2026-05-10 00:00",
+      "exit_price": 148.0,
+      "return_pct": 0.0,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "ORDER/KRW",
+      "entry_date": "2026-05-12 00:04",
+      "entry_price": 90.0,
+      "exit_date": "2026-05-12 01:59",
+      "exit_price": 88.2,
+      "return_pct": -2.0,
+      "reason": "손절 -2.0%"
+    },
+    {
+      "symbol": "TOKAMAK/KRW",
+      "entry_date": "2026-05-12 00:04",
+      "entry_price": 844.0,
+      "exit_date": "2026-05-12 10:41",
+      "exit_price": 827.0,
+      "return_pct": -2.01,
+      "reason": "손절 -2.0%"
+    },
+    {
+      "symbol": "POKT/KRW",
+      "entry_date": "2026-05-12 00:04",
+      "entry_price": 18.1,
+      "exit_date": "2026-05-13 00:04",
+      "exit_price": 18.6,
+      "return_pct": 2.76,
+      "reason": "1일 회전"
+    },
+    {
+      "symbol": "AZTEC/KRW",
+      "entry_date": "2026-05-13 00:04",
+      "entry_price": 36.7,
+      "exit_date": "2026-05-13 00:08",
+      "exit_price": 35.9,
+      "return_pct": -2.18,
+      "reason": "손절 -2.2%"
+    }
+  ],
+  "dead_symbols": [
+    "ELF/KRW"
+  ],
+  "weekly_count": {
+    "2026-W19": {
+      "MINA/KRW": 1,
+      "DOOD/KRW": 1,
+      "VET/KRW": 1,
+      "1INCH/KRW": 2,
+      "SONIC/KRW": 1,
+      "ERA/KRW": 1,
+      "G/KRW": 1,
+      "PENDLE/KRW": 1,
+      "STORJ/KRW": 1,
+      "XTZ/KRW": 1,
+      "POLYX/KRW": 1
+    },
+    "2026-W20": {
+      "ORDER/KRW": 1,
+      "POKT/KRW": 1,
+      "TOKAMAK/KRW": 1,
+      "AZTEC/KRW": 1
+    }
+  },
+  "loss_cooldown_until": "2026-05-10T22:06:58.621006+00:00",
+  "state_balance_fix_ts": "20260510_232531"
+}

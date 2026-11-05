@@ -1,0 +1,4 @@
+{"ts_utc": "2026-05-16T07:12:44.470668+00:00", "symbol": "GLM/KRW", "signal_ts": "2026-05-16T07:12:44.467751+00:00", "signal_type": "DC_breakout_realtime", "score": 1.0, "threshold": 0.4, "will_buy": true, "ml_active": false}
+{"ts_utc": "2026-05-16T08:50:47.797155+00:00", "symbol": "META/KRW", "signal_ts": "2026-05-16T08:50:47.796974+00:00", "signal_type": "DC_breakout_realtime", "score": 1.0, "threshold": 0.4, "will_buy": true, "ml_active": false}
+{"ts_utc": "2026-05-20T00:08:18.753075+00:00", "kind": "outcome", "symbol": "GLM/KRW", "signal_ts": "2026-05-16T07:12:44.467751+00:00", "outcome_pct": 0.0246, "reached_target": false, "horizon_bars_actual": 6}
+{"ts_utc": "2026-05-20T00:08:18.952054+00:00", "kind": "outcome", "symbol": "META/KRW", "signal_ts": "2026-05-16T08:50:47.796974+00:00", "outcome_pct": 0.1871, "reached_target": true, "horizon_bars_actual": 6}

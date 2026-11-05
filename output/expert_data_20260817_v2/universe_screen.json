@@ -1,0 +1,1955 @@
+{
+  "generated_at": "2026-08-17T10:48:59.026154+00:00",
+  "total_markets": 283,
+  "screen_passed": 106,
+  "min_volume_krw_current": 500000000.0,
+  "candidates": [
+    {
+      "symbol": "USDT/KRW",
+      "current_24h_krw": 70168959078.28743,
+      "screen_pass": true
+    },
+    {
+      "symbol": "XRP/KRW",
+      "current_24h_krw": 35340595624.77944,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ONG/KRW",
+      "current_24h_krw": 32630870033.68567,
+      "screen_pass": true
+    },
+    {
+      "symbol": "BTC/KRW",
+      "current_24h_krw": 26664489767.31807,
+      "screen_pass": true
+    },
+    {
+      "symbol": "CAP/KRW",
+      "current_24h_krw": 26556792856.74177,
+      "screen_pass": true
+    },
+    {
+      "symbol": "CHIP/KRW",
+      "current_24h_krw": 21473688805.419025,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ETH/KRW",
+      "current_24h_krw": 19829587325.2509,
+      "screen_pass": true
+    },
+    {
+      "symbol": "PRL/KRW",
+      "current_24h_krw": 18065517373.19039,
+      "screen_pass": true
+    },
+    {
+      "symbol": "O/KRW",
+      "current_24h_krw": 12287770340.233313,
+      "screen_pass": true
+    },
+    {
+      "symbol": "WLD/KRW",
+      "current_24h_krw": 11704104747.736584,
+      "screen_pass": true
+    },
+    {
+      "symbol": "DOS/KRW",
+      "current_24h_krw": 10802953933.02121,
+      "screen_pass": true
+    },
+    {
+      "symbol": "SNT/KRW",
+      "current_24h_krw": 10698328271.768782,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ONDO/KRW",
+      "current_24h_krw": 9397857109.484175,
+      "screen_pass": true
+    },
+    {
+      "symbol": "HOME/KRW",
+      "current_24h_krw": 8404385396.222604,
+      "screen_pass": true
+    },
+    {
+      "symbol": "PROM/KRW",
+      "current_24h_krw": 7100961745.173981,
+      "screen_pass": true
+    },
+    {
+      "symbol": "COW/KRW",
+      "current_24h_krw": 6536804489.194155,
+      "screen_pass": true
+    },
+    {
+      "symbol": "UP2/KRW",
+      "current_24h_krw": 6034737466.043151,
+      "screen_pass": true
+    },
+    {
+      "symbol": "BSB/KRW",
+      "current_24h_krw": 5896721350.382786,
+      "screen_pass": true
+    },
+    {
+      "symbol": "RE/KRW",
+      "current_24h_krw": 5827172289.581258,
+      "screen_pass": true
+    },
+    {
+      "symbol": "SOL/KRW",
+      "current_24h_krw": 5659642567.262945,
+      "screen_pass": true
+    },
+    {
+      "symbol": "B3/KRW",
+      "current_24h_krw": 5656382820.551075,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ONT/KRW",
+      "current_24h_krw": 5578709933.983965,
+      "screen_pass": true
+    },
+    {
+      "symbol": "EUL/KRW",
+      "current_24h_krw": 5564928496.38954,
+      "screen_pass": true
+    },
+    {
+      "symbol": "XLM/KRW",
+      "current_24h_krw": 4890088424.643292,
+      "screen_pass": true
+    },
+    {
+      "symbol": "KAITO/KRW",
+      "current_24h_krw": 4786153147.142935,
+      "screen_pass": true
+    },
+    {
+      "symbol": "SLX/KRW",
+      "current_24h_krw": 4649818967.660928,
+      "screen_pass": true
+    },
+    {
+      "symbol": "DRV/KRW",
+      "current_24h_krw": 4292156899.026087,
+      "screen_pass": true
+    },
+    {
+      "symbol": "DOGE/KRW",
+      "current_24h_krw": 4169997796.998321,
+      "screen_pass": true
+    },
+    {
+      "symbol": "SOPH/KRW",
+      "current_24h_krw": 4129948184.013639,
+      "screen_pass": true
+    },
+    {
+      "symbol": "HOLO/KRW",
+      "current_24h_krw": 3561216971.633249,
+      "screen_pass": true
+    },
+    {
+      "symbol": "WLFI/KRW",
+      "current_24h_krw": 3374544294.386878,
+      "screen_pass": true
+    },
+    {
+      "symbol": "EDGE/KRW",
+      "current_24h_krw": 3269618057.092712,
+      "screen_pass": true
+    },
+    {
+      "symbol": "LINK/KRW",
+      "current_24h_krw": 3043241017.3281093,
+      "screen_pass": true
+    },
+    {
+      "symbol": "GEOD/KRW",
+      "current_24h_krw": 3009267808.1758223,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ENSO/KRW",
+      "current_24h_krw": 2954099911.927099,
+      "screen_pass": true
+    },
+    {
+      "symbol": "BIGTIME/KRW",
+      "current_24h_krw": 2900972498.87379,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ADA/KRW",
+      "current_24h_krw": 2851460172.5587068,
+      "screen_pass": true
+    },
+    {
+      "symbol": "MMT/KRW",
+      "current_24h_krw": 2640671492.5519524,
+      "screen_pass": true
+    },
+    {
+      "symbol": "SHIB/KRW",
+      "current_24h_krw": 2544871188.4670167,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ZBT/KRW",
+      "current_24h_krw": 2382932681.9178467,
+      "screen_pass": true
+    },
+    {
+      "symbol": "NEWT/KRW",
+      "current_24h_krw": 2336530114.9016995,
+      "screen_pass": true
+    },
+    {
+      "symbol": "BONK/KRW",
+      "current_24h_krw": 2277782920.4101415,
+      "screen_pass": true
+    },
+    {
+      "symbol": "PUMP/KRW",
+      "current_24h_krw": 2230308064.420053,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ENA/KRW",
+      "current_24h_krw": 2155595566.9930706,
+      "screen_pass": true
+    },
+    {
+      "symbol": "MOVE/KRW",
+      "current_24h_krw": 1692130935.9044135,
+      "screen_pass": true
+    },
+    {
+      "symbol": "G/KRW",
+      "current_24h_krw": 1625789788.5893188,
+      "screen_pass": true
+    },
+    {
+      "symbol": "WAL/KRW",
+      "current_24h_krw": 1584698491.405943,
+      "screen_pass": true
+    },
+    {
+      "symbol": "AVAX/KRW",
+      "current_24h_krw": 1553108473.3584766,
+      "screen_pass": true
+    },
+    {
+      "symbol": "GAS/KRW",
+      "current_24h_krw": 1549279233.302094,
+      "screen_pass": true
+    },
+    {
+      "symbol": "SUI/KRW",
+      "current_24h_krw": 1510994685.0594928,
+      "screen_pass": true
+    },
+    {
+      "symbol": "XPL/KRW",
+      "current_24h_krw": 1502405010.4226158,
+      "screen_pass": true
+    },
+    {
+      "symbol": "PLUME/KRW",
+      "current_24h_krw": 1489842154.3845396,
+      "screen_pass": true
+    },
+    {
+      "symbol": "LA/KRW",
+      "current_24h_krw": 1438396198.2458446,
+      "screen_pass": true
+    },
+    {
+      "symbol": "SAND/KRW",
+      "current_24h_krw": 1373861751.40213,
+      "screen_pass": true
+    },
+    {
+      "symbol": "SAHARA/KRW",
+      "current_24h_krw": 1325038541.7713144,
+      "screen_pass": true
+    },
+    {
+      "symbol": "PIEVERSE/KRW",
+      "current_24h_krw": 1321653274.0116673,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ARX/KRW",
+      "current_24h_krw": 1237857600.260455,
+      "screen_pass": true
+    },
+    {
+      "symbol": "STEEM/KRW",
+      "current_24h_krw": 1160698909.582426,
+      "screen_pass": true
+    },
+    {
+      "symbol": "QUID/KRW",
+      "current_24h_krw": 1158362724.6390755,
+      "screen_pass": true
+    },
+    {
+      "symbol": "NXPC/KRW",
+      "current_24h_krw": 1146940067.3129294,
+      "screen_pass": true
+    },
+    {
+      "symbol": "TRX/KRW",
+      "current_24h_krw": 1132753878.1273632,
+      "screen_pass": true
+    },
+    {
+      "symbol": "DATA/KRW",
+      "current_24h_krw": 1103041910.2586887,
+      "screen_pass": true
+    },
+    {
+      "symbol": "STORJ/KRW",
+      "current_24h_krw": 1074960883.5026994,
+      "screen_pass": true
+    },
+    {
+      "symbol": "JTO/KRW",
+      "current_24h_krw": 1007850177.060101,
+      "screen_pass": true
+    },
+    {
+      "symbol": "PENGU/KRW",
+      "current_24h_krw": 992806989.6198585,
+      "screen_pass": true
+    },
+    {
+      "symbol": "SIGN/KRW",
+      "current_24h_krw": 985770941.7520633,
+      "screen_pass": true
+    },
+    {
+      "symbol": "BLEND/KRW",
+      "current_24h_krw": 953258072.4227916,
+      "screen_pass": true
+    },
+    {
+      "symbol": "SOON/KRW",
+      "current_24h_krw": 938558103.266229,
+      "screen_pass": true
+    },
+    {
+      "symbol": "SEI/KRW",
+      "current_24h_krw": 899078479.2924969,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ETC/KRW",
+      "current_24h_krw": 885554101.6863492,
+      "screen_pass": true
+    },
+    {
+      "symbol": "BCH/KRW",
+      "current_24h_krw": 866903861.285459,
+      "screen_pass": true
+    },
+    {
+      "symbol": "UNI/KRW",
+      "current_24h_krw": 861700558.9468039,
+      "screen_pass": true
+    },
+    {
+      "symbol": "USDC/KRW",
+      "current_24h_krw": 859794035.2305604,
+      "screen_pass": true
+    },
+    {
+      "symbol": "AWE/KRW",
+      "current_24h_krw": 857943397.6018468,
+      "screen_pass": true
+    },
+    {
+      "symbol": "VIRTUAL/KRW",
+      "current_24h_krw": 823602497.6273118,
+      "screen_pass": true
+    },
+    {
+      "symbol": "GRVT/KRW",
+      "current_24h_krw": 809371122.3015153,
+      "screen_pass": true
+    },
+    {
+      "symbol": "NEAR/KRW",
+      "current_24h_krw": 804026247.2138488,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ETHFI/KRW",
+      "current_24h_krw": 801793722.6889689,
+      "screen_pass": true
+    },
+    {
+      "symbol": "HBAR/KRW",
+      "current_24h_krw": 795783869.9409155,
+      "screen_pass": true
+    },
+    {
+      "symbol": "0G/KRW",
+      "current_24h_krw": 772243541.9407685,
+      "screen_pass": true
+    },
+    {
+      "symbol": "OPG/KRW",
+      "current_24h_krw": 769506273.099991,
+      "screen_pass": true
+    },
+    {
+      "symbol": "APT/KRW",
+      "current_24h_krw": 769263990.986492,
+      "screen_pass": true
+    },
+    {
+      "symbol": "2Z/KRW",
+      "current_24h_krw": 760593367.5336314,
+      "screen_pass": true
+    },
+    {
+      "symbol": "XEC/KRW",
+      "current_24h_krw": 754403096.869192,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ENS/KRW",
+      "current_24h_krw": 727028643.4638307,
+      "screen_pass": true
+    },
+    {
+      "symbol": "PEPE/KRW",
+      "current_24h_krw": 719397870.4272835,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ALGO/KRW",
+      "current_24h_krw": 697281130.7368753,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ESP/KRW",
+      "current_24h_krw": 693208385.6627165,
+      "screen_pass": true
+    },
+    {
+      "symbol": "AVNT/KRW",
+      "current_24h_krw": 689976524.6803558,
+      "screen_pass": true
+    },
+    {
+      "symbol": "IRYS/KRW",
+      "current_24h_krw": 678266621.5141301,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ARB/KRW",
+      "current_24h_krw": 675905958.7227676,
+      "screen_pass": true
+    },
+    {
+      "symbol": "RVN/KRW",
+      "current_24h_krw": 670493074.7427726,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ELSA/KRW",
+      "current_24h_krw": 651224137.111673,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ID/KRW",
+      "current_24h_krw": 640889833.1726543,
+      "screen_pass": true
+    },
+    {
+      "symbol": "POL/KRW",
+      "current_24h_krw": 633001848.3672712,
+      "screen_pass": true
+    },
+    {
+      "symbol": "TRUMP/KRW",
+      "current_24h_krw": 619852583.6364176,
+      "screen_pass": true
+    },
+    {
+      "symbol": "CC/KRW",
+      "current_24h_krw": 595250722.2429863,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ATH/KRW",
+      "current_24h_krw": 557553251.5547363,
+      "screen_pass": true
+    },
+    {
+      "symbol": "CFG/KRW",
+      "current_24h_krw": 538166986.4249891,
+      "screen_pass": true
+    },
+    {
+      "symbol": "BERA/KRW",
+      "current_24h_krw": 535584743.45256174,
+      "screen_pass": true
+    },
+    {
+      "symbol": "MIRA/KRW",
+      "current_24h_krw": 529408468.1766012,
+      "screen_pass": true
+    },
+    {
+      "symbol": "TAO/KRW",
+      "current_24h_krw": 527522571.137766,
+      "screen_pass": true
+    },
+    {
+      "symbol": "TT/KRW",
+      "current_24h_krw": 522616201.13435704,
+      "screen_pass": true
+    },
+    {
+      "symbol": "FIL/KRW",
+      "current_24h_krw": 522389711.2411745,
+      "screen_pass": true
+    },
+    {
+      "symbol": "AXS/KRW",
+      "current_24h_krw": 522095728.16193646,
+      "screen_pass": true
+    },
+    {
+      "symbol": "TRAC/KRW",
+      "current_24h_krw": 518331997.2222221,
+      "screen_pass": true
+    }
+  ],
+  "all_results": [
+    {
+      "symbol": "0G/KRW",
+      "current_24h_krw": 772243541.9407685,
+      "screen_pass": true
+    },
+    {
+      "symbol": "1INCH/KRW",
+      "current_24h_krw": 30336200.59088445,
+      "screen_pass": false
+    },
+    {
+      "symbol": "2Z/KRW",
+      "current_24h_krw": 760593367.5336314,
+      "screen_pass": true
+    },
+    {
+      "symbol": "A/KRW",
+      "current_24h_krw": 47791844.337174,
+      "screen_pass": false
+    },
+    {
+      "symbol": "AAVE/KRW",
+      "current_24h_krw": 314845212.806639,
+      "screen_pass": false
+    },
+    {
+      "symbol": "ADA/KRW",
+      "current_24h_krw": 2851460172.5587068,
+      "screen_pass": true
+    },
+    {
+      "symbol": "AERO/KRW",
+      "current_24h_krw": 155861962.519626,
+      "screen_pass": false
+    },
+    {
+      "symbol": "AGLD/KRW",
+      "current_24h_krw": 50650160.12929729,
+      "screen_pass": false
+    },
+    {
+      "symbol": "AHT/KRW",
+      "current_24h_krw": 23627116.23466001,
+      "screen_pass": false
+    },
+    {
+      "symbol": "AI/KRW",
+      "current_24h_krw": 97366579.26589552,
+      "screen_pass": false
+    },
+    {
+      "symbol": "AKT/KRW",
+      "current_24h_krw": 380494815.7402976,
+      "screen_pass": false
+    },
+    {
+      "symbol": "ALGO/KRW",
+      "current_24h_krw": 697281130.7368753,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ALT/KRW",
+      "current_24h_krw": 66658763.36173218,
+      "screen_pass": false
+    },
+    {
+      "symbol": "ANIME/KRW",
+      "current_24h_krw": 99417135.66015562,
+      "screen_pass": false
+    },
+    {
+      "symbol": "ANKR/KRW",
+      "current_24h_krw": 43927590.87458023,
+      "screen_pass": false
+    },
+    {
+      "symbol": "API3/KRW",
+      "current_24h_krw": 182694856.364107,
+      "screen_pass": false
+    },
+    {
+      "symbol": "APT/KRW",
+      "current_24h_krw": 769263990.986492,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ARB/KRW",
+      "current_24h_krw": 675905958.7227676,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ARDR/KRW",
+      "current_24h_krw": 44056507.64622649,
+      "screen_pass": false
+    },
+    {
+      "symbol": "ARK/KRW",
+      "current_24h_krw": 61403152.82472021,
+      "screen_pass": false
+    },
+    {
+      "symbol": "ARKM/KRW",
+      "current_24h_krw": 120171844.01269086,
+      "screen_pass": false
+    },
+    {
+      "symbol": "ARX/KRW",
+      "current_24h_krw": 1237857600.260455,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ASTR/KRW",
+      "current_24h_krw": 45090227.6325678,
+      "screen_pass": false
+    },
+    {
+      "symbol": "ATH/KRW",
+      "current_24h_krw": 557553251.5547363,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ATOM/KRW",
+      "current_24h_krw": 227513284.69134942,
+      "screen_pass": false
+    },
+    {
+      "symbol": "AUCTION/KRW",
+      "current_24h_krw": 64533090.0815108,
+      "screen_pass": false
+    },
+    {
+      "symbol": "AVAX/KRW",
+      "current_24h_krw": 1553108473.3584766,
+      "screen_pass": true
+    },
+    {
+      "symbol": "AVNT/KRW",
+      "current_24h_krw": 689976524.6803558,
+      "screen_pass": true
+    },
+    {
+      "symbol": "AWE/KRW",
+      "current_24h_krw": 857943397.6018468,
+      "screen_pass": true
+    },
+    {
+      "symbol": "AXL/KRW",
+      "current_24h_krw": 64850837.90644266,
+      "screen_pass": false
+    },
+    {
+      "symbol": "AXS/KRW",
+      "current_24h_krw": 522095728.16193646,
+      "screen_pass": true
+    },
+    {
+      "symbol": "AZTEC/KRW",
+      "current_24h_krw": 95085921.95110181,
+      "screen_pass": false
+    },
+    {
+      "symbol": "B3/KRW",
+      "current_24h_krw": 5656382820.551075,
+      "screen_pass": true
+    },
+    {
+      "symbol": "BABY/KRW",
+      "current_24h_krw": 54193678.53154501,
+      "screen_pass": false
+    },
+    {
+      "symbol": "BARD/KRW",
+      "current_24h_krw": 465696695.50715506,
+      "screen_pass": false
+    },
+    {
+      "symbol": "BAT/KRW",
+      "current_24h_krw": 128941675.16313046,
+      "screen_pass": false
+    },
+    {
+      "symbol": "BCH/KRW",
+      "current_24h_krw": 866903861.285459,
+      "screen_pass": true
+    },
+    {
+      "symbol": "BEAM/KRW",
+      "current_24h_krw": 79707538.93090919,
+      "screen_pass": false
+    },
+    {
+      "symbol": "BERA/KRW",
+      "current_24h_krw": 535584743.45256174,
+      "screen_pass": true
+    },
+    {
+      "symbol": "BIGTIME/KRW",
+      "current_24h_krw": 2900972498.87379,
+      "screen_pass": true
+    },
+    {
+      "symbol": "BIO/KRW",
+      "current_24h_krw": 163816257.5296211,
+      "screen_pass": false
+    },
+    {
+      "symbol": "BIRB/KRW",
+      "current_24h_krw": 263208663.97662118,
+      "screen_pass": false
+    },
+    {
+      "symbol": "BLAST/KRW",
+      "current_24h_krw": 142445095.8972691,
+      "screen_pass": false
+    },
+    {
+      "symbol": "BLEND/KRW",
+      "current_24h_krw": 953258072.4227916,
+      "screen_pass": true
+    },
+    {
+      "symbol": "BLUR/KRW",
+      "current_24h_krw": 79056573.81424695,
+      "screen_pass": false
+    },
+    {
+      "symbol": "BONK/KRW",
+      "current_24h_krw": 2277782920.4101415,
+      "screen_pass": true
+    },
+    {
+      "symbol": "BORA/KRW",
+      "current_24h_krw": 157182841.4720941,
+      "screen_pass": false
+    },
+    {
+      "symbol": "BOUNTY/KRW",
+      "current_24h_krw": 105645173.30243734,
+      "screen_pass": false
+    },
+    {
+      "symbol": "BREV/KRW",
+      "current_24h_krw": 73922122.13781533,
+      "screen_pass": false
+    },
+    {
+      "symbol": "BSB/KRW",
+      "current_24h_krw": 5896721350.382786,
+      "screen_pass": true
+    },
+    {
+      "symbol": "BSV/KRW",
+      "current_24h_krw": 236308957.8481881,
+      "screen_pass": false
+    },
+    {
+      "symbol": "BTC/KRW",
+      "current_24h_krw": 26664489767.31807,
+      "screen_pass": true
+    },
+    {
+      "symbol": "BTT/KRW",
+      "current_24h_krw": 190935658.3637188,
+      "screen_pass": false
+    },
+    {
+      "symbol": "CAP/KRW",
+      "current_24h_krw": 26556792856.74177,
+      "screen_pass": true
+    },
+    {
+      "symbol": "CARV/KRW",
+      "current_24h_krw": 127796236.63782749,
+      "screen_pass": false
+    },
+    {
+      "symbol": "CBK/KRW",
+      "current_24h_krw": 38720710.62675311,
+      "screen_pass": false
+    },
+    {
+      "symbol": "CC/KRW",
+      "current_24h_krw": 595250722.2429863,
+      "screen_pass": true
+    },
+    {
+      "symbol": "CELO/KRW",
+      "current_24h_krw": 98627700.18155335,
+      "screen_pass": false
+    },
+    {
+      "symbol": "CFG/KRW",
+      "current_24h_krw": 538166986.4249891,
+      "screen_pass": true
+    },
+    {
+      "symbol": "CFX/KRW",
+      "current_24h_krw": 70698017.15973134,
+      "screen_pass": false
+    },
+    {
+      "symbol": "CHIP/KRW",
+      "current_24h_krw": 21473688805.419025,
+      "screen_pass": true
+    },
+    {
+      "symbol": "CHZ/KRW",
+      "current_24h_krw": 290176319.0855016,
+      "screen_pass": false
+    },
+    {
+      "symbol": "CKB/KRW",
+      "current_24h_krw": 31944007.83273044,
+      "screen_pass": false
+    },
+    {
+      "symbol": "COMP/KRW",
+      "current_24h_krw": 12407916.3652562,
+      "screen_pass": false
+    },
+    {
+      "symbol": "COW/KRW",
+      "current_24h_krw": 6536804489.194155,
+      "screen_pass": true
+    },
+    {
+      "symbol": "CPOOL/KRW",
+      "current_24h_krw": 87845219.95250094,
+      "screen_pass": false
+    },
+    {
+      "symbol": "CRO/KRW",
+      "current_24h_krw": 94112214.25676937,
+      "screen_pass": false
+    },
+    {
+      "symbol": "CTC/KRW",
+      "current_24h_krw": 287582020.2400998,
+      "screen_pass": false
+    },
+    {
+      "symbol": "CVC/KRW",
+      "current_24h_krw": 24957058.35058042,
+      "screen_pass": false
+    },
+    {
+      "symbol": "CYBER/KRW",
+      "current_24h_krw": 76384832.92396674,
+      "screen_pass": false
+    },
+    {
+      "symbol": "DATA/KRW",
+      "current_24h_krw": 1103041910.2586887,
+      "screen_pass": true
+    },
+    {
+      "symbol": "DEEP/KRW",
+      "current_24h_krw": 164177180.413524,
+      "screen_pass": false
+    },
+    {
+      "symbol": "DKA/KRW",
+      "current_24h_krw": 78079375.56321935,
+      "screen_pass": false
+    },
+    {
+      "symbol": "DOGE/KRW",
+      "current_24h_krw": 4169997796.998321,
+      "screen_pass": true
+    },
+    {
+      "symbol": "DOOD/KRW",
+      "current_24h_krw": 304156250.87862563,
+      "screen_pass": false
+    },
+    {
+      "symbol": "DOS/KRW",
+      "current_24h_krw": 10802953933.02121,
+      "screen_pass": true
+    },
+    {
+      "symbol": "DOT/KRW",
+      "current_24h_krw": 124253648.91646057,
+      "screen_pass": false
+    },
+    {
+      "symbol": "DRV/KRW",
+      "current_24h_krw": 4292156899.026087,
+      "screen_pass": true
+    },
+    {
+      "symbol": "EDGE/KRW",
+      "current_24h_krw": 3269618057.092712,
+      "screen_pass": true
+    },
+    {
+      "symbol": "EGLD/KRW",
+      "current_24h_krw": 15573584.49170016,
+      "screen_pass": false
+    },
+    {
+      "symbol": "ELF/KRW",
+      "current_24h_krw": 178376320.44527555,
+      "screen_pass": false
+    },
+    {
+      "symbol": "ELSA/KRW",
+      "current_24h_krw": 651224137.111673,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ENA/KRW",
+      "current_24h_krw": 2155595566.9930706,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ENS/KRW",
+      "current_24h_krw": 727028643.4638307,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ENSO/KRW",
+      "current_24h_krw": 2954099911.927099,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ERA/KRW",
+      "current_24h_krw": 368695459.2489694,
+      "screen_pass": false
+    },
+    {
+      "symbol": "ESP/KRW",
+      "current_24h_krw": 693208385.6627165,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ETC/KRW",
+      "current_24h_krw": 885554101.6863492,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ETH/KRW",
+      "current_24h_krw": 19829587325.2509,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ETHFI/KRW",
+      "current_24h_krw": 801793722.6889689,
+      "screen_pass": true
+    },
+    {
+      "symbol": "EUL/KRW",
+      "current_24h_krw": 5564928496.38954,
+      "screen_pass": true
+    },
+    {
+      "symbol": "F/KRW",
+      "current_24h_krw": 139255070.00248513,
+      "screen_pass": false
+    },
+    {
+      "symbol": "FCT2/KRW",
+      "current_24h_krw": 60016960.38478016,
+      "screen_pass": false
+    },
+    {
+      "symbol": "FF/KRW",
+      "current_24h_krw": 194383866.79355776,
+      "screen_pass": false
+    },
+    {
+      "symbol": "FIL/KRW",
+      "current_24h_krw": 522389711.2411745,
+      "screen_pass": true
+    },
+    {
+      "symbol": "FLOCK/KRW",
+      "current_24h_krw": 184808932.0237408,
+      "screen_pass": false
+    },
+    {
+      "symbol": "FLUID/KRW",
+      "current_24h_krw": 40638070.69704021,
+      "screen_pass": false
+    },
+    {
+      "symbol": "G/KRW",
+      "current_24h_krw": 1625789788.5893188,
+      "screen_pass": true
+    },
+    {
+      "symbol": "GAME2/KRW",
+      "current_24h_krw": 21578973.32913753,
+      "screen_pass": false
+    },
+    {
+      "symbol": "GAS/KRW",
+      "current_24h_krw": 1549279233.302094,
+      "screen_pass": true
+    },
+    {
+      "symbol": "GEOD/KRW",
+      "current_24h_krw": 3009267808.1758223,
+      "screen_pass": true
+    },
+    {
+      "symbol": "GLM/KRW",
+      "current_24h_krw": 30325454.16614189,
+      "screen_pass": false
+    },
+    {
+      "symbol": "GMT/KRW",
+      "current_24h_krw": 202913969.43206197,
+      "screen_pass": false
+    },
+    {
+      "symbol": "GRT/KRW",
+      "current_24h_krw": 112157167.11184126,
+      "screen_pass": false
+    },
+    {
+      "symbol": "GRVT/KRW",
+      "current_24h_krw": 809371122.3015153,
+      "screen_pass": true
+    },
+    {
+      "symbol": "HBAR/KRW",
+      "current_24h_krw": 795783869.9409155,
+      "screen_pass": true
+    },
+    {
+      "symbol": "HIVE/KRW",
+      "current_24h_krw": 147850085.43214852,
+      "screen_pass": false
+    },
+    {
+      "symbol": "HOLO/KRW",
+      "current_24h_krw": 3561216971.633249,
+      "screen_pass": true
+    },
+    {
+      "symbol": "HOME/KRW",
+      "current_24h_krw": 8404385396.222604,
+      "screen_pass": true
+    },
+    {
+      "symbol": "HP/KRW",
+      "current_24h_krw": 29533718.77410191,
+      "screen_pass": false
+    },
+    {
+      "symbol": "HUNT/KRW",
+      "current_24h_krw": 42342683.13802796,
+      "screen_pass": false
+    },
+    {
+      "symbol": "HYPER/KRW",
+      "current_24h_krw": 95535701.48331414,
+      "screen_pass": false
+    },
+    {
+      "symbol": "ICP/KRW",
+      "current_24h_krw": 239523754.50498098,
+      "screen_pass": false
+    },
+    {
+      "symbol": "ICX/KRW",
+      "current_24h_krw": 65776292.34335853,
+      "screen_pass": false
+    },
+    {
+      "symbol": "ID/KRW",
+      "current_24h_krw": 640889833.1726543,
+      "screen_pass": true
+    },
+    {
+      "symbol": "IMX/KRW",
+      "current_24h_krw": 69487719.09955455,
+      "screen_pass": false
+    },
+    {
+      "symbol": "IN/KRW",
+      "current_24h_krw": 367589717.4971005,
+      "screen_pass": false
+    },
+    {
+      "symbol": "INJ/KRW",
+      "current_24h_krw": 202209023.1025183,
+      "screen_pass": false
+    },
+    {
+      "symbol": "IO/KRW",
+      "current_24h_krw": 96796340.26032718,
+      "screen_pass": false
+    },
+    {
+      "symbol": "IOST/KRW",
+      "current_24h_krw": 139037267.50031587,
+      "screen_pass": false
+    },
+    {
+      "symbol": "IOTA/KRW",
+      "current_24h_krw": 294971260.8953985,
+      "screen_pass": false
+    },
+    {
+      "symbol": "IQ/KRW",
+      "current_24h_krw": 27255634.10970818,
+      "screen_pass": false
+    },
+    {
+      "symbol": "IRYS/KRW",
+      "current_24h_krw": 678266621.5141301,
+      "screen_pass": true
+    },
+    {
+      "symbol": "JST/KRW",
+      "current_24h_krw": 115006125.33152369,
+      "screen_pass": false
+    },
+    {
+      "symbol": "JTO/KRW",
+      "current_24h_krw": 1007850177.060101,
+      "screen_pass": true
+    },
+    {
+      "symbol": "JUP/KRW",
+      "current_24h_krw": 115403392.10556506,
+      "screen_pass": false
+    },
+    {
+      "symbol": "KAITO/KRW",
+      "current_24h_krw": 4786153147.142935,
+      "screen_pass": true
+    },
+    {
+      "symbol": "KAT/KRW",
+      "current_24h_krw": 492322255.12959355,
+      "screen_pass": false
+    },
+    {
+      "symbol": "KAVA/KRW",
+      "current_24h_krw": 54781490.1255768,
+      "screen_pass": false
+    },
+    {
+      "symbol": "KERNEL/KRW",
+      "current_24h_krw": 49174822.17328218,
+      "screen_pass": false
+    },
+    {
+      "symbol": "KITE/KRW",
+      "current_24h_krw": 318524050.7668609,
+      "screen_pass": false
+    },
+    {
+      "symbol": "KMNO/KRW",
+      "current_24h_krw": 184739984.97556734,
+      "screen_pass": false
+    },
+    {
+      "symbol": "KNC/KRW",
+      "current_24h_krw": 61263269.38055216,
+      "screen_pass": false
+    },
+    {
+      "symbol": "LA/KRW",
+      "current_24h_krw": 1438396198.2458446,
+      "screen_pass": true
+    },
+    {
+      "symbol": "LAYER/KRW",
+      "current_24h_krw": 124503556.58442928,
+      "screen_pass": false
+    },
+    {
+      "symbol": "LINEA/KRW",
+      "current_24h_krw": 35762706.12516304,
+      "screen_pass": false
+    },
+    {
+      "symbol": "LINK/KRW",
+      "current_24h_krw": 3043241017.3281093,
+      "screen_pass": true
+    },
+    {
+      "symbol": "LPT/KRW",
+      "current_24h_krw": 41833779.98089596,
+      "screen_pass": false
+    },
+    {
+      "symbol": "LSK/KRW",
+      "current_24h_krw": 449648487.9034347,
+      "screen_pass": false
+    },
+    {
+      "symbol": "MANA/KRW",
+      "current_24h_krw": 59508741.98410857,
+      "screen_pass": false
+    },
+    {
+      "symbol": "MANTRA/KRW",
+      "current_24h_krw": 145573986.84083277,
+      "screen_pass": false
+    },
+    {
+      "symbol": "MASK/KRW",
+      "current_24h_krw": 7669832.14011474,
+      "screen_pass": false
+    },
+    {
+      "symbol": "MBL/KRW",
+      "current_24h_krw": 38521918.35903668,
+      "screen_pass": false
+    },
+    {
+      "symbol": "ME/KRW",
+      "current_24h_krw": 297016688.2158538,
+      "screen_pass": false
+    },
+    {
+      "symbol": "MED/KRW",
+      "current_24h_krw": 66887574.67238121,
+      "screen_pass": false
+    },
+    {
+      "symbol": "MEGA/KRW",
+      "current_24h_krw": 327520578.4374254,
+      "screen_pass": false
+    },
+    {
+      "symbol": "MET2/KRW",
+      "current_24h_krw": 110368347.9559054,
+      "screen_pass": false
+    },
+    {
+      "symbol": "META/KRW",
+      "current_24h_krw": 56053520.50653074,
+      "screen_pass": false
+    },
+    {
+      "symbol": "META2/KRW",
+      "current_24h_krw": 183947132.36900836,
+      "screen_pass": false
+    },
+    {
+      "symbol": "MEW/KRW",
+      "current_24h_krw": 69059767.54033475,
+      "screen_pass": false
+    },
+    {
+      "symbol": "MINA/KRW",
+      "current_24h_krw": 39208626.39290663,
+      "screen_pass": false
+    },
+    {
+      "symbol": "MIRA/KRW",
+      "current_24h_krw": 529408468.1766012,
+      "screen_pass": true
+    },
+    {
+      "symbol": "MLK/KRW",
+      "current_24h_krw": 70200732.9759674,
+      "screen_pass": false
+    },
+    {
+      "symbol": "MMT/KRW",
+      "current_24h_krw": 2640671492.5519524,
+      "screen_pass": true
+    },
+    {
+      "symbol": "MNT/KRW",
+      "current_24h_krw": 47810972.67758994,
+      "screen_pass": false
+    },
+    {
+      "symbol": "MOC/KRW",
+      "current_24h_krw": 54810921.16090038,
+      "screen_pass": false
+    },
+    {
+      "symbol": "MOCA/KRW",
+      "current_24h_krw": 51917491.52313407,
+      "screen_pass": false
+    },
+    {
+      "symbol": "MON/KRW",
+      "current_24h_krw": 475008686.76725674,
+      "screen_pass": false
+    },
+    {
+      "symbol": "MOODENG/KRW",
+      "current_24h_krw": 163712670.54093668,
+      "screen_pass": false
+    },
+    {
+      "symbol": "MORPHO/KRW",
+      "current_24h_krw": 325832142.099898,
+      "screen_pass": false
+    },
+    {
+      "symbol": "MOVE/KRW",
+      "current_24h_krw": 1692130935.9044135,
+      "screen_pass": true
+    },
+    {
+      "symbol": "MTL/KRW",
+      "current_24h_krw": 23453608.00674472,
+      "screen_pass": false
+    },
+    {
+      "symbol": "MVL/KRW",
+      "current_24h_krw": 32240517.96114905,
+      "screen_pass": false
+    },
+    {
+      "symbol": "NEAR/KRW",
+      "current_24h_krw": 804026247.2138488,
+      "screen_pass": true
+    },
+    {
+      "symbol": "NEO/KRW",
+      "current_24h_krw": 346264772.2891953,
+      "screen_pass": false
+    },
+    {
+      "symbol": "NEWT/KRW",
+      "current_24h_krw": 2336530114.9016995,
+      "screen_pass": true
+    },
+    {
+      "symbol": "NXPC/KRW",
+      "current_24h_krw": 1146940067.3129294,
+      "screen_pass": true
+    },
+    {
+      "symbol": "O/KRW",
+      "current_24h_krw": 12287770340.233313,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ONDO/KRW",
+      "current_24h_krw": 9397857109.484175,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ONG/KRW",
+      "current_24h_krw": 32630870033.68567,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ONT/KRW",
+      "current_24h_krw": 5578709933.983965,
+      "screen_pass": true
+    },
+    {
+      "symbol": "OP/KRW",
+      "current_24h_krw": 165004877.90989923,
+      "screen_pass": false
+    },
+    {
+      "symbol": "OPEN/KRW",
+      "current_24h_krw": 125630065.86388858,
+      "screen_pass": false
+    },
+    {
+      "symbol": "OPG/KRW",
+      "current_24h_krw": 769506273.099991,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ORBS/KRW",
+      "current_24h_krw": 46488681.94421146,
+      "screen_pass": false
+    },
+    {
+      "symbol": "ORCA/KRW",
+      "current_24h_krw": 122835228.32711495,
+      "screen_pass": false
+    },
+    {
+      "symbol": "ORDER/KRW",
+      "current_24h_krw": 61917887.97934188,
+      "screen_pass": false
+    },
+    {
+      "symbol": "PENDLE/KRW",
+      "current_24h_krw": 423092082.89333004,
+      "screen_pass": false
+    },
+    {
+      "symbol": "PENGU/KRW",
+      "current_24h_krw": 992806989.6198585,
+      "screen_pass": true
+    },
+    {
+      "symbol": "PEPE/KRW",
+      "current_24h_krw": 719397870.4272835,
+      "screen_pass": true
+    },
+    {
+      "symbol": "PIEVERSE/KRW",
+      "current_24h_krw": 1321653274.0116673,
+      "screen_pass": true
+    },
+    {
+      "symbol": "PLUME/KRW",
+      "current_24h_krw": 1489842154.3845396,
+      "screen_pass": true
+    },
+    {
+      "symbol": "POKT/KRW",
+      "current_24h_krw": 116377117.44744134,
+      "screen_pass": false
+    },
+    {
+      "symbol": "POL/KRW",
+      "current_24h_krw": 633001848.3672712,
+      "screen_pass": true
+    },
+    {
+      "symbol": "POLYX/KRW",
+      "current_24h_krw": 103861510.0644094,
+      "screen_pass": false
+    },
+    {
+      "symbol": "POWR/KRW",
+      "current_24h_krw": 43693500.47754538,
+      "screen_pass": false
+    },
+    {
+      "symbol": "PRL/KRW",
+      "current_24h_krw": 18065517373.19039,
+      "screen_pass": true
+    },
+    {
+      "symbol": "PROM/KRW",
+      "current_24h_krw": 7100961745.173981,
+      "screen_pass": true
+    },
+    {
+      "symbol": "PROS/KRW",
+      "current_24h_krw": 107498862.38289149,
+      "screen_pass": false
+    },
+    {
+      "symbol": "PROVE/KRW",
+      "current_24h_krw": 134310776.73024815,
+      "screen_pass": false
+    },
+    {
+      "symbol": "PUMP/KRW",
+      "current_24h_krw": 2230308064.420053,
+      "screen_pass": true
+    },
+    {
+      "symbol": "PUNDIX/KRW",
+      "current_24h_krw": 77998903.31789503,
+      "screen_pass": false
+    },
+    {
+      "symbol": "PYTH/KRW",
+      "current_24h_krw": 254203655.31456554,
+      "screen_pass": false
+    },
+    {
+      "symbol": "QKC/KRW",
+      "current_24h_krw": 73977460.25891139,
+      "screen_pass": false
+    },
+    {
+      "symbol": "QTUM/KRW",
+      "current_24h_krw": 181052760.0747269,
+      "screen_pass": false
+    },
+    {
+      "symbol": "QUID/KRW",
+      "current_24h_krw": 1158362724.6390755,
+      "screen_pass": true
+    },
+    {
+      "symbol": "RAY/KRW",
+      "current_24h_krw": 30685220.88193449,
+      "screen_pass": false
+    },
+    {
+      "symbol": "RE/KRW",
+      "current_24h_krw": 5827172289.581258,
+      "screen_pass": true
+    },
+    {
+      "symbol": "RED/KRW",
+      "current_24h_krw": 355903729.0575173,
+      "screen_pass": false
+    },
+    {
+      "symbol": "RENDER/KRW",
+      "current_24h_krw": 140779853.45999897,
+      "screen_pass": false
+    },
+    {
+      "symbol": "RLUSD/KRW",
+      "current_24h_krw": 33569888.55886607,
+      "screen_pass": false
+    },
+    {
+      "symbol": "RVN/KRW",
+      "current_24h_krw": 670493074.7427726,
+      "screen_pass": true
+    },
+    {
+      "symbol": "SAFE/KRW",
+      "current_24h_krw": 80498878.73344044,
+      "screen_pass": false
+    },
+    {
+      "symbol": "SAHARA/KRW",
+      "current_24h_krw": 1325038541.7713144,
+      "screen_pass": true
+    },
+    {
+      "symbol": "SAND/KRW",
+      "current_24h_krw": 1373861751.40213,
+      "screen_pass": true
+    },
+    {
+      "symbol": "SC/KRW",
+      "current_24h_krw": 86188077.14554451,
+      "screen_pass": false
+    },
+    {
+      "symbol": "SEI/KRW",
+      "current_24h_krw": 899078479.2924969,
+      "screen_pass": true
+    },
+    {
+      "symbol": "SENT/KRW",
+      "current_24h_krw": 35962052.23066077,
+      "screen_pass": false
+    },
+    {
+      "symbol": "SHIB/KRW",
+      "current_24h_krw": 2544871188.4670167,
+      "screen_pass": true
+    },
+    {
+      "symbol": "SIGN/KRW",
+      "current_24h_krw": 985770941.7520633,
+      "screen_pass": true
+    },
+    {
+      "symbol": "SKR/KRW",
+      "current_24h_krw": 91989681.21176358,
+      "screen_pass": false
+    },
+    {
+      "symbol": "SKY/KRW",
+      "current_24h_krw": 160481604.32780823,
+      "screen_pass": false
+    },
+    {
+      "symbol": "SLX/KRW",
+      "current_24h_krw": 4649818967.660928,
+      "screen_pass": true
+    },
+    {
+      "symbol": "SNT/KRW",
+      "current_24h_krw": 10698328271.768782,
+      "screen_pass": true
+    },
+    {
+      "symbol": "SOL/KRW",
+      "current_24h_krw": 5659642567.262945,
+      "screen_pass": true
+    },
+    {
+      "symbol": "SOMI/KRW",
+      "current_24h_krw": 65194980.21638812,
+      "screen_pass": false
+    },
+    {
+      "symbol": "SONIC/KRW",
+      "current_24h_krw": 485211658.01241726,
+      "screen_pass": false
+    },
+    {
+      "symbol": "SOON/KRW",
+      "current_24h_krw": 938558103.266229,
+      "screen_pass": true
+    },
+    {
+      "symbol": "SOPH/KRW",
+      "current_24h_krw": 4129948184.013639,
+      "screen_pass": true
+    },
+    {
+      "symbol": "SPK/KRW",
+      "current_24h_krw": 286862347.35598564,
+      "screen_pass": false
+    },
+    {
+      "symbol": "SPX/KRW",
+      "current_24h_krw": 22099938.40138784,
+      "screen_pass": false
+    },
+    {
+      "symbol": "STEEM/KRW",
+      "current_24h_krw": 1160698909.582426,
+      "screen_pass": true
+    },
+    {
+      "symbol": "STORJ/KRW",
+      "current_24h_krw": 1074960883.5026994,
+      "screen_pass": true
+    },
+    {
+      "symbol": "STRAX/KRW",
+      "current_24h_krw": 157604163.98034328,
+      "screen_pass": false
+    },
+    {
+      "symbol": "STX/KRW",
+      "current_24h_krw": 436598014.54925495,
+      "screen_pass": false
+    },
+    {
+      "symbol": "SUI/KRW",
+      "current_24h_krw": 1510994685.0594928,
+      "screen_pass": true
+    },
+    {
+      "symbol": "SUN/KRW",
+      "current_24h_krw": 42606456.16200444,
+      "screen_pass": false
+    },
+    {
+      "symbol": "SUPER/KRW",
+      "current_24h_krw": 54566865.09744083,
+      "screen_pass": false
+    },
+    {
+      "symbol": "SYRUP/KRW",
+      "current_24h_krw": 63282234.62040849,
+      "screen_pass": false
+    },
+    {
+      "symbol": "T/KRW",
+      "current_24h_krw": 73809204.18168773,
+      "screen_pass": false
+    },
+    {
+      "symbol": "TAIKO/KRW",
+      "current_24h_krw": 60948064.43990301,
+      "screen_pass": false
+    },
+    {
+      "symbol": "TAO/KRW",
+      "current_24h_krw": 527522571.137766,
+      "screen_pass": true
+    },
+    {
+      "symbol": "TFUEL/KRW",
+      "current_24h_krw": 65662796.73779227,
+      "screen_pass": false
+    },
+    {
+      "symbol": "THETA/KRW",
+      "current_24h_krw": 24517771.67333681,
+      "screen_pass": false
+    },
+    {
+      "symbol": "TIA/KRW",
+      "current_24h_krw": 100337094.26549175,
+      "screen_pass": false
+    },
+    {
+      "symbol": "TOKAMAK/KRW",
+      "current_24h_krw": 111754138.1041332,
+      "screen_pass": false
+    },
+    {
+      "symbol": "TOSHI/KRW",
+      "current_24h_krw": 101119585.75266235,
+      "screen_pass": false
+    },
+    {
+      "symbol": "TRAC/KRW",
+      "current_24h_krw": 518331997.2222221,
+      "screen_pass": true
+    },
+    {
+      "symbol": "TREE/KRW",
+      "current_24h_krw": 418990842.81255776,
+      "screen_pass": false
+    },
+    {
+      "symbol": "TRUMP/KRW",
+      "current_24h_krw": 619852583.6364176,
+      "screen_pass": true
+    },
+    {
+      "symbol": "TRUST/KRW",
+      "current_24h_krw": 201144297.63587627,
+      "screen_pass": false
+    },
+    {
+      "symbol": "TRX/KRW",
+      "current_24h_krw": 1132753878.1273632,
+      "screen_pass": true
+    },
+    {
+      "symbol": "TT/KRW",
+      "current_24h_krw": 522616201.13435704,
+      "screen_pass": true
+    },
+    {
+      "symbol": "UNI/KRW",
+      "current_24h_krw": 861700558.9468039,
+      "screen_pass": true
+    },
+    {
+      "symbol": "UP2/KRW",
+      "current_24h_krw": 6034737466.043151,
+      "screen_pass": true
+    },
+    {
+      "symbol": "USD1/KRW",
+      "current_24h_krw": 72281917.12274581,
+      "screen_pass": false
+    },
+    {
+      "symbol": "USDC/KRW",
+      "current_24h_krw": 859794035.2305604,
+      "screen_pass": true
+    },
+    {
+      "symbol": "USDE/KRW",
+      "current_24h_krw": 4945462.905207,
+      "screen_pass": false
+    },
+    {
+      "symbol": "USDG/KRW",
+      "current_24h_krw": 2365278.4350974,
+      "screen_pass": false
+    },
+    {
+      "symbol": "USDS/KRW",
+      "current_24h_krw": 435274.74939139,
+      "screen_pass": false
+    },
+    {
+      "symbol": "USDT/KRW",
+      "current_24h_krw": 70168959078.28743,
+      "screen_pass": true
+    },
+    {
+      "symbol": "VANA/KRW",
+      "current_24h_krw": 234233598.4703874,
+      "screen_pass": false
+    },
+    {
+      "symbol": "VET/KRW",
+      "current_24h_krw": 167450962.29289898,
+      "screen_pass": false
+    },
+    {
+      "symbol": "VIRTUAL/KRW",
+      "current_24h_krw": 823602497.6273118,
+      "screen_pass": true
+    },
+    {
+      "symbol": "VTHO/KRW",
+      "current_24h_krw": 23573031.96512279,
+      "screen_pass": false
+    },
+    {
+      "symbol": "VVV/KRW",
+      "current_24h_krw": 235255546.0541863,
+      "screen_pass": false
+    },
+    {
+      "symbol": "W/KRW",
+      "current_24h_krw": 185392353.0172466,
+      "screen_pass": false
+    },
+    {
+      "symbol": "WAL/KRW",
+      "current_24h_krw": 1584698491.405943,
+      "screen_pass": true
+    },
+    {
+      "symbol": "WAVES/KRW",
+      "current_24h_krw": 162682818.07341516,
+      "screen_pass": false
+    },
+    {
+      "symbol": "WAXP/KRW",
+      "current_24h_krw": 73311342.4755254,
+      "screen_pass": false
+    },
+    {
+      "symbol": "WCT/KRW",
+      "current_24h_krw": 312960812.23011106,
+      "screen_pass": false
+    },
+    {
+      "symbol": "WET/KRW",
+      "current_24h_krw": 50170262.26117521,
+      "screen_pass": false
+    },
+    {
+      "symbol": "WIF/KRW",
+      "current_24h_krw": 3145162.47401593,
+      "screen_pass": false
+    },
+    {
+      "symbol": "WLD/KRW",
+      "current_24h_krw": 11704104747.736584,
+      "screen_pass": true
+    },
+    {
+      "symbol": "WLFI/KRW",
+      "current_24h_krw": 3374544294.386878,
+      "screen_pass": true
+    },
+    {
+      "symbol": "XAUT/KRW",
+      "current_24h_krw": 217944855.99255,
+      "screen_pass": false
+    },
+    {
+      "symbol": "XCN/KRW",
+      "current_24h_krw": 75706729.48721345,
+      "screen_pass": false
+    },
+    {
+      "symbol": "XEC/KRW",
+      "current_24h_krw": 754403096.869192,
+      "screen_pass": true
+    },
+    {
+      "symbol": "XLM/KRW",
+      "current_24h_krw": 4890088424.643292,
+      "screen_pass": true
+    },
+    {
+      "symbol": "XPL/KRW",
+      "current_24h_krw": 1502405010.4226158,
+      "screen_pass": true
+    },
+    {
+      "symbol": "XRP/KRW",
+      "current_24h_krw": 35340595624.77944,
+      "screen_pass": true
+    },
+    {
+      "symbol": "XTZ/KRW",
+      "current_24h_krw": 48556414.40666386,
+      "screen_pass": false
+    },
+    {
+      "symbol": "YGG/KRW",
+      "current_24h_krw": 86784073.43848284,
+      "screen_pass": false
+    },
+    {
+      "symbol": "ZAMA/KRW",
+      "current_24h_krw": 178337614.81205487,
+      "screen_pass": false
+    },
+    {
+      "symbol": "ZBT/KRW",
+      "current_24h_krw": 2382932681.9178467,
+      "screen_pass": true
+    },
+    {
+      "symbol": "ZETA/KRW",
+      "current_24h_krw": 115869218.93518113,
+      "screen_pass": false
+    },
+    {
+      "symbol": "ZIL/KRW",
+      "current_24h_krw": 354618306.4292408,
+      "screen_pass": false
+    },
+    {
+      "symbol": "ZK/KRW",
+      "current_24h_krw": 292465213.04537714,
+      "screen_pass": false
+    },
+    {
+      "symbol": "ZKC/KRW",
+      "current_24h_krw": 44121713.65695716,
+      "screen_pass": false
+    },
+    {
+      "symbol": "ZKP/KRW",
+      "current_24h_krw": 145671205.5759647,
+      "screen_pass": false
+    },
+    {
+      "symbol": "ZORA/KRW",
+      "current_24h_krw": 446060650.3656989,
+      "screen_pass": false
+    },
+    {
+      "symbol": "ZRO/KRW",
+      "current_24h_krw": 238336830.02909333,
+      "screen_pass": false
+    },
+    {
+      "symbol": "ZRX/KRW",
+      "current_24h_krw": 67706043.3009695,
+      "screen_pass": false
+    }
+  ]
+}
