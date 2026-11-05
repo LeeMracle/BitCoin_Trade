@@ -230,13 +230,17 @@ def should_notify(prev_state: dict, new_state: dict) -> bool:
 
 
 def format_notification(old: str, new: str, reason: str) -> str:
-    """레짐 전환 텔레그램 알림 메시지를 반환한다.
+    """관찰 레짐 전환 텔레그램 알림 메시지를 반환한다.
+
+    lessons #55 — 매매 레짐(scanner.fetch_btc_above_ema, BTC>EMA200)과
+    관찰 레짐(이 모듈, SMA50+EMA200+F&G DRY-RUN)의 혼동 방지를 위해
+    [관찰레짐] prefix 를 붙인다. 매매 영향 없음을 명시.
 
     예시:
-        [BATA] 레짐 전환: BEAR → BULL
+        [관찰레짐] [BATA] 전환: BEAR → BULL (DRY-RUN, 매매 미연결)
         사유: BTC(120,000,000)>EMA200(110,000,000) AND F&G=45>=40
     """
     return (
-        f"[BATA] 레짐 전환: {old} → {new}\n"
+        f"[관찰레짐] [BATA] 전환: {old} → {new} (DRY-RUN, 매매 미연결)\n"
         f"사유: {reason}"
     )

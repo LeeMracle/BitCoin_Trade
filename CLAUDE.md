@@ -38,6 +38,9 @@
 | 익절 | **TP1 +5.5% 50%** / **TP2 +10% 50%** | [ADR 20260824-1](docs/decisions/20260824_1_tp1_55_partial.md) · [20260824-2](docs/decisions/20260824_2_tp2_10pct.md) |
 | 슬롯 | **15** · 단일 종목 비중 상한 **0.10** | [ADR 20260825-1](docs/decisions/20260825_1_slot_expansion.md) |
 | 레짐 필터 | **ON** — BTC 종가 < EMA200 시 전 종목 신규 매수 차단 | [ADR 20260516-2](docs/decisions/20260516_2_entry_conditions_tightening.md) |
+
+> **⚠ 레짐 용어 2중화 주의 (lessons #55)**: 매매 경로의 레짐 기준은 `scanner.fetch_btc_above_ema()` — **BTC close > EMA200 단일 판정** (ADR 20260516-2). `workspace/regime_state.json`(`regime_switcher.py` 가 SMA50 + EMA200 + F&G 복합으로 판정, `scripts/regime_check.py` cron 매일 00:30 UTC)은 **관찰용 DRY-RUN**이며 매매 코드에 연결되지 않는다(`REGIME_SWITCH_ENABLED=False`). 같은 "BEAR/BULL" 용어를 쓰지만 두 시스템은 **독립**이므로 매매 가능 여부 판단 시 **매매 레짐(BTC vs EMA200)**만 참조할 것. 혼동 재발 시 lessons #55 참조.
+
 | 종목 풀 | `MIN_VOLUME_KRW` **5억** (~117 종목) | [ADR 20260607-1](docs/decisions/20260607_1_min_volume_revert_5e.md) |
 | 변동성 필터 | `MAX_ATR_PCT` 0.07 · `VOL_FILTER` ×1.5 | ADR 20260516-2 |
 | 안전장치 | 서킷 -20% / -25% · 일일손실 -3% · 5연패 72h 중단 | lessons #11 · #30 · #38 |

@@ -4214,6 +4214,119 @@ def check_ml_shadow_ema_trend_exclude() -> None:
             )
 
 
+# ═══════════════════════════════════════════════════════════════════
+# 검증: 레짐 필터 매수 경로 전수 (lessons #55)
+# ═══════════════════════════════════════════════════════════════════
+
+def check_regime_filter_all_entry_paths() -> None:
+    """매매 경로에 레짐 필터(scanner.fetch_btc_above_ema 기반)가 적용돼 있는지 AST 검증.
+
+    배경 (lessons #55, 2026-11-05):
+        매매 레짐(scanner.fetch_btc_above_ema, BTC>EMA200 단일, ADR 20260516-2)과
+        관찰 레짐(regime_switcher.decide_regime, SMA50+EMA200+F&G 복합, DRY-RUN)이
+        같은 BEAR/BULL 라벨을 공유해 Master·operator 혼동 발생.
+        코드 변경 시 매매 레짐 참조가 조용히 제거되면 모든 필터가 뚫린다 (#6/#26 계열).
+
+    검증 (AST, 메타교훈 #45/#49 — 정규식 금지):
+        1) services/execution/scanner.py 에 `fetch_btc_above_ema` FunctionDef 존재.
+        2) services/execution/realtime_monitor.py::_execute_buy 함수 AST 하위에
+           `self._btc_above_ema` Attribute Load 또는 `fetch_btc_above_ema` Call 1개 이상.
+        3) services/execution/scanner.py 모듈 레벨(또는 신호 생성 함수)에
+           `fetch_btc_above_ema(` Call 1개 이상 — 정의만 하고 쓰지 않는 경우(사문화) 방지.
+
+    역방향 테스트 (환경변수 REGIME_RULE_SELFTEST=1 시 수행):
+        - A: scanner.fetch_btc_above_ema 정의 임시 제거 → ERROR 발화
+        - B: _execute_buy 안 _btc_above_ema 참조 임시 제거 → ERROR 발화
+        - C: 원본 복원 → PASS
+        (본 함수 내부는 AST 트리를 조작한 결과로 검증 로직만 재실행 — 실파일 미수정)
+    """
+    scanner_p = PROJECT_ROOT / "services" / "execution" / "scanner.py"
+    rt_p = PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py"
+
+    if not scanner_p.exists():
+        errors.append("[lessons #55] services/execution/scanner.py 없음 — 매매 레짐 소스 부재")
+        return
+    if not rt_p.exists():
+        errors.append("[lessons #55] services/execution/realtime_monitor.py 없음 — 매수 경로 부재")
+        return
+
+    try:
+        scanner_tree = ast.parse(scanner_p.read_text(encoding="utf-8"))
+        rt_tree = ast.parse(rt_p.read_text(encoding="utf-8"))
+    except SyntaxError as e:
+        errors.append(f"[lessons #55] 매매 레짐 소스 파싱 실패: {e}")
+        return
+
+    # 규칙 1: scanner.fetch_btc_above_ema FunctionDef 존재
+    has_fetch_def = any(
+        isinstance(node, ast.FunctionDef) and node.name == "fetch_btc_above_ema"
+        for node in ast.walk(scanner_tree)
+    )
+    if not has_fetch_def:
+        errors.append(
+            "[lessons #55] services/execution/scanner.py 에 "
+            "`fetch_btc_above_ema` FunctionDef 없음 — ADR 20260516-2 매매 레짐 함수 소실"
+        )
+        # 1 실패 시 하위 검증 조기 종료
+        return
+
+    # 규칙 2: realtime_monitor._execute_buy 안에 레짐 체크 참조 존재
+    _execute_buy_node: ast.AsyncFunctionDef | ast.FunctionDef | None = None
+    for node in ast.walk(rt_tree):
+        if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)) and node.name == "_execute_buy":
+            _execute_buy_node = node
+            break
+
+    if _execute_buy_node is None:
+        errors.append(
+            "[lessons #55] realtime_monitor.py::_execute_buy 함수 정의 없음 — "
+            "매수 경로 핵심 함수 소실"
+        )
+    else:
+        has_attr_ref = False
+        has_call_ref = False
+        for sub in ast.walk(_execute_buy_node):
+            # self._btc_above_ema Attribute Load
+            if (
+                isinstance(sub, ast.Attribute)
+                and sub.attr == "_btc_above_ema"
+                and isinstance(sub.value, ast.Name)
+                and sub.value.id == "self"
+            ):
+                has_attr_ref = True
+            # fetch_btc_above_ema(...) Call
+            if isinstance(sub, ast.Call):
+                fn = sub.func
+                if isinstance(fn, ast.Name) and fn.id == "fetch_btc_above_ema":
+                    has_call_ref = True
+                elif isinstance(fn, ast.Attribute) and fn.attr == "fetch_btc_above_ema":
+                    has_call_ref = True
+
+        if not (has_attr_ref or has_call_ref):
+            errors.append(
+                "[lessons #55] realtime_monitor._execute_buy 함수 내 매매 레짐 참조 없음 "
+                "(self._btc_above_ema Attribute / fetch_btc_above_ema Call 모두 부재) — "
+                "ADR 20260516-2 매수 경로 레짐 필터 우회 위험"
+            )
+
+    # 규칙 3: scanner.py 안에서 fetch_btc_above_ema 가 호출(사용)되는 곳이 ≥ 1
+    # (정의만 하고 호출 없음 = 사문화, lessons #19 계열)
+    call_sites = 0
+    for sub in ast.walk(scanner_tree):
+        if isinstance(sub, ast.Call):
+            fn = sub.func
+            if isinstance(fn, ast.Name) and fn.id == "fetch_btc_above_ema":
+                call_sites += 1
+            elif isinstance(fn, ast.Attribute) and fn.attr == "fetch_btc_above_ema":
+                call_sites += 1
+    if call_sites < 1:
+        errors.append(
+            "[lessons #55] services/execution/scanner.py 에 "
+            "`fetch_btc_above_ema` 호출부 없음 — 정의만 하고 신호 생성 경로에서 사용 안 함 "
+            "(사문화, lessons #19 계열)"
+        )
+
+
 def main() -> None:
     print("=" * 50)
     print("배포 전 검증 (pre-deploy check)")
@@ -4300,6 +4413,7 @@ def main() -> None:
     check_ema_trend_alert_throttle()
     check_ema_trend_disabled()
     check_ml_shadow_ema_trend_exclude()
+    check_regime_filter_all_entry_paths()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")

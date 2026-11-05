@@ -69,7 +69,9 @@ def run(notify: bool = False, dry: bool = False) -> dict:
     fg = fetch_fg()
 
     decision = decide_regime(btc_close, sma50, ema200, fg)
-    print(f"[레짐] BTC={btc_close:,.0f} EMA200={ema200:,.0f} SMA50={sma50:,.0f} "
+    # lessons #55: [관찰레짐] prefix — regime_switcher 는 관찰용 DRY-RUN
+    # (매매 레짐은 scanner.fetch_btc_above_ema, BTC>EMA200 단일)
+    print(f"[관찰레짐] BTC={btc_close:,.0f} EMA200={ema200:,.0f} SMA50={sma50:,.0f} "
           f"F&G={fg} → {decision.regime.value} ({decision.reason})", flush=True)
 
     prev = load_state()
@@ -85,9 +87,9 @@ def run(notify: bool = False, dry: bool = False) -> dict:
         try:
             from services.execution.telegram_bot import send_message
             asyncio.run(send_message(msg))
-            print(f"[레짐] 전환 알림 발송: {msg[:80]}", flush=True)
+            print(f"[관찰레짐] 전환 알림 발송: {msg[:80]}", flush=True)
         except Exception as e:
-            print(f"[레짐] 알림 실패: {e}", flush=True)
+            print(f"[관찰레짐] 알림 실패: {e}", flush=True)
 
     return new_state
 

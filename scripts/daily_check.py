@@ -116,8 +116,13 @@ def _load_json(path: Path) -> dict:
 
 
 def _section_regime() -> list[str]:
-    """레짐 상태 섹션 — regime_state.json 기반."""
-    out: list[str] = ["🌤 레짐 상태"]
+    """관찰 레짐 상태 섹션 — regime_state.json 기반 (lessons #55).
+
+    주의: 이 섹션은 regime_switcher(SMA50+EMA200+F&G 복합, DRY-RUN) 상태이며
+    **매매 레짐**(scanner.fetch_btc_above_ema, BTC>EMA200 단일, ADR 20260516-2)과
+    다르다. 매매 가능 여부는 매매 레짐으로 판단한다.
+    """
+    out: list[str] = ["🌤 관찰 레짐 상태 (regime_switcher DRY-RUN, 매매 미연결)"]
     state = _load_json(REGIME_STATE)
     if not state:
         out.append("  - regime_state.json 없음 (regime_check.py 미실행?)")
@@ -133,9 +138,10 @@ def _section_regime() -> list[str]:
             last_str = datetime.fromtimestamp(last_ts, tz=KST).strftime("%Y-%m-%d %H:%M")
         except Exception:
             last_str = f"ts={last_ts}"
-    out.append(f"  - 현재: {current} (이전 {prev}) — 스위칭 {'ON' if enabled else 'OFF'}")
+    out.append(f"  - 관찰 레짐: {current} (이전 {prev}) — 스위칭 {'ON' if enabled else 'OFF'}")
     out.append(f"  - 최근 시그널 큐: {signals}")
     out.append(f"  - 마지막 판정: {last_str} KST")
+    out.append(f"  - ⚠ 매매 가능 여부는 매매 레짐(BTC vs EMA200)으로 판단 — lessons #55")
     return out
 
 
