@@ -172,6 +172,7 @@
 | 29 | "거래소에만 존재" 알람은 dust 자동 silence 필수 — 디바운스만으론 영구 루프 |
 | 37 | `regime_check.py` 에 `--notify` 미부여로 BULL 전환 알림 침묵 — cron 인자 누락은 대표적 silent fail |
 | 39 | 텔레그램 Markdown 400 을 `except: pass` 가 삼킴 — `resp.status` 확인 + plain 재시도 |
+| 56 | bash 텔레그램: curl exit 23 + `$()\|\|echo "000"` 폴백이 status="200000" 조합 — `mktemp` + body `"ok":true` 1차 판정 |
 
 #### 배포·인프라 — 코드 채널과 인프라 채널은 다르다
 
