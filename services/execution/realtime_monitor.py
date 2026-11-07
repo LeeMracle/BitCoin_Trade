@@ -58,6 +58,7 @@ from services.execution.config import (
     EMA_TREND_ENABLED, EMA_TREND_DRY_RUN,
     EMA_TREND_EMA_PERIOD, EMA_TREND_FILTER_PERIOD,
     EMA_TREND_TRAIL_PCT, EMA_TREND_MAX_POSITIONS, EMA_TREND_POSITION_RATIO,
+    BUY_DISABLED,
 )
 from services.execution.vb_filters import (
     compute_dead_symbols,
@@ -2444,6 +2445,20 @@ class RealtimeMonitor:
         return True
 
     async def _execute_buy(self, symbol: str, price: float, level: dict):
+        # ── Kill Switch (ADR 20261107-1, lessons #57) ───────────────
+        # 전략 재설계 완료 전까지 자동 매수 영구 차단.
+        # 매도 경로(트레일/하드캡/TP/서킷 L2)는 영향 없음 — 매수만 차단.
+        # 로그는 심볼별 60초 1회 throttle (lessons #14 폭주 방지).
+        if BUY_DISABLED:
+            from services.common.log_throttle import throttled_print
+            throttled_print(
+                f"buy_disabled_{symbol}",
+                f"  [{symbol}] 매수 차단 — BUY_DISABLED kill switch (ADR 20261107-1)",
+                interval_sec=60,
+            )
+            record_block("buy_disabled", symbol)
+            return
+
         positions = self.state.get("positions", {})
         if symbol in positions:
             return

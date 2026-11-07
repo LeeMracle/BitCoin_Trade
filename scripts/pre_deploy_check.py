@@ -4327,6 +4327,112 @@ def check_regime_filter_all_entry_paths() -> None:
         )
 
 
+def check_buy_disabled_all_entry_paths() -> None:
+    """Kill switch(BUY_DISABLED) 가드가 매수 경로 전수에 존재하는지 AST 검증.
+
+    배경 (ADR 20261107-1, lessons #57, 2026-11-07):
+        실거래 n=52 승률 30.8% + 시점 일치 백테스트 음의 기대값 확정으로
+        전략 재설계 완료 전까지 자동 매수 영구 차단. BULL 복귀 시 재개 방지를 위해
+        config.BUY_DISABLED kill switch 신설. 가드가 조용히 제거되면 음의 기대값
+        전략으로 자동 매수가 재개된다 (#6/#26 계열).
+
+    검증 (AST, 메타교훈 #45/#49 — 정규식 금지):
+        1) services/execution/config.py 에 `BUY_DISABLED = True` Assign 존재.
+        2) services/execution/realtime_monitor.py::_execute_buy 함수 AST 하위에
+           `if BUY_DISABLED` 분기(Name 노드) 존재 — 매수 경로 메인(실시간 DC+VB).
+        3) services/execution/multi_trader.py::run 함수 AST 하위에
+           `if BUY_DISABLED` 분기 존재 — scanner 경로(daily_live).
+
+    역방향 테스트:
+        - config.py 에서 BUY_DISABLED 제거 → 규칙 1 ERROR
+        - _execute_buy 가드 제거 → 규칙 2 ERROR
+        - multi_trader.run 가드 제거 → 규칙 3 ERROR
+    """
+    cfg_p = PROJECT_ROOT / "services" / "execution" / "config.py"
+    rt_p = PROJECT_ROOT / "services" / "execution" / "realtime_monitor.py"
+    mt_p = PROJECT_ROOT / "services" / "execution" / "multi_trader.py"
+
+    if not cfg_p.exists():
+        errors.append("[lessons #57] services/execution/config.py 없음 — kill switch 소스 부재")
+        return
+    if not rt_p.exists():
+        errors.append("[lessons #57] services/execution/realtime_monitor.py 없음 — 매수 경로 부재")
+        return
+    if not mt_p.exists():
+        errors.append("[lessons #57] services/execution/multi_trader.py 없음 — scanner 매수 경로 부재")
+        return
+
+    try:
+        cfg_tree = ast.parse(cfg_p.read_text(encoding="utf-8"))
+        rt_tree = ast.parse(rt_p.read_text(encoding="utf-8"))
+        mt_tree = ast.parse(mt_p.read_text(encoding="utf-8"))
+    except SyntaxError as e:
+        errors.append(f"[lessons #57] kill switch 소스 파싱 실패: {e}")
+        return
+
+    # 규칙 1: config.py 에 BUY_DISABLED 할당 존재 (상수 정의)
+    has_buy_disabled_const = False
+    for node in ast.walk(cfg_tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "BUY_DISABLED":
+                    has_buy_disabled_const = True
+                    break
+    if not has_buy_disabled_const:
+        errors.append(
+            "[lessons #57] services/execution/config.py 에 "
+            "`BUY_DISABLED = ...` 할당 없음 — ADR 20261107-1 kill switch 상수 소실"
+        )
+        return
+
+    def _has_buy_disabled_guard(func_node) -> bool:
+        """func_node AST 하위에 `if BUY_DISABLED:` 분기(Name 노드)가 있으면 True."""
+        for sub in ast.walk(func_node):
+            if isinstance(sub, ast.If):
+                test = sub.test
+                # 단순 `if BUY_DISABLED:` 또는 `if BUY_DISABLED is True` 등 Name 포함 분기
+                for inner in ast.walk(test):
+                    if isinstance(inner, ast.Name) and inner.id == "BUY_DISABLED":
+                        return True
+        return False
+
+    # 규칙 2: realtime_monitor.py::_execute_buy 가드 존재
+    _exec_buy_node: ast.AsyncFunctionDef | ast.FunctionDef | None = None
+    for node in ast.walk(rt_tree):
+        if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)) and node.name == "_execute_buy":
+            _exec_buy_node = node
+            break
+    if _exec_buy_node is None:
+        errors.append(
+            "[lessons #57] realtime_monitor.py::_execute_buy 함수 정의 없음 — "
+            "실시간 매수 경로 소실"
+        )
+    else:
+        if not _has_buy_disabled_guard(_exec_buy_node):
+            errors.append(
+                "[lessons #57] realtime_monitor._execute_buy 함수 내 "
+                "`if BUY_DISABLED` 가드 없음 — ADR 20261107-1 실시간 매수 kill switch 우회"
+            )
+
+    # 규칙 3: multi_trader.py::run 가드 존재
+    _run_node: ast.AsyncFunctionDef | ast.FunctionDef | None = None
+    for node in ast.walk(mt_tree):
+        if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)) and node.name == "run":
+            _run_node = node
+            break
+    if _run_node is None:
+        errors.append(
+            "[lessons #57] multi_trader.py::run 함수 정의 없음 — "
+            "scanner 매수 경로(daily_live) 소실"
+        )
+    else:
+        if not _has_buy_disabled_guard(_run_node):
+            errors.append(
+                "[lessons #57] multi_trader.run 함수 내 "
+                "`if BUY_DISABLED` 가드 없음 — ADR 20261107-1 scanner 매수 kill switch 우회"
+            )
+
+
 def main() -> None:
     print("=" * 50)
     print("배포 전 검증 (pre-deploy check)")
@@ -4414,6 +4520,7 @@ def main() -> None:
     check_ema_trend_disabled()
     check_ml_shadow_ema_trend_exclude()
     check_regime_filter_all_entry_paths()
+    check_buy_disabled_all_entry_paths()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")

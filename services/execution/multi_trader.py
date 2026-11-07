@@ -26,7 +26,7 @@ from services.execution.scanner import (
     get_krw_market_coins, scan_entry_signals, check_exit_signal,
 )
 from services.execution.upbit_client import get_balance, buy_market, sell_market
-from services.execution.config import STRATEGY, MAX_POSITIONS, MIN_ORDER_KRW
+from services.execution.config import STRATEGY, MAX_POSITIONS, MIN_ORDER_KRW, BUY_DISABLED
 from services.alerting.notifier import send, notify_error
 
 # ── ML 신호 필터 (lessons #36 B8: fail-CLOSED) ──────────────────
@@ -205,6 +205,12 @@ async def run(dry_run: bool = False):
 
             for sig in buy_signals[:available_slots]:
                 symbol = sig["symbol"]
+                # ── Kill Switch (ADR 20261107-1, lessons #57) ──
+                # 전략 재설계 완료 전까지 자동 매수 영구 차단.
+                # scanner 경로(multi_trader)에도 매수 경로 전수 적용 (lessons #6/#26).
+                if BUY_DISABLED:
+                    print(f"  [{symbol}] 매수 차단 — BUY_DISABLED kill switch (ADR 20261107-1)")
+                    continue
                 order_amount = min(per_position, available_krw * 0.95)
 
                 if order_amount < MIN_ORDER_KRW:
