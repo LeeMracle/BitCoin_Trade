@@ -1,0 +1,32 @@
+  일봉 25/298
+  skip BMT/KRW: RequestTimeout
+  일봉 50/298
+  일봉 75/298
+  일봉 100/298
+  일봉 125/298
+  skip JUP/KRW: RequestTimeout
+  skip KAITO/KRW: RequestTimeout
+  일봉 150/298
+  일봉 175/298
+  skip NEWT/KRW: RequestTimeout
+  skip NIL/KRW: RequestTimeout
+  skip OP/KRW: ExchangeNotAvailable
+  skip ORCA/KRW: RequestTimeout
+  일봉 200/298
+  skip PONS/KRW: ExchangeNotAvailable
+  일봉 225/298
+  skip SOPH/KRW: RequestTimeout
+  일봉 250/298
+  일봉 275/298
+  skip XPL/KRW: RequestTimeout
+일봉 로드 273종목
+PIT 종목군에서 신호가 난 종목 203
+시간봉 수집 대상 8 (캐시 195)
+    1/8 ARKM/KRW        14322봉
+    2/8 BARD/KRW         9950봉
+    3/8 DEEP/KRW        13473봉
+    4/8 KERNEL/KRW       8869봉
+    5/8 KITE/KRW         8855봉
+    6/8 POKT/KRW        12560봉
+    7/8 SOMI/KRW         9479봉
+    8/8 ZETA/KRW        17400봉

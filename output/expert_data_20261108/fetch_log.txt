@@ -1,0 +1,22 @@
+[2026-11-08T05:40:13Z] ============================================================
+[2026-11-08T05:40:13Z] FETCH RESUME 시작 — H1 dir: D:\20.Personal\Study\BitCoin_Trade\output\h1
+[2026-11-08T05:40:13Z] 일봉 로드 중 (DuckDB 캐시)...
+[2026-11-08T06:05:24Z] ============================================================
+[2026-11-08T06:05:24Z] FETCH RESUME 시작 — H1 dir: D:\20.Personal\Study\BitCoin_Trade\output\h1
+[2026-11-08T06:05:24Z] 일봉 로드 중 (DuckDB 캐시)...
+[2026-11-08T06:07:36Z] [DAILY-SKIP] POD/KRW: RequestTimeout: upbit GET https://api.upbit.com/v1/market/all
+[2026-11-08T06:10:45Z] [DAILY-SKIP] DOOD/KRW: ExchangeNotAvailable: upbit GET https://api.upbit.com/v1/market/all
+[2026-11-08T06:11:02Z] [DAILY-SKIP] CC/KRW: RequestTimeout: upbit GET https://api.upbit.com/v1/market/all
+[2026-11-08T06:11:31Z] [DAILY-SKIP] AVAX/KRW: ExchangeNotAvailable: upbit GET https://api.upbit.com/v1/market/all
+[2026-11-08T06:12:55Z] 종목군 확정: 79개
+[2026-11-08T06:15:03Z] progress: 10/79 last=BIRB/KRW candles=6631 (fetched) fetched=10 cached=0 skipped=0
+[2026-11-08T06:16:48Z] progress: 20/79 last=DOGE/KRW candles=16800 (fetched) fetched=20 cached=0 skipped=0
+[2026-11-08T06:19:07Z] progress: 30/79 last=FIL/KRW candles=13960 (fetched) fetched=30 cached=0 skipped=0
+[2026-11-08T06:20:40Z] progress: 40/79 last=LINK/KRW candles=16800 (fetched) fetched=40 cached=0 skipped=0
+[2026-11-08T06:22:12Z] progress: 50/79 last=ORDER/KRW candles=8999 (fetched) fetched=50 cached=0 skipped=0
+[2026-11-08T06:24:36Z] progress: 60/79 last=SIGN/KRW candles=13323 (fetched) fetched=60 cached=0 skipped=0
+[2026-11-08T06:26:21Z] progress: 70/79 last=TRX/KRW candles=16800 (fetched) fetched=70 cached=0 skipped=0
+[2026-11-08T06:28:04Z] progress: 79/79 last=ZIL/KRW candles=16800 (fetched) fetched=79 cached=0 skipped=0
+[2026-11-08T06:28:04Z] ============================================================
+[2026-11-08T06:28:04Z] FETCH 완료 — fetched=79 cached=0 skipped=0 total=79
+[2026-11-08T06:28:04Z] H1 dir 최종: 79 files

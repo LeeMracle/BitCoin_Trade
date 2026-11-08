@@ -1,0 +1,41 @@
+[2026-11-08T06:28:33.084033+00:00] 일봉 로드 시작
+  일봉 25/298
+  skip AUCTION/KRW: RequestTimeout
+  skip AVAX/KRW: RequestTimeout
+  skip BLEND/KRW: RequestTimeout
+  일봉 50/298
+  skip CARDS/KRW: ExchangeNotAvailable
+  skip CASHCAT/KRW: ExchangeNotAvailable
+  skip CELO/KRW: RequestTimeout
+  skip CT/KRW: RequestTimeout
+  skip CVC/KRW: ExchangeNotAvailable
+  skip ETC/KRW: ExchangeNotAvailable
+  일봉 100/298
+  skip ICP/KRW: ExchangeNotAvailable
+  일봉 125/298
+  일봉 150/298
+  skip MANTRA/KRW: ExchangeNotAvailable
+  일봉 175/298
+  일봉 200/298
+  skip SAHARA/KRW: ExchangeNotAvailable
+  일봉 225/298
+  skip SENT/KRW: ExchangeNotAvailable
+  skip SOPH/KRW: RequestTimeout
+  일봉 250/298
+  skip THETA/KRW: ExchangeNotAvailable
+  일봉 275/298
+일봉 로드 268종목
+PIT 종목군 (신호 발생) 198종목
+[중단] 시간봉 미수집 148종목: ['1INCH/KRW', 'A/KRW', 'AERO/KRW', 'AGLD/KRW', 'AHT/KRW']...
+먼저 `py scripts/backtest_universe_pit.py --fetch` 를 실행하세요.
+  skip ANIME/KRW: ExchangeNotAvailable
+  일봉 25/298
+  skip AXIS/KRW: IOException
+  skip AXL/KRW: IOException
+  skip AXS/KRW: IOException
+  skip AZTEC/KRW: IOException
+  skip B3/KRW: IOException
+  skip BABY/KRW: IOException
+  일봉 50/298
+  skip CARDS/KRW: RequestTimeout
+  skip CARV/KRW: ExchangeNotAvailable
