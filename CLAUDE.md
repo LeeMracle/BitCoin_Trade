@@ -5,7 +5,7 @@
 ## 🔴 세션 시작 시 읽는 순서
 
 1. **[docs/ROADMAP.md](docs/ROADMAP.md)** — **지금 무엇을 해야 하는가** (현황판, 1페이지)
-2. [workspace/reports/20261105_1_session_handoff.md](workspace/reports/20261105_1_session_handoff.md) — 직전 세션 인수인계
+2. [workspace/reports/20261108_1_session_handoff.md](workspace/reports/20261108_1_session_handoff.md) — 직전 세션 인수인계
 3. 이 문서 — 프로젝트 레퍼런스 (규칙·제약·파라미터·교훈 인덱스)
 
 > ROADMAP.md 가 "다음 행동", 이 문서가 "변하지 않는 규칙"이다. **진척 상태를 이 문서에 적지 말 것.**
