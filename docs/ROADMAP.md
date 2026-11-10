@@ -1,6 +1,6 @@
 # ROADMAP — 지금 무엇을 해야 하는가
 
-> **갱신**: 2026-11-07 (BUY_DISABLED kill switch 적용 — ADR 20261107-1) · **다음 갱신 트리거**: 재설계 plan 완료 / 레짐 BULL 복귀 / 새 결정 / 세션 종료
+> **갱신**: 2026-11-10 (재설계 v2 A1~A4 전부 IS 탈락 — 시나리오 B) · **다음 갱신 트리거**: 후속 방향 결정(거래소 교체/모집단 축소) / 레짐 BULL 복귀 / 새 결정 / 세션 종료
 >
 > 🔴 **이 문서의 규칙 — 이력을 쌓지 않는다. 항상 덮어쓴다. 1페이지를 넘기지 않는다.**
 > 이력이 필요하면 [decisions/](decisions/)(왜 정했나) · [lessons/](lessons/)(무엇이 고장났나) ·
@@ -18,7 +18,7 @@ Phase 3 실거래검증 ████████░░░░ n=52 · L1 조건�
 Phase 4 실전운영   ████████░░░░ 모듈·배포 완료, 검증 통과 대기
 ```
 
-**한 줄**: 손절 -6% 창 52건 승률 31%. **실거래와 같은 종목군으로 백테스트하니 승률 33 ~ 40%, 건당 음수 — 실거래 부진은 운이 아니라 전략의 기대값이다.** 사전 등록 개선 후보 3개 모두 미달. **2026-11-07 Master 결정 `BUY_DISABLED=True` 적용 — 전략 재설계 완료 전까지 자동 매수 영구 차단** (ADR 20261107-1). 다음은 재설계 plan.
+**한 줄**: 실거래 종목군(PIT)에서 현행 DC 돌파는 음의 기대값(v1, 11-08). **대안 아키텍처 4종(평균회귀·MTF pullback·NR7·RS 로테이션)도 사전 등록 IS 기준 전부 미달(v2, 11-10)** — 가장 근접한 A3 NR7 은 IS 건당 +0.31% 였으나 IS-A 승률 31% 로 구간 불안정. `BUY_DISABLED=True` 유지. **다음은 Master 결정: 거래소 교체(선물/숏) vs 모집단 축소(예: BTC 단일)** — plan 20261108_1 §7.
 
 | | |
 | --- | --- |
@@ -51,7 +51,8 @@ Phase 4 실전운영   ████████░░░░ 모듈·배포 완�
 | # | 무엇 | 비고 |
 | --- | --- | --- |
 | ① | ✅ **BUY_DISABLED kill switch 적용 (11-07)** — Master 결정 | config.py `BUY_DISABLED=True` + scanner/realtime_monitor 가드 + `check_buy_disabled_all_entry_paths()` AST 룰. 재활성은 ①-2 완료 + 신규 ADR + Master 재승인 전수 충족시만 · [ADR 20261107-1](decisions/20261107_1_buy_disabled_until_redesign.md) · [lessons #57](lessons/20261107_1_buy_disabled_kill_switch.md) |
-| ①-2 | 전략 재설계 — **새 사전 등록 plan** 으로 (B 변동성 상한 + C 종가 확인 결합, 거래대금 순위 상한 등) | 이번 IS 로 다시 고르면 과적합. 상폐 종목 보정 방법 포함 · 수집기 0봉 탈락 버그 수정 완료([lessons #52](lessons/20261104_1_fetcher_late_listing_dropped.md)). **재활성 기준: OOS Sharpe ≥ 0.8 + MDD ≥ -15%** |
+| ①-2 | ✅ 재설계 v1(DC+필터 H1~H4, OOS 미달) · v2(대안 4축 A1~A4, IS 전부 탈락) **둘 다 시나리오 B 종결** | [research/20261110_1](../workspace/research/20261110_1_architecture_redesign_result.md) · cto 조건부 PASS. 새 plan 설계 입력: 가설별 구조적 손익분기 기준, Guards OFF 1차 측정 |
+| ①-3 | **후속 방향 결정 — Master** | 거래소 교체(선물/숏 확보) vs 모집단 축소(BTC 단일 등). 결정 후 새 사전 등록 plan |
 | ② | ✅ **F1 레짐 fail-closed — 배포 완료(11-03 13:03 UTC)** | 조회 실패 시 3회 재시도 후 매수 차단, 봇 시작 시 기본값도 차단 · 서버 테스트 7/7 · pre_deploy_check 서버 실행 PASS · 백업 `~/deploy_backup/20261103_F1/` |
 | ③ | ~~창 정의 결정~~ → 불필요 | 백테스트가 실거래를 재현해 "개선 필요"가 독립 근거로 확정. 판정 기준 §3-4 구조적 여유를 PIT 기준으로 재계산 |
 | ④ | F2 주문 이력 7일 창 — 7일 넘게 보유 후 수동 매도 정산 시 TP 매도 누락 | `position_pnl.rebuild_realized_from_exchange` 등에 `since=entry` |

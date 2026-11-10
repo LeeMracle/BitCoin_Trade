@@ -50,6 +50,7 @@ INIT = float(C.CIRCUIT_BREAKER_INITIAL_CAPITAL)
 SLOTS = C.MAX_POSITIONS
 WEIGHT = C.MAX_POSITION_WEIGHT
 EXCLUDE = {"USDT", "USDC", "DAI", "BUSD"}
+SKIPPED: list[str] = []   # 일봉 로드 실패 종목 — results.json 에 기록 (종목군 누락 추적)
 HOUR_MS = 3_600_000
 DAY_MS = 86_400_000
 
@@ -109,10 +110,17 @@ async def load_daily() -> tuple[dict, pd.DataFrame]:
     raw = {}
     syms = all_krw_symbols()
     for i, sym in enumerate(syms, 1):
-        try:
-            df = pd.DataFrame(await fetch_ohlcv(sym, "1d", DAILY_START, DATA_END, use_cache=True))
-        except Exception as ex:  # noqa: BLE001 — 개별 종목 실패는 건너뛴다
-            print(f"  skip {sym}: {type(ex).__name__}", flush=True)
+        df = None
+        for attempt in range(4):   # 일시 타임아웃으로 종목이 조용히 빠지면 종목군이 바뀐다
+            try:
+                df = pd.DataFrame(await fetch_ohlcv(sym, "1d", DAILY_START, DATA_END, use_cache=True))
+                break
+            except Exception as ex:  # noqa: BLE001
+                print(f"  retry {sym} {attempt + 1}/4: {type(ex).__name__}", flush=True)
+                await asyncio.sleep(2 * (attempt + 1))
+        if df is None:
+            SKIPPED.append(sym)
+            print(f"  skip {sym}: 4회 실패", flush=True)
             continue
         if len(df) < MIN_AGE_DAYS:
             continue
@@ -609,7 +617,8 @@ def run(runs: int) -> int:
             pd.Series(oos["trades"], name="ret_pct").to_csv(OUT / f"oos_{pick}_trades.csv", index=False)
 
     if not pick:
-        verdict = "B: IS 통과 가설 0 — 4개 대안 축 모두 PIT 모집단에서 양의 기대값 없음"
+        # cto review Major-2: 탈락 사유는 사전 등록 기준(승률·분할 안정성) 미달이지 "기대값 없음"이 아니다
+        verdict = "B: IS 통과 가설 0 — 사전 등록 IS 기준(승률·분할 안정성) 미달"
     elif not all(checks.values()):
         verdict = f"B: {pick} IS 통과 → OOS 미달"
     elif delist and delist["pass"]:
@@ -621,7 +630,7 @@ def run(runs: int) -> int:
     summary = {
         "plan": "workspace/plans/20261108_1_architecture_redesign.md",
         "timestamp": datetime.now(timezone.utc).isoformat(), "runs": runs,
-        "universe": {"pit_symbols": len(syms)}, "windows": WINDOWS,
+        "universe": {"pit_symbols": len(syms), "daily_load_skipped": SKIPPED}, "windows": WINDOWS,
         "events": {k: len(v) for k, v in ev.items()},
         "params": {"A1": A1, "A2": A2, "A3": A3, "A4": A4},
         "is": {h: {w: strip(res[h][w]) for w in ("IS-A", "IS-B", "IS")} |
