@@ -1741,6 +1741,11 @@ class RealtimeMonitor:
                     self._save_ema_trend_state()
                     return
 
+                # Kill switch (ADR 20261107-1) — 도달 불가 경로(EMA_TREND_ENABLED=False)지만
+                # lessons #26 전수 원칙상 가드 (cto 20261112 m4)
+                if BUY_DISABLED:
+                    print("  [EMA-TREND] 매수 차단 — BUY_DISABLED kill switch", flush=True)
+                    return
                 try:
                     balance = get_balance()
                     avail = balance.get("krw", 0)
@@ -2158,6 +2163,13 @@ class RealtimeMonitor:
             "exit_price": exit_price,
             "return_pct": round(ret_pct, 2),
             "exit_reason": reason,
+            # 실행 동등성 계측 전달 (plan 20261112_1 단계 1, cto m2) — 단계 1 보고가
+            # closed_trades 만으로 평균 슬리피지를 계산할 수 있게 한다.
+            "trigger_price": pos.get("trigger_price"),
+            "trigger_upper": pos.get("trigger_upper"),
+            "slip_pct": pos.get("slip_pct"),
+            "signal_ts": pos.get("signal_ts"),
+            "order_ts": pos.get("order_ts"),
         })
         self.state.get("positions", {}).pop(symbol, None)
         save_state(self.state)
@@ -2524,6 +2536,8 @@ class RealtimeMonitor:
         # 같은 봉 차단은 제거 — 진짜 신호까지 막혀 매수 0건 발생 (1.5h 257건 차단 / 매수 0건).
         # 2026-05-22: dedupe 갱신을 모든 필터 통과 후로 이동 — 진짜 차단 사유(REGIME/VOL/ATR/ML) 로그 가시화.
         _now_ts = _time.time()
+        # 신호(틱) 시각 — 체결 후가 아니라 **여기서** 찍어야 틱→주문 지연을 분리할 수 있다 (cto m2)
+        _signal_ts_iso = datetime.fromtimestamp(_now_ts, tz=timezone.utc).isoformat()
         _last = self._signal_dedupe.get(symbol)
         if _last is not None and (_now_ts - _last["ts"]) < 60:
             if _now_ts - self._dedupe_log_ts > 60:
@@ -2876,7 +2890,8 @@ class RealtimeMonitor:
             "trigger_price": float(price),
             "trigger_upper": float(level.get("upper") or 0),
             "slip_pct": (float(exec_price) / float(price) - 1.0) * 100.0 if price else None,
-            "signal_ts": datetime.now(tz=timezone.utc).isoformat(),
+            "signal_ts": _signal_ts_iso,                                   # 틱 판정 시각
+            "order_ts": datetime.now(tz=timezone.utc).isoformat(),         # 체결 확정 시각
         }
         self.state["positions"] = positions
         save_state(self.state)

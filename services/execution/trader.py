@@ -180,6 +180,12 @@ async def run(dry_run: bool = False):
                     order_result = {"id": "dry-run", "price": latest_close,
                                     "amount": order_amount / latest_close, "status": "dry-run"}
                 else:
+                    # Kill switch (ADR 20261107-1) — 수동 실행 전용 레거시 경로에도 전수 적용
+                    # (lessons #26, cto 20261112 m4)
+                    from services.execution.config import BUY_DISABLED
+                    if BUY_DISABLED:
+                        print("  매수 차단 — BUY_DISABLED kill switch (ADR 20261107-1)")
+                        return
                     try:
                         order_result = buy_market(order_amount)
                         print(f"  주문 체결: {order_result}")

@@ -29,7 +29,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -43,6 +43,9 @@ EMA_PERIOD = 200
 EMA_WINDOW = 250          # 실거래 scanner._BTC_EMA_FETCH_LIMIT = EMA_PERIOD + 50 (cto M2)
 UPPER_TOL = 1e-4          # plan §2 — 가격 레벨 상대오차
 ATR_WARN = 0.02           # 보고용 임계 — 넘으면 WARN 표기만
+REGIME_BOUNDARY = 0.005   # |close/EMA − 1| ≤ 0.5% 는 "경계" — 봇(진행봉 포함)과 기준값이 갈릴 수 있는 구간
+EMA_TOL = 0.015           # 봇이 기록한 EMA200 vs 기준 EMA200 상대오차 (진행봉 1개 차이 ≈ 0.5% 이내)
+TS_LAG_WARN_MIN = 10      # 기록 시각 − D 00:00 UTC (분)
 DAY_MS = 86_400_000
 
 
@@ -107,11 +110,82 @@ def compare_row(row: dict, candles: list[list], btc_candles: list[list]) -> dict
         return res
     res["regime_bot"], res["regime_ref"] = bool(row.get("regime_above")), bool(reg["regime_ref"])
     res["ema_ref"], res["ema_bot"] = reg["ema_ref"], row.get("btc_ema")
+    # 실거래 산식과의 구조적 차이 (cto 20261112 M2): 봇은 진행 중 D 봉(close ≈ 00:0x 가격)을
+    # 포함한 D-249..D 창으로 판정하고, 기준값은 close(D-1)·D-250..D-1 창이다. 둘은 EMA 교차
+    # 부근(|close/EMA − 1| ≤ 0.5%)에서만 갈릴 수 있다(BTC 349일 실측 3일). 그 구간은 "경계"로
+    # 표기하고 엄격 판정에서 뺀다 — 대신 판정에 쓰인 EMA 값과 창 길이를 숫자로 대조한다.
+    gap = abs(reg["close_ref"] / reg["ema_ref"] - 1.0)
+    res["regime_gap"] = gap
     if res["regime_bot"] != res["regime_ref"]:
+        msg = (f"레짐 불일치 bot={res['regime_bot']} ref={res['regime_ref']} "
+               f"(close {reg['close_ref']:,.0f} / EMA {reg['ema_ref']:,.0f}, 이격 {gap:.2%})")
+        if gap <= REGIME_BOUNDARY:
+            res["notes"].append("경계: " + msg)
+        else:
+            res["strict_fail"] = True
+            res["notes"].append(msg)
+    ema_bot = row.get("btc_ema")
+    if ema_bot is not None:
+        res["ema_rel"] = abs(float(ema_bot) / reg["ema_ref"] - 1.0)
+        if res["ema_rel"] > EMA_TOL:
+            res["strict_fail"] = True
+            res["notes"].append(f"EMA200 불일치 bot {float(ema_bot):,.0f} vs ref {reg['ema_ref']:,.0f} ({res['ema_rel']:.2%})")
+    n_bot = row.get("btc_n")
+    if n_bot is not None and int(n_bot) != EMA_WINDOW:
         res["strict_fail"] = True
-        res["notes"].append(f"레짐 불일치 bot={res['regime_bot']} ref={res['regime_ref']} "
-                            f"(close {reg['close_ref']:,.0f} / EMA {reg['ema_ref']:,.0f})")
+        res["notes"].append(f"EMA 창 길이 {n_bot} ≠ {EMA_WINDOW} (실거래 _BTC_EMA_FETCH_LIMIT)")
     return res
+
+
+def _ts_lag_minutes(row: dict) -> float | None:
+    """ts_written − D 00:00 UTC (분). plan §2 — 10분 이내가 정상(봉 마감 직후 1회 갱신)."""
+    try:
+        d0 = datetime.strptime(row["date"], "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        tw = datetime.fromisoformat(row["ts_written"])
+        if tw.tzinfo is None:
+            tw = tw.replace(tzinfo=timezone.utc)
+        return (tw - d0).total_seconds() / 60.0
+    except Exception:
+        return None
+
+
+def evaluate_rows(rows: list[dict], data: dict[str, list[list]], btc: list[list]) -> dict:
+    """행 전체를 평가. 같은 (date, symbol) 의 **첫 행만** 엄격 비교(재시작 재기록은 'restart' 표기),
+    날짜 공백은 FAIL, ts_written 지연 > 10분은 WARN (cto m1)."""
+    out = {"results": [], "strict": 0, "atr_warn": 0, "boundary": 0, "restart": 0, "lag_warn": 0, "gaps": []}
+    seen: set[tuple] = set()
+    for r in rows:
+        key = (r.get("date"), r.get("symbol"))
+        if key in seen:
+            res = {"date": key[0], "symbol": key[1], "strict_fail": False, "notes": ["restart 재기록(장중) — 비교 생략"]}
+            out["restart"] += 1
+            out["results"].append(res)
+            continue
+        seen.add(key)
+        res = compare_row(r, data.get(r.get("symbol"), []), btc)
+        lag = _ts_lag_minutes(r)
+        if lag is not None and lag > TS_LAG_WARN_MIN:
+            res["notes"].append(f"기록 지연 {lag:.0f}분 > {TS_LAG_WARN_MIN}분 (WARN)")
+            out["lag_warn"] += 1
+        out["strict"] += 1 if res["strict_fail"] else 0
+        out["atr_warn"] += 1 if any("ATR 편차" in n for n in res["notes"]) else 0
+        out["boundary"] += 1 if any(n.startswith("경계") for n in res["notes"]) else 0
+        out["results"].append(res)
+    # 날짜 연속성 — 기록이 빠진 날은 섀도 기록기가 침묵한 날이다(cto m6 — 실패가 print 뿐)
+    by_sym: dict[str, set] = {}
+    for d, s in seen:
+        by_sym.setdefault(s, set()).add(d)
+    for s, days in by_sym.items():
+        ds = sorted(days)
+        cur = datetime.strptime(ds[0], "%Y-%m-%d")
+        end = datetime.strptime(ds[-1], "%Y-%m-%d")
+        while cur <= end:
+            k = cur.strftime("%Y-%m-%d")
+            if k not in days:
+                out["gaps"].append((k, s))
+            cur += timedelta(days=1)
+    out["strict"] += len(out["gaps"])
+    return out
 
 
 # ───────────────────────── 데이터 ─────────────────────────
@@ -180,26 +254,52 @@ def selftest() -> int:
     reg = reference_regime(cands, date)
     assert ref["ok"] and reg["ok"], "기준값 계산 실패"
     good = {"date": date, "symbol": "BTC/KRW", "upper": ref["upper_ref"], "atr": ref["atr_ref"],
-            "regime_above": reg["regime_ref"], "level_missing": False, "btc_ema": reg["ema_ref"]}
+            "regime_above": reg["regime_ref"], "level_missing": False, "btc_ema": reg["ema_ref"],
+            "btc_n": EMA_WINDOW, "ts_written": date + "T00:04:00+00:00"}
+    gap = abs(reg["close_ref"] / reg["ema_ref"] - 1.0)
     cases = [
-        ("정상 행 → PASS", dict(good), False),
-        ("상단 +0.1% → FAIL", {**good, "upper": good["upper"] * 1.001}, True),
-        ("상단 D 봉 고가 포함(lookahead) → FAIL", {**good, "upper": max(good["upper"], cands[-1][2])}, True),
-        ("레짐 반전 → FAIL", {**good, "regime_above": not good["regime_above"]}, True),
-        ("레벨 결측 → FAIL", {**good, "upper": None, "level_missing": True}, True),
-        ("ATR +10% → PASS(보고용 WARN)", {**good, "atr": good["atr"] * 1.10}, False),
+        ("정상 행 → PASS", dict(good), False, None),
+        ("상단 +0.1% → FAIL", {**good, "upper": good["upper"] * 1.001}, True, None),
+        ("상단 D 봉 고가 포함(lookahead) → FAIL", {**good, "upper": max(good["upper"], cands[-1][2])}, True, None),
+        (f"레짐 반전(이격 {gap:.1%} > 0.5%) → FAIL", {**good, "regime_above": not good["regime_above"]}, True, None),
+        ("레벨 결측 → FAIL", {**good, "upper": None, "level_missing": True}, True, None),
+        ("ATR +10% → PASS(보고용 WARN)", {**good, "atr": good["atr"] * 1.10}, False, "ATR 편차"),
+        ("EMA200 +3% → FAIL", {**good, "btc_ema": good["btc_ema"] * 1.03}, True, "EMA200 불일치"),
+        ("EMA 창 200 → FAIL", {**good, "btc_n": 200}, True, "EMA 창 길이"),
     ]
     bad = 0
-    for name, row, expect_fail in cases:
+    for name, row, expect_fail, must_note in cases:
         r = compare_row(row, cands, cands)
         ok = r["strict_fail"] == expect_fail
         if name.startswith("상단 D 봉") and max(good["upper"], cands[-1][2]) == good["upper"]:
             ok = True  # 합성 데이터에서 D 고가가 상단 미만이면 lookahead 케이스가 성립하지 않음 — 스킵
-        if name.startswith("ATR"):
-            ok = ok and any("ATR 편차" in n for n in r["notes"])
+        if must_note:
+            ok = ok and any(must_note in n for n in r["notes"])
         print(f"  [{'OK' if ok else 'NG'}] {name}  notes={r['notes']}")
         bad += 0 if ok else 1
-    print(f"selftest: {len(cases) - bad}/{len(cases)} 통과")
+
+    # 경계 케이스: 종가를 EMA 바로 위(+0.2%)로 맞춘 합성 봉 → 반전해도 엄격 FAIL 이 아니어야 한다
+    bc = [list(c) for c in cands]
+    ema_prev = reg["ema_ref"]
+    bc[-2][4] = ema_prev * 1.002  # D-1 종가를 EMA 근처로
+    reg2 = reference_regime(bc, date)
+    row_b = {**good, "regime_above": not reg2["regime_ref"]}
+    r = compare_row(row_b, bc, bc)
+    ok = (not r["strict_fail"]) and any(n.startswith("경계") for n in r["notes"])
+    print(f"  [{'OK' if ok else 'NG'}] 레짐 반전(경계 이격 ≤0.5%) → PASS(경계 표기)  notes={r['notes']}")
+    bad += 0 if ok else 1
+
+    # 행 집합 평가: 재시작 중복 · 날짜 공백 · 기록 지연
+    d_prev = (datetime.strptime(date, "%Y-%m-%d") - timedelta(days=2)).strftime("%Y-%m-%d")
+    rows = [dict(good), {**good, "ts_written": date + "T09:30:00+00:00"},           # restart 중복(장중)
+            {**good, "date": d_prev, "upper": 1.0, "ts_written": d_prev + "T00:20:00+00:00"}]  # 2일 전 → 1일 공백 + 지연
+    ev = evaluate_rows(rows, {"BTC/KRW": cands}, cands)
+    ok = ev["restart"] == 1 and len(ev["gaps"]) == 1 and ev["lag_warn"] == 1
+    print(f"  [{'OK' if ok else 'NG'}] 집합: restart={ev['restart']} gaps={ev['gaps']} lag_warn={ev['lag_warn']}")
+    bad += 0 if ok else 1
+
+    total = len(cases) + 2
+    print(f"selftest: {total - bad}/{total} 통과")
     return 0 if bad == 0 else 1
 
 
@@ -232,13 +332,10 @@ def main() -> int:
     data = {s: fetch_daily(s) for s in symbols}
     btc = data.get("BTC/KRW") or fetch_daily("BTC/KRW")
 
-    strict, atr_warn, days = 0, 0, set()
+    ev = evaluate_rows(rows, data, btc)
+    days = {r.get("date") for r in rows}
     print(f"{'date':<10} {'symbol':<8} {'upper_bot':>14} {'upper_ref':>14} {'rel':>8} {'atr_rel':>8} {'regime':>12}  notes")
-    for r in rows:
-        res = compare_row(r, data.get(r.get("symbol"), []), btc)
-        days.add(r.get("date"))
-        strict += 1 if res["strict_fail"] else 0
-        atr_warn += 1 if any("ATR 편차" in n for n in res["notes"]) else 0
+    for res in ev["results"]:
         reg = f"{res.get('regime_bot')}/{res.get('regime_ref')}" if "regime_bot" in res else "-"
         # lessons #12: .get(default) 는 값이 None 이면 default 를 주지 않는다 — 숫자 포매팅 전에 정규화
         ub = _num(res, "upper_bot")
@@ -247,9 +344,12 @@ def main() -> int:
         arel = _num(res, "atr_rel")
         print(f"{res['date']:<10} {res['symbol']:<8} {ub:>14,.0f} {ur:>14,.0f} {rel:>8.1e} {arel:>+8.1%} {reg:>12}  "
               f"{'; '.join(res['notes'])}")
-    print(f"\n행 {len(rows)} · 날 {len(days)} · 엄격 불일치(상단/레짐/결측) {strict} · ATR 편차 >{ATR_WARN:.0%} {atr_warn}")
-    print("판정:", "PASS" if strict == 0 else "FAIL")
-    return 0 if strict == 0 else 1
+    for d, s in ev["gaps"]:
+        print(f"{d:<10} {s:<8} {'(기록 없음)':>14} — 날짜 공백 FAIL")
+    print(f"\n행 {len(rows)} · 날 {len(days)} · 엄격 불일치(상단/레짐/EMA/창/결측/공백) {ev['strict']} · "
+          f"경계 {ev['boundary']} · restart 중복 {ev['restart']} · 기록 지연 {ev['lag_warn']} · ATR 편차 >{ATR_WARN:.0%} {ev['atr_warn']}")
+    print("판정:", "PASS" if ev["strict"] == 0 else "FAIL")
+    return 0 if ev["strict"] == 0 else 1
 
 
 if __name__ == "__main__":
