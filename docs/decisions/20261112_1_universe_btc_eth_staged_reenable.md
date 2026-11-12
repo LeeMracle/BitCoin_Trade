@@ -1,7 +1,7 @@
 # ADR 20261112-1 — 모집단 BTC+ETH 축소 + 단계적 매수 재활성 (섀도 → 최소주문 → 정상 비중)
 
 - **날짜**: 2026-11-12
-- **상태**: **초안 — Master 승인 대기**
+- **상태**: **승인됨 (Master 2026-11-12)** — ADR 채택 + 단계 0 착수. 단계 1 금액 **12,000원** 채택(TP1 부분청산 20% 여유)
 - **결정자**: Master (이정수)
 - **발의자**: bata-pm (bata-investment-expert 산출물 기반)
 - **구현자**: bata-engineer
@@ -30,7 +30,7 @@
 | 단계 | 주문 | 목적 | 통과 기준 (사전 등록, plan 20261112_1) | 기간 상한 |
 | --- | --- | --- | --- | --- |
 | **0 섀도** | 없음 (`BUY_DISABLED=True` 유지) | 봇이 매일 산출하는 BTC·ETH DC12 상단·레짐·ATR 이 백테스트 코드와 **일치**하는지 | 레벨 불일치 0건 / 14일 | 14일 (신호 불필요) |
-| **1 최소주문** | **10,000원/건** (`MIN_ORDER_KRW` ×2 — TP1 50% 부분청산이 성립하는 최소) | **실제 슬리피지 실측** | 신호 5건 · 평균 진입 슬리피지 **< 0.2%** · 체결 경로 L1 일치 5/5 | 신호 5건 또는 90일 |
+| **1 최소주문** | **12,000원/건** (`MICRO_ORDER_KRW` — TP1 50% 부분청산 하한 10,000원 + 20% 여유, Master 결정) | **실제 슬리피지 실측** | 신호 5건 · 평균 진입 슬리피지 **< 0.2%** · 체결 경로 L1 일치 5/5 | 신호 5건 또는 90일 |
 | **2 정상 비중** | 종목당 0.475 | 운영 | 별도 Master 승인 | — |
 
 **중단선 (어느 단계든)**: 평균 진입 슬리피지 ≥ 0.2% → 즉시 중단, `BUY_DISABLED=True` 복귀. 0.2% 는 cto 민감도에서 **IS 근거가 사라지는 지점**이다(IS Sharpe 0.82→0.74).
@@ -62,13 +62,14 @@
 
 ## 4. 구현 체크리스트 (bata-engineer, plan 20261112_1)
 
-- [ ] `config.py`: `SYMBOL_WHITELIST`(신설) · `MAX_POSITIONS=2` · `MAX_POSITION_WEIGHT=0.475` · `MICRO_ORDER_KRW=10_000` + `MICRO_ORDER_MODE` 플래그
-- [ ] scanner · `realtime_monitor` 양쪽에 화이트리스트 적용 (lessons #6 — `grep buy_market` 전수)
-- [ ] 섀도 로그: 매일 00:05 UTC BTC·ETH `dc_upper / ema200 / atr / regime` 을 `workspace/shadow_levels.jsonl` 에 기록
-- [ ] 체결 로그: 트리거 틱가 · 주문 시각 · 체결가 · 슬리피지(%) 를 `closed_trades` 와 별도 필드로 기록
-- [ ] `pre_deploy_check.py`: 화이트리스트 밖 심볼 진입 경로 부재(AST) · `MAX_POSITION_WEIGHT × MAX_POSITIONS ≤ POSITION_RATIO` · CLAUDE.md 표 동기화(#4)
-- [ ] `docs/lessons`: `build_panel` 레짐·ATR 당일값 lookahead (cto M1) 기록 + 영향 연구 목록
-- [ ] CLAUDE.md "현재 전략 파라미터" 표 갱신 (배포 시)
+- [x] `config.py`: `SYMBOL_WHITELIST`(신설) · `MAX_POSITIONS=2` · `MAX_POSITION_WEIGHT=0.475` · `MICRO_ORDER_KRW=12_000` + `MICRO_ORDER_MODE` 플래그
+- [x] scanner(`get_krw_market_coins` 1차 관문) · `realtime_monitor._execute_buy` · `multi_trader.run` 화이트리스트 (lessons #6/#26)
+- [x] 섀도 로그: `_refresh_levels` 직후 BTC·ETH `upper / atr / close / regime_above / btc_close / btc_ema` → `workspace/shadow_levels.jsonl` (`_write_shadow_levels`) · 대조기 `scripts/shadow_level_check.py` (+`--selftest` 역방향 6/6)
+- [x] 체결 계측: 포지션에 `trigger_price · trigger_upper · slip_pct · signal_ts`, 매수 알림에 슬리피지 1줄
+- [x] `pre_deploy_check.py`: `check_symbol_whitelist_all_entry_paths` · `check_weight_slots_budget` · `check_micro_order_stage_gate` (AST, 역방향 `tests/scripts/test_stage_gate_rules.py` 14건)
+- [x] `docs/lessons/20261112_1` (#58) `build_panel` 당일값 lookahead + 영향 연구 4건
+- [x] CLAUDE.md 파라미터 표(슬롯·종목 풀·재활성 단계) 갱신
+- [ ] 구현 cto review → `deploy_to_aws.sh` → 서버 `pre_deploy_check` PASS → 섀도 14일
 
 ---
 
@@ -93,6 +94,6 @@
 
 | 단계 | 승인일 | 비고 |
 | --- | --- | --- |
-| ADR 채택 + 단계 0 | — | |
+| ADR 채택 + 단계 0 | 2026-11-12 | Master "승인, 12,000원으로". 구현 커밋 + cto review 후 배포 |
 | 단계 1 진입 | — | 단계 0 결과 첨부 |
 | 단계 2 진입 | — | 단계 1 결과(슬리피지 실측) 첨부 |
