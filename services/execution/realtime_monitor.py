@@ -59,6 +59,7 @@ from services.execution.config import (
     EMA_TREND_EMA_PERIOD, EMA_TREND_FILTER_PERIOD,
     EMA_TREND_TRAIL_PCT, EMA_TREND_MAX_POSITIONS, EMA_TREND_POSITION_RATIO,
     BUY_DISABLED,
+    SYMBOL_WHITELIST, MICRO_ORDER_MODE, MICRO_ORDER_KRW,
 )
 from services.execution.vb_filters import (
     compute_dead_symbols,
@@ -147,6 +148,9 @@ def is_benign_ws_error(exc: BaseException) -> bool:
 
 
 VR_STATE_FILE = Path(__file__).resolve().parents[2] / "workspace" / "vol_reversal_dryrun_state.json"
+# 섀도 레벨 기록 (plan 20261112_1 단계 0) — 봇이 **실제로 쓴** 레벨을 매일 1줄씩 남긴다.
+# scripts/shadow_level_check.py 가 거래소 일봉으로 독립 재계산해 대조한다.
+SHADOW_LEVELS_FILE = Path(__file__).resolve().parents[2] / "workspace" / "shadow_levels.jsonl"
 VB_STATE_FILE = Path(__file__).resolve().parents[2] / "workspace" / "vb_state.json"
 EMA_TREND_STATE_FILE = Path(__file__).resolve().parents[2] / "workspace" / "ema_trend_state.json"
 # EMA-TREND 알림 throttle (lessons #14 + #30 + 2026-11-05 chop 실측 23건/6분)
@@ -785,6 +789,13 @@ class RealtimeMonitor:
         self.levels = new_levels
         print(f"  레벨 계산 완료: {len(self.levels)}개 종목", flush=True)
 
+        # ── 섀도 레벨 기록 (ADR 20261112-1 단계 0, plan 20261112_1) ──
+        # 화이트리스트 종목에 대해 "봇이 이 날 쓸 값"을 그대로 적는다 — 재계산이 아니라
+        # self.levels 와 self._btc_above_ema 를 복사한다. 비교 기준값은 외부 스크립트가
+        # 독립 산출한다(같은 코드로 두 번 계산하면 검증이 아니다 — lessons #49).
+        if SYMBOL_WHITELIST and not IS_DAYTRADING:
+            self._write_shadow_levels(now)
+
         # ── VB(변동성 돌파) 일일 회전 처리 ──
         if VB_ENABLED and not IS_DAYTRADING:
             await self._vb_daily_rotation()
@@ -1295,6 +1306,42 @@ class RealtimeMonitor:
         else:
             if price > level["upper"]:
                 await self._execute_buy(symbol, price, level)
+
+    def _write_shadow_levels(self, now: datetime) -> None:
+        """화이트리스트 종목의 당일 레벨 스냅샷을 SHADOW_LEVELS_FILE 에 append (plan 20261112_1).
+
+        한 줄 = 한 종목·한 날. 필드:
+          date(UTC) · ts_written · symbol · upper(DC12) · atr · close(마지막 봉)
+          · regime_above(봇이 쓴 bool) · btc_close/btc_ema/btc_n (판정에 쓰인 숫자 스냅샷)
+          · fg · level_missing(레벨 계산 탈락 시 True)
+        실패해도 매매에는 영향을 주지 않는다 — 기록만 비고 다음 날 검증에서 결측으로 드러난다.
+        """
+        try:
+            from services.execution.scanner import fetch_btc_ema_snapshot
+            snap = fetch_btc_ema_snapshot() or {}
+            date_utc = now.strftime("%Y-%m-%d")
+            SHADOW_LEVELS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            with open(SHADOW_LEVELS_FILE, "a", encoding="utf-8") as f:
+                for sym in SYMBOL_WHITELIST:
+                    lv = self.levels.get(sym)
+                    row = {
+                        "date": date_utc,
+                        "ts_written": now.isoformat(),
+                        "symbol": sym,
+                        "upper": (lv or {}).get("upper"),
+                        "atr": (lv or {}).get("atr"),
+                        "close": (lv or {}).get("close"),
+                        "level_missing": lv is None,
+                        "regime_above": bool(self._btc_above_ema),
+                        "btc_close": snap.get("close"),
+                        "btc_ema": snap.get("ema"),
+                        "btc_n": snap.get("n"),
+                        "fg": self._fg_value,
+                    }
+                    f.write(json.dumps(row, ensure_ascii=False) + "\n")
+            print(f"  [섀도] 레벨 기록 {len(SYMBOL_WHITELIST)}종목 → {SHADOW_LEVELS_FILE.name}", flush=True)
+        except Exception as e:
+            print(f"  [섀도] 레벨 기록 실패: {e} — 매매 영향 없음", flush=True)
 
     async def _check_vr_exit(self, symbol: str, price: float):
         """vol_reversal DRY-RUN 보유종목의 실시간 청산 확인."""
@@ -2459,6 +2506,13 @@ class RealtimeMonitor:
             record_block("buy_disabled", symbol)
             return
 
+        # ── 모집단 화이트리스트 (ADR 20261112-1) — 심층 방어 ─────────────
+        # 1차 관문은 scanner.get_krw_market_coins 지만, 레벨 dict 에 다른 경로로
+        # 심볼이 들어와도 여기서 막는다 (lessons #6/#26 — 매수 경로 전수).
+        if SYMBOL_WHITELIST and symbol not in SYMBOL_WHITELIST:
+            record_block("whitelist", symbol)
+            return
+
         positions = self.state.get("positions", {})
         if symbol in positions:
             return
@@ -2707,6 +2761,14 @@ class RealtimeMonitor:
                   f"({MAX_POSITION_WEIGHT*100:.0f}% 상한)", flush=True)
             order_amount = _cap
 
+        # ── 단계 1 최소주문 (ADR 20261112-1) — 슬리피지 실측용 ─────────
+        # 비중 상한 **뒤에** 건다: 상한이 더 작으면 상한이 이긴다. 실측 대상은
+        # 호가 충격이 아니라 틱→체결 사이 가격 이동이므로 금액과 무관하다(plan §4).
+        if MICRO_ORDER_MODE and order_amount > MICRO_ORDER_KRW:
+            print(f"  [최소주문] {symbol} {order_amount:,.0f} → {MICRO_ORDER_KRW:,.0f} "
+                  f"(MICRO_ORDER_MODE, ADR 20261112-1 단계 1)", flush=True)
+            order_amount = float(MICRO_ORDER_KRW)
+
         if order_amount < MIN_ORDER_KRW:
             return
 
@@ -2806,6 +2868,15 @@ class RealtimeMonitor:
             "entry_amount_krw": entry_amount_krw,  # 불변 (TP 잔량 회계 기준, 실제 체결 대금)
             "entry_qty": entry_qty,                # 불변 (부분 매도 수량 산정 기준)
             "tp_sold_levels": [],                  # 단계별 매도 추적
+            # ── 실행 동등성 계측 (plan 20261112_1 단계 1) ──
+            # trigger_price = 돌파를 판정한 틱가, upper = 그날 DC12 상단.
+            # slip_pct = 체결가/틱가 - 1. 백테스트는 max(upper, 시가)에 체결된다고
+            # 가정하므로 upper 도 같이 남겨 "틱가 자체가 상단에서 얼마나 떨어졌나"를
+            # 사후에 분리할 수 있게 한다. 중단선(평균 ≥ 0.2%)은 slip_pct 기준.
+            "trigger_price": float(price),
+            "trigger_upper": float(level.get("upper") or 0),
+            "slip_pct": (float(exec_price) / float(price) - 1.0) * 100.0 if price else None,
+            "signal_ts": datetime.now(tz=timezone.utc).isoformat(),
         }
         self.state["positions"] = positions
         save_state(self.state)
@@ -2814,15 +2885,19 @@ class RealtimeMonitor:
         if symbol in self.levels:
             del self.levels[symbol]
 
+        _slip = positions[symbol]["slip_pct"]
         append_log({"action": "BUY", "symbol": symbol, "price": exec_price,
-                     "amount_krw": order_amount, "trigger": "realtime"})
+                     "amount_krw": order_amount, "trigger": "realtime",
+                     "trigger_price": float(price), "slip_pct": _slip})
 
         if NOTIFY_ON_BUY:
+            _slip_txt = f"\n슬리피지: {_slip:+.3f}% (틱 {price:,.0f})" if _slip is not None else ""
             await send(
                 f"🟢 *매수* {symbol}\n"
                 f"가격: {exec_price:,.0f}\n"
                 f"금액: {order_amount:,.0f} KRW\n"
                 f"스탑: {trail_stop:,.0f}"
+                f"{_slip_txt}"
             )
 
     async def _execute_sell(self, symbol: str, price: float):

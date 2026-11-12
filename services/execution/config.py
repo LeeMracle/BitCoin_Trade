@@ -42,6 +42,28 @@ MONITOR_MODE = "realtime"
 BUY_DISABLED = True
 
 # ═══════════════════════════════════════════════════════
+# 단계적 재활성 (ADR 20261112-1, plan 20261112_1) — 모집단 BTC+ETH 고정
+# ═══════════════════════════════════════════════════════
+# 사전 등록 백테스트(plan 20261110_1)에서 OOS 7기준을 통과한 셀은 U2-S1
+# (BTC+ETH × 현행 DC12) 하나다. 전략 규칙은 그대로 두고 **종목만** 고정한다.
+#   단계 0 섀도   : BUY_DISABLED=True  · 주문 없음 · 레벨 일치 검증 14일
+#   단계 1 최소주문: BUY_DISABLED=False · MICRO_ORDER_MODE=True  · 건당 MICRO_ORDER_KRW
+#   단계 2 정상    : BUY_DISABLED=False · MICRO_ORDER_MODE=False · 종목당 MAX_POSITION_WEIGHT
+# 각 단계 진입은 Master 명시 승인(ADR §7) — pre_deploy_check 가
+# BUY_DISABLED=False & MICRO_ORDER_MODE=False 조합을 단계 2 승인 전까지 ERROR 로 막는다.
+#
+# 화이트리스트가 비어 있지 않으면 scanner.get_krw_market_coins 가 이 목록만 돌려주고
+# (레벨·웹소켓 구독·신호 전부 이 안에서만), _execute_buy / multi_trader 매수 루프도
+# 심층 방어로 한 번 더 거른다 (lessons #6/#26 — 매수 경로 전수).
+SYMBOL_WHITELIST = ["BTC/KRW", "ETH/KRW"]   # 빈 리스트 = 화이트리스트 비활성
+
+# 단계 1 최소주문. MIN_ORDER_KRW(5,000) × 2 = 10,000 이 TP1 50% 부분청산이 성립하는
+# 하한인데, 진입 후 가격이 내리면 절반 매도금이 5,000 미만으로 떨어져 부분청산이
+# 전량 매도로 격하된다(ADR 20260516-1 dust). 20% 여유를 둔 12,000 (Master 2026-11-12).
+MICRO_ORDER_MODE = False
+MICRO_ORDER_KRW = 12_000
+
+# ═══════════════════════════════════════════════════════
 # 전략 설정
 # ═══════════════════════════════════════════════════════
 # 사용 가능한 전략:
@@ -105,7 +127,10 @@ MAX_ATR_PCT = 0.07            # 7% — ADR 20260516-2: 0.10→0.07 (closed_trade
 # 경위: 2026-05-16 ADR 20260516-1이 10→5로 줄였던 이유가 정확히 dust였다.
 #       당시는 TP 3단계(30%x3 + 잔여 10%)라 매도금 ~3.7k로 최소주문 미달이었고,
 #       현재는 2단계 50%x2 라서 같은 자본에서 dust 임계가 절반이다.
-MAX_POSITIONS = 15
+# 2026-11-12 ADR 20261112-1: 15 → 2. 모집단이 BTC+ETH 두 종목으로 고정되어
+# 슬롯 수 = 종목 수. 위 dust 계산(15슬롯 기준 157,895원)은 역사 기록으로 남긴다 —
+# 2슬롯이면 슬롯당 142,500원(30만 기준)이라 여유가 크다.
+MAX_POSITIONS = 2
 
 # 단일 종목 최대 비중 (총자산 = 현금 + 보유평가액 대비)
 # ADR 20260823-2: order_amount = available*RATIO/slots_empty 는 빈 슬롯이 1개면
@@ -120,7 +145,11 @@ MAX_POSITIONS = 15
 # 15슬롯이면 균등비중 6.7% → 상한 10%.
 # 측정: 상한을 균등비중까지 조이면 OOS가 떨어진다(현금이 누는 구간 발생) —
 # 상한은 목표 비중보다 여유가 있어야 한다. 1.5배가 그 여유.
-MAX_POSITION_WEIGHT = 0.10
+# 2026-11-12 ADR 20261112-1: 0.10 → 0.475 (= POSITION_RATIO 0.95 / 2종목).
+# 백테스트(plan 20261110_1 §9 ①, Master 승인)가 이 비중으로 측정됐다. 상한 0.10 을
+# 유지하면 자본 80% 가 놀아 측정된 수익·MDD 와 다른 전략이 된다.
+# 불변식: MAX_POSITION_WEIGHT × MAX_POSITIONS ≤ POSITION_RATIO (pre_deploy_check).
+MAX_POSITION_WEIGHT = 0.475
 
 # ═══════════════════════════════════════════════════════
 # 부분 익절 (decision 20260504-1, plan 20260504_2 AC1 → ADR 20260516-1 재설계)

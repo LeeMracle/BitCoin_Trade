@@ -31,6 +31,7 @@ from services.strategies import get_strategy
 from services.execution.config import (
     STRATEGY, STRATEGY_KWARGS, DONCHIAN_PERIOD, ATR_PERIOD, ATR_MULTIPLIER,
     MIN_VOLUME_KRW, REGIME_FILTER_ENABLED, REGIME_FILTER_EMA_PERIOD,
+    SYMBOL_WHITELIST,
 )
 # Donchian 상단 거리 및 ATR 계산 — NEAR 신호 표시 및 스탑 계산 목적
 from services.paper_trading.strategy import calc_atr, calc_donchian_upper
@@ -83,6 +84,32 @@ def fetch_btc_above_ema(retries: int = 3, backoff_sec: float = 2.0) -> bool:
     return False
 
 
+def fetch_btc_ema_snapshot() -> "dict | None":
+    """섀도 검증용 (plan 20261112_1 단계 0) — 레짐 판정에 쓰인 숫자 자체를 남긴다.
+
+    fetch_btc_above_ema() 와 **같은 조회·같은 산식**(limit=_BTC_EMA_FETCH_LIMIT,
+    ewm(span, adjust=False), 마지막 봉 close)이지만 bool 대신 {close, ema, above,
+    n, last_ts} 를 돌려준다. 매매 판정 함수는 건드리지 않는다(ADR 사후 변경 회피,
+    F1 fail-closed 룰 보존). 실패 시 None — 섀도 기록만 비고, 매매 영향 없음.
+    """
+    try:
+        exchange = ccxt.upbit({"enableRateLimit": True})
+        candles = exchange.fetch_ohlcv("BTC/KRW", "1d", limit=_BTC_EMA_FETCH_LIMIT)
+        if len(candles) < REGIME_FILTER_EMA_PERIOD:
+            return None
+        closes = pd.Series([c[4] for c in candles])
+        ema = closes.ewm(span=REGIME_FILTER_EMA_PERIOD, adjust=False).mean()
+        return {
+            "close": float(closes.iloc[-1]),
+            "ema": float(ema.iloc[-1]),
+            "above": bool(float(closes.iloc[-1]) > float(ema.iloc[-1])),
+            "n": int(len(candles)),
+            "last_ts": int(candles[-1][0]),
+        }
+    except Exception:
+        return None
+
+
 
 def get_krw_market_coins() -> list[dict]:
     """업비트 KRW 마켓 전체 종목 + 24h 거래대금 조회."""
@@ -93,6 +120,12 @@ def get_krw_market_coins() -> list[dict]:
         s for s in markets
         if s.endswith("/KRW") and markets[s]["active"] and s not in EXCLUDE_SYMBOLS
     ]
+    # ADR 20261112-1: 화이트리스트가 있으면 모집단을 그 종목으로 고정한다.
+    # 레벨 계산·웹소켓 구독·scanner 신호가 전부 이 함수에서 출발하므로 여기가 1차 관문.
+    # (_execute_buy / multi_trader 는 심층 방어로 한 번 더 거른다 — lessons #6/#26)
+    if SYMBOL_WHITELIST:
+        _wl = set(SYMBOL_WHITELIST)
+        krw_pairs = [s for s in krw_pairs if s in _wl]
 
     tickers = exchange.fetch_tickers(krw_pairs)
     coins = []

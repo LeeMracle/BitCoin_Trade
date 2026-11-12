@@ -26,7 +26,10 @@ from services.execution.scanner import (
     get_krw_market_coins, scan_entry_signals, check_exit_signal,
 )
 from services.execution.upbit_client import get_balance, buy_market, sell_market
-from services.execution.config import STRATEGY, MAX_POSITIONS, MIN_ORDER_KRW, BUY_DISABLED
+from services.execution.config import (
+    STRATEGY, MAX_POSITIONS, MIN_ORDER_KRW, BUY_DISABLED,
+    SYMBOL_WHITELIST, MICRO_ORDER_MODE, MICRO_ORDER_KRW,
+)
 from services.alerting.notifier import send, notify_error
 
 # ── ML 신호 필터 (lessons #36 B8: fail-CLOSED) ──────────────────
@@ -211,7 +214,15 @@ async def run(dry_run: bool = False):
                 if BUY_DISABLED:
                     print(f"  [{symbol}] 매수 차단 — BUY_DISABLED kill switch (ADR 20261107-1)")
                     continue
+                # ── 모집단 화이트리스트 (ADR 20261112-1) — scanner 경로 심층 방어 ──
+                if SYMBOL_WHITELIST and symbol not in SYMBOL_WHITELIST:
+                    print(f"  [{symbol}] 매수 차단 — 화이트리스트 밖 (ADR 20261112-1)")
+                    continue
                 order_amount = min(per_position, available_krw * 0.95)
+                # ── 단계 1 최소주문 (ADR 20261112-1) ──
+                if MICRO_ORDER_MODE and order_amount > MICRO_ORDER_KRW:
+                    print(f"  [최소주문] {symbol} {order_amount:,.0f} → {MICRO_ORDER_KRW:,.0f}")
+                    order_amount = float(MICRO_ORDER_KRW)
 
                 if order_amount < MIN_ORDER_KRW:
                     print(f"  {symbol} 잔고 부족 ({order_amount:,.0f} KRW) — 건너뜀")

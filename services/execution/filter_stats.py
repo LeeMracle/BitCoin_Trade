@@ -37,6 +37,8 @@ VALID_REASONS = frozenset({
     "vb_gate_b_deadlist",
     "vb_gate_c_weekly3",
     "vb_gate_d_cooldown",
+    "buy_disabled",     # ADR 20261107-1 kill switch
+    "whitelist",        # ADR 20261112-1 모집단 화이트리스트 밖 심볼 (심층 방어 — 정상이면 0)
 })
 
 # ── 내부 상태 ──
