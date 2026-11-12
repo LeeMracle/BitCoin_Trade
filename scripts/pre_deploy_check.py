@@ -4433,6 +4433,181 @@ def check_buy_disabled_all_entry_paths() -> None:
             )
 
 
+# ═══════════════════════════════════════════════════════════════════
+# 검증: ADR 20261112-1 단계적 재활성 — 화이트리스트 전수 / 비중×슬롯 예산 / 단계 게이트
+# ═══════════════════════════════════════════════════════════════════
+
+_STAGE_FILES = {
+    "cfg": "services/execution/config.py",
+    "rm": "services/execution/realtime_monitor.py",
+    "mt": "services/execution/multi_trader.py",
+    "sc": "services/execution/scanner.py",
+}
+
+
+def _stage_load(sources: dict[str, str] | None, key: str) -> str | None:
+    rel = _STAGE_FILES[key]
+    if sources is not None:
+        return sources.get(rel)
+    f = PROJECT_ROOT / rel
+    return f.read_text(encoding="utf-8") if f.exists() else None
+
+
+def _find_func(tree: ast.AST, name: str):
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
+            return node
+    return None
+
+
+def _if_tests_reference(func_node, ident: str) -> bool:
+    """func_node 안의 `if` 분기 중 **test 식**에 Name(ident) 가 있는 것이 하나라도 있으면 True.
+    본문·주석·문자열이 아니라 조건식을 묻는다 (메타교훈 #48 — 호출/판정 형태로 물어라)."""
+    for sub in ast.walk(func_node):
+        if isinstance(sub, ast.If):
+            for n in ast.walk(sub.test):
+                if isinstance(n, ast.Name) and n.id == ident:
+                    return True
+    return False
+
+
+def _calls_method(func_node, attr: str) -> bool:
+    for sub in ast.walk(func_node):
+        if isinstance(sub, ast.Call) and isinstance(sub.func, ast.Attribute) and sub.func.attr == attr:
+            return True
+    return False
+
+
+def _cfg_literal(tree: ast.AST, name: str):
+    """config 모듈 최상위 `NAME = <literal>` 의 값. 없으면 None (리터럴이 아니면 None)."""
+    for node in tree.body if isinstance(tree, ast.Module) else []:
+        if isinstance(node, ast.Assign):
+            for t in node.targets:
+                if isinstance(t, ast.Name) and t.id == name:
+                    try:
+                        return ast.literal_eval(node.value)
+                    except Exception:
+                        return None
+    return None
+
+
+def check_symbol_whitelist_all_entry_paths(sources: dict[str, str] | None = None) -> list[str]:
+    """모집단 화이트리스트가 **모든** 진입 관문에 걸려 있는지 — AST (ADR 20261112-1, lessons #6/#26).
+
+    (1) config.py 최상위 `SYMBOL_WHITELIST = [...]` 리스트 리터럴 존재
+    (2) scanner.get_krw_market_coins 의 `if` 조건식이 SYMBOL_WHITELIST 를 참조 (1차 관문)
+    (3) realtime_monitor._execute_buy 의 `if` 조건식이 SYMBOL_WHITELIST 를 참조 (심층 방어)
+    (4) multi_trader.run 의 `if` 조건식이 SYMBOL_WHITELIST 를 참조 (scanner 경로 심층 방어)
+    (5) realtime_monitor._refresh_levels 가 `self._write_shadow_levels(` 를 호출 (단계 0 기록기)
+    sources(상대경로→소스)를 주면 파일 대신 그것을 검사한다(역방향 테스트용).
+    """
+    found: list[str] = []
+    srcs = {k: _stage_load(sources, k) for k in _STAGE_FILES}
+    if any(v is None for v in srcs.values()):
+        found.append("[ADR 20261112-1] 검사 대상 소스 누락: " + ", ".join(k for k, v in srcs.items() if v is None))
+        errors.extend(found)
+        return found
+    try:
+        trees = {k: ast.parse(v) for k, v in srcs.items()}
+    except SyntaxError as e:
+        found.append(f"[ADR 20261112-1] 소스 파싱 실패: {e}")
+        errors.extend(found)
+        return found
+
+    wl = _cfg_literal(trees["cfg"], "SYMBOL_WHITELIST")
+    if not isinstance(wl, list):
+        found.append("[ADR 20261112-1] config.py 에 `SYMBOL_WHITELIST = [...]` 리스트 리터럴 없음 — 모집단 고정 상수 소실")
+
+    f = _find_func(trees["sc"], "get_krw_market_coins")
+    if f is None or not _if_tests_reference(f, "SYMBOL_WHITELIST"):
+        found.append("[ADR 20261112-1] scanner.get_krw_market_coins 가 SYMBOL_WHITELIST 로 모집단을 거르지 않음 (1차 관문 부재)")
+
+    f = _find_func(trees["rm"], "_execute_buy")
+    if f is None or not _if_tests_reference(f, "SYMBOL_WHITELIST"):
+        found.append("[ADR 20261112-1] realtime_monitor._execute_buy 에 `if ... SYMBOL_WHITELIST` 가드 없음 (lessons #6 심층 방어)")
+
+    f = _find_func(trees["mt"], "run")
+    if f is None or not _if_tests_reference(f, "SYMBOL_WHITELIST"):
+        found.append("[ADR 20261112-1] multi_trader.run 매수 루프에 `if ... SYMBOL_WHITELIST` 가드 없음 (scanner 경로, lessons #26)")
+
+    f = _find_func(trees["rm"], "_refresh_levels")
+    if f is None or not _calls_method(f, "_write_shadow_levels"):
+        found.append("[plan 20261112_1] realtime_monitor._refresh_levels 가 self._write_shadow_levels( 를 호출하지 않음 — 단계 0 섀도 기록 부재")
+    if _find_func(trees["rm"], "_write_shadow_levels") is None:
+        found.append("[plan 20261112_1] realtime_monitor._write_shadow_levels 정의 없음")
+
+    errors.extend(found)
+    return found
+
+
+def check_weight_slots_budget(sources: dict[str, str] | None = None) -> list[str]:
+    """비중 × 슬롯 ≤ POSITION_RATIO, 슬롯 수 = 화이트리스트 종목 수 (ADR 20261112-1).
+
+    0.475 × 2 = 0.95 가 정확히 예산이다. 비중을 올리면 두 종목 동시 보유 시 현금이 모자라
+    두 번째 진입이 조용히 축소된다(백테스트와 다른 전략). 화이트리스트가 있는데 슬롯이 종목 수와
+    다르면 빈 슬롯 분모가 어긋나 `order_amount = avail*RATIO/slots_empty` 사이징이 틀어진다.
+    """
+    found: list[str] = []
+    src = _stage_load(sources, "cfg")
+    if src is None:
+        found.append("[ADR 20261112-1] config.py 없음")
+        errors.extend(found)
+        return found
+    tree = ast.parse(src)
+    w, n, r = (_cfg_literal(tree, "MAX_POSITION_WEIGHT"), _cfg_literal(tree, "MAX_POSITIONS"),
+               _cfg_literal(tree, "POSITION_RATIO"))
+    wl = _cfg_literal(tree, "SYMBOL_WHITELIST")
+    if None in (w, n, r):
+        found.append("[ADR 20261112-1] MAX_POSITION_WEIGHT / MAX_POSITIONS / POSITION_RATIO 리터럴을 읽을 수 없음")
+    else:
+        if w * n > r + 1e-9:
+            found.append(f"[ADR 20261112-1] MAX_POSITION_WEIGHT {w} × MAX_POSITIONS {n} = {w*n:.3f} > POSITION_RATIO {r} — 예산 초과")
+        if isinstance(wl, list) and wl and n != len(wl):
+            found.append(f"[ADR 20261112-1] MAX_POSITIONS {n} ≠ 화이트리스트 종목 수 {len(wl)} — 슬롯 = 종목 수 불변식 위반")
+    errors.extend(found)
+    return found
+
+
+def check_micro_order_stage_gate(sources: dict[str, str] | None = None) -> list[str]:
+    """단계 게이트 (ADR 20261112-1 §1-2): 정상 비중 매수는 단계 2 승인 전까지 ERROR.
+
+    (1) BUY_DISABLED=False 이면 MICRO_ORDER_MODE=True 여야 한다 — 단계 2 진입 시 Master 승인을
+        ADR §7 에 기록하고 **이 룰을 함께 갱신**한다(승인 흔적이 코드 diff 로 남게).
+    (2) MICRO_ORDER_KRW ≥ MIN_ORDER_KRW / min(TP sell_ratio) × 1.2 — 부분청산 유지 하한 + 20% 여유
+    (3) _execute_buy / multi_trader.run 의 `if` 조건식이 MICRO_ORDER_MODE 를 참조 (캡이 실제로 걸림)
+    """
+    found: list[str] = []
+    cfg, rm, mt = (_stage_load(sources, "cfg"), _stage_load(sources, "rm"), _stage_load(sources, "mt"))
+    if None in (cfg, rm, mt):
+        found.append("[ADR 20261112-1] 단계 게이트 검사 소스 누락")
+        errors.extend(found)
+        return found
+    ct, rt, mtree = ast.parse(cfg), ast.parse(rm), ast.parse(mt)
+    bd, micro, amt = (_cfg_literal(ct, "BUY_DISABLED"), _cfg_literal(ct, "MICRO_ORDER_MODE"),
+                      _cfg_literal(ct, "MICRO_ORDER_KRW"))
+    min_order, tp_levels = _cfg_literal(ct, "MIN_ORDER_KRW"), _cfg_literal(ct, "TP_LEVELS")
+    if bd is None or micro is None or amt is None:
+        found.append("[ADR 20261112-1] BUY_DISABLED / MICRO_ORDER_MODE / MICRO_ORDER_KRW 리터럴을 읽을 수 없음")
+    else:
+        if bd is False and micro is False:
+            found.append("[ADR 20261112-1] BUY_DISABLED=False & MICRO_ORDER_MODE=False = 단계 2(정상 비중) — "
+                         "Master 승인(ADR §7) 기록 전. 승인 후 이 룰을 ADR 번호와 함께 갱신할 것")
+        ratios = [t.get("sell_ratio", 0) for t in (tp_levels or []) if isinstance(t, dict) and t.get("sell_ratio", 0) > 0]
+        if min_order and ratios:
+            floor = min_order / min(ratios) * 1.2
+            if amt < floor - 1e-9:
+                found.append(f"[ADR 20261112-1] MICRO_ORDER_KRW {amt:,} < 부분청산 유지 하한 {floor:,.0f} "
+                             f"(MIN_ORDER {min_order:,} / 최소 매도비율 {min(ratios):.0%} × 1.2)")
+    f = _find_func(rt, "_execute_buy")
+    if f is None or not _if_tests_reference(f, "MICRO_ORDER_MODE"):
+        found.append("[ADR 20261112-1] realtime_monitor._execute_buy 에 `if MICRO_ORDER_MODE` 캡 없음")
+    f = _find_func(mtree, "run")
+    if f is None or not _if_tests_reference(f, "MICRO_ORDER_MODE"):
+        found.append("[ADR 20261112-1] multi_trader.run 에 `if MICRO_ORDER_MODE` 캡 없음")
+    errors.extend(found)
+    return found
+
+
 def main() -> None:
     print("=" * 50)
     print("배포 전 검증 (pre-deploy check)")
@@ -4521,6 +4696,9 @@ def main() -> None:
     check_ml_shadow_ema_trend_exclude()
     check_regime_filter_all_entry_paths()
     check_buy_disabled_all_entry_paths()
+    check_symbol_whitelist_all_entry_paths()
+    check_weight_slots_budget()
+    check_micro_order_stage_gate()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")
