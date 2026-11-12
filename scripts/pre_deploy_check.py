@@ -4608,6 +4608,83 @@ def check_micro_order_stage_gate(sources: dict[str, str] | None = None) -> list[
     return found
 
 
+def _eval_simple(node: ast.AST, names: dict[str, float]):
+    """상수·이름·+ − * 이항식만 평가하는 미니 평가기 (eval 금지 — 소스는 검사 대상이지 실행 대상이 아니다)."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        return node.value
+    if isinstance(node, ast.Name):
+        return names.get(node.id)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Sub, ast.Mult)):
+        a, b = _eval_simple(node.left, names), _eval_simple(node.right, names)
+        if a is None or b is None:
+            return None
+        return a + b if isinstance(node.op, ast.Add) else a - b if isinstance(node.op, ast.Sub) else a * b
+    return None
+
+
+def check_btc_ema_history_depth(sources: dict[str, str] | None = None) -> list[str]:
+    """레짐 EMA200 의 일봉 창이 실제로 채워지는지 — AST (lessons #59, 2026-11-13).
+
+    업비트 캔들 API 는 요청당 최대 200개. `fetch_ohlcv(limit=250)` 은 오류 없이 200개를 돌려주고
+    `len >= 200` 가드를 통과해 **seed 편향 13.7% 의 EMA** 로 6개월 동안 레짐을 판정했다
+    (섀도 단계 0 첫 행 btc_n=200 으로 발견). 검증:
+      (1) scanner 에 `_fetch_btc_daily` FunctionDef 가 있고 본문에 `while` 루프 + 문자열 "to" 키 사용
+      (2) `fetch_btc_above_ema` 와 `fetch_btc_ema_snapshot` 이 `_fetch_btc_daily(` 를 호출하고
+          `fetch_ohlcv(` 를 **직접 호출하지 않는다**
+      (3) `_BTC_EMA_FETCH_LIMIT` 리터럴/식 평가값 ≥ REGIME_FILTER_EMA_PERIOD + 50
+      (4) 두 함수 안의 `len(candles) < X` 비교에서 X 가 `_BTC_EMA_FETCH_LIMIT` (EMA_PERIOD 가 아니라)
+    """
+    found: list[str] = []
+    rel = "services/execution/scanner.py"
+    src = sources.get(rel) if sources is not None else (
+        (PROJECT_ROOT / rel).read_text(encoding="utf-8") if (PROJECT_ROOT / rel).exists() else None)
+    if src is None:
+        found.append("[lessons #59] scanner.py 없음")
+        errors.extend(found)
+        return found
+    tree = ast.parse(src)
+
+    f = _find_func(tree, "_fetch_btc_daily")
+    if f is None:
+        found.append("[lessons #59] scanner._fetch_btc_daily 정의 없음 — 페이징 없이는 200개로 잘린다")
+    else:
+        has_while = any(isinstance(n, ast.While) for n in ast.walk(f))
+        has_to = any(isinstance(n, ast.Constant) and n.value == "to" for n in ast.walk(f))
+        if not (has_while and has_to):
+            found.append("[lessons #59] _fetch_btc_daily 에 `while` 페이징 루프 + params['to'] 가 없음")
+
+    # (3) 상한 상수 — 식이면 REGIME_FILTER_EMA_PERIOD 를 200 으로 두고 평가
+    limit_val = None
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "_BTC_EMA_FETCH_LIMIT" for t in node.targets):
+            limit_val = _eval_simple(node.value, {"REGIME_FILTER_EMA_PERIOD": 200})
+    if limit_val is None or limit_val < 250:
+        found.append(f"[lessons #59] _BTC_EMA_FETCH_LIMIT={limit_val} < 250 — EMA200 seed 편향 (최소 EMA_PERIOD+50)")
+
+    for fname in ("fetch_btc_above_ema", "fetch_btc_ema_snapshot"):
+        g = _find_func(tree, fname)
+        if g is None:
+            found.append(f"[lessons #59] scanner.{fname} 정의 없음")
+            continue
+        calls = [n for n in ast.walk(g) if isinstance(n, ast.Call)]
+        direct = any(isinstance(c.func, ast.Attribute) and c.func.attr == "fetch_ohlcv" for c in calls)
+        paged = any(isinstance(c.func, ast.Name) and c.func.id == "_fetch_btc_daily" for c in calls)
+        if direct or not paged:
+            found.append(f"[lessons #59] scanner.{fname} 가 _fetch_btc_daily( 대신 fetch_ohlcv( 를 직접 호출 — 200개 절단")
+        # (4) 길이 가드 비교 대상
+        ok_guard = False
+        for n in ast.walk(g):
+            if isinstance(n, ast.Compare) and isinstance(n.left, ast.Call) and isinstance(n.left.func, ast.Name) \
+                    and n.left.func.id == "len" and n.comparators:
+                rhs = n.comparators[0]
+                if isinstance(rhs, ast.Name) and rhs.id == "_BTC_EMA_FETCH_LIMIT":
+                    ok_guard = True
+        if not ok_guard:
+            found.append(f"[lessons #59] scanner.{fname} 의 `len(candles) < _BTC_EMA_FETCH_LIMIT` 가드 없음 — 창 미달을 fail-closed 로 잡지 못함")
+    errors.extend(found)
+    return found
+
+
 def main() -> None:
     print("=" * 50)
     print("배포 전 검증 (pre-deploy check)")
@@ -4699,6 +4776,7 @@ def main() -> None:
     check_symbol_whitelist_all_entry_paths()
     check_weight_slots_budget()
     check_micro_order_stage_gate()
+    check_btc_ema_history_depth()
 
     if warnings:
         print(f"\n경고 {len(warnings)}건:")

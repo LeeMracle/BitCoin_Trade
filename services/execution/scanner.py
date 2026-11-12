@@ -39,7 +39,34 @@ MIN_LISTING_DAYS = DONCHIAN_PERIOD + 10  # 최소 상장일수
 EXCLUDE_SYMBOLS = {"USDT/KRW", "USDC/KRW", "DAI/KRW", "BUSD/KRW"}  # 스테이블코인
 
 # composite 전략 v2 필터 — EMA 워밍업을 위해 넉넉한 버퍼 확보
-_BTC_EMA_FETCH_LIMIT = REGIME_FILTER_EMA_PERIOD + 50  # EMA 안정화용 여유분
+# EMA200 계산에 쓸 일봉 수. 업비트 캔들 API 는 요청당 **최대 200개**라 `fetch_ohlcv(limit=250)` 은
+# 조용히 200개만 돌려준다 (lessons #59, 2026-11-13 섀도 단계 0 첫 행에서 발견 — btc_n=200).
+# ewm(adjust=False) 는 첫 종가를 seed 로 쓰므로 200개면 seed 가중치 (1-2/201)^200 ≈ 13.7% —
+# 200일 전 종가 하나가 EMA 의 1/7 을 차지해 기준선이 1.6% 틀어져 있었다. 600개면 ≈ 0.25%.
+# `_fetch_btc_daily` 가 `to` 역방향 페이징으로 채우고, 모자라면 fail-closed (lessons #21).
+_BTC_EMA_FETCH_LIMIT = REGIME_FILTER_EMA_PERIOD * 3  # 600
+_UPBIT_CANDLE_PAGE = 200                              # 업비트 API 요청당 상한
+
+
+def _fetch_btc_daily(exchange, n: int = _BTC_EMA_FETCH_LIMIT) -> list:
+    """BTC/KRW 일봉 최근 n개(오름차순). 200개 단위로 `to` 를 뒤로 옮기며 페이징한다."""
+    out: list = []
+    to_ms = None
+    while len(out) < n:
+        params = {}
+        if to_ms is not None:
+            params["to"] = datetime.fromtimestamp(to_ms / 1000, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        page = exchange.fetch_ohlcv("BTC/KRW", "1d", limit=_UPBIT_CANDLE_PAGE, params=params)
+        if not page:
+            break
+        page.sort(key=lambda c: c[0])
+        if out:
+            page = [c for c in page if c[0] < out[0][0]]
+            if not page:
+                break
+        out = page + out
+        to_ms = page[0][0]
+    return out[-n:]
 
 
 def fetch_fg_value() -> "float | None":
@@ -69,9 +96,10 @@ def fetch_btc_above_ema(retries: int = 3, backoff_sec: float = 2.0) -> bool:
     for attempt in range(1, retries + 1):
         try:
             exchange = ccxt.upbit({"enableRateLimit": True})
-            candles = exchange.fetch_ohlcv("BTC/KRW", "1d", limit=_BTC_EMA_FETCH_LIMIT)
-            if len(candles) < REGIME_FILTER_EMA_PERIOD:
-                last_err = f"데이터 부족 {len(candles)} < {REGIME_FILTER_EMA_PERIOD}"
+            candles = _fetch_btc_daily(exchange, _BTC_EMA_FETCH_LIMIT)
+            # 전체 창이 차야 한다 — 200개(API 1페이지)로도 EMA_PERIOD 는 넘지만 seed 편향이 남는다
+            if len(candles) < _BTC_EMA_FETCH_LIMIT:
+                last_err = f"데이터 부족 {len(candles)} < {_BTC_EMA_FETCH_LIMIT}"
             else:
                 closes = pd.Series([c[4] for c in candles])
                 ema = closes.ewm(span=REGIME_FILTER_EMA_PERIOD, adjust=False).mean()
@@ -94,8 +122,8 @@ def fetch_btc_ema_snapshot() -> "dict | None":
     """
     try:
         exchange = ccxt.upbit({"enableRateLimit": True})
-        candles = exchange.fetch_ohlcv("BTC/KRW", "1d", limit=_BTC_EMA_FETCH_LIMIT)
-        if len(candles) < REGIME_FILTER_EMA_PERIOD:
+        candles = _fetch_btc_daily(exchange, _BTC_EMA_FETCH_LIMIT)
+        if len(candles) < _BTC_EMA_FETCH_LIMIT:
             return None
         closes = pd.Series([c[4] for c in candles])
         ema = closes.ewm(span=REGIME_FILTER_EMA_PERIOD, adjust=False).mean()

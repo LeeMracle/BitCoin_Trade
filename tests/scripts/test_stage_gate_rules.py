@@ -132,3 +132,40 @@ def test_stage_gate_catches_micro_cap_missing_in_buy_path():
     s = _sources()
     s[RM] = s[RM].replace("if MICRO_ORDER_MODE and order_amount > MICRO_ORDER_KRW:", "if False:")
     assert any("_execute_buy" in e for e in pdc.check_micro_order_stage_gate(s))
+
+
+# ── 4. 레짐 EMA 일봉 창 깊이 (lessons #59) ───────────────────────
+
+def test_ema_depth_clean_on_repo():
+    pdc = _load_pdc()
+    assert pdc.check_btc_ema_history_depth(_sources()) == []
+
+
+def test_ema_depth_catches_direct_fetch_ohlcv():
+    pdc = _load_pdc()
+    s = _sources()
+    s[SC] = s[SC].replace("candles = _fetch_btc_daily(exchange, _BTC_EMA_FETCH_LIMIT)\n            # 전체 창",
+                          "candles = exchange.fetch_ohlcv('BTC/KRW', '1d', limit=_BTC_EMA_FETCH_LIMIT)\n            # 전체 창")
+    assert any("fetch_btc_above_ema" in e and "직접 호출" in e for e in pdc.check_btc_ema_history_depth(s))
+
+
+def test_ema_depth_catches_short_limit():
+    pdc = _load_pdc()
+    s = _sources()
+    s[SC] = s[SC].replace("_BTC_EMA_FETCH_LIMIT = REGIME_FILTER_EMA_PERIOD * 3", "_BTC_EMA_FETCH_LIMIT = 200")
+    assert any("_BTC_EMA_FETCH_LIMIT=200" in e for e in pdc.check_btc_ema_history_depth(s))
+
+
+def test_ema_depth_catches_weak_length_guard():
+    pdc = _load_pdc()
+    s = _sources()
+    s[SC] = s[SC].replace("if len(candles) < _BTC_EMA_FETCH_LIMIT:\n                last_err",
+                          "if len(candles) < REGIME_FILTER_EMA_PERIOD:\n                last_err")
+    assert any("fetch_btc_above_ema" in e and "가드 없음" in e for e in pdc.check_btc_ema_history_depth(s))
+
+
+def test_ema_depth_catches_missing_pagination_loop():
+    pdc = _load_pdc()
+    s = _sources()
+    s[SC] = s[SC].replace("    while len(out) < n:\n        params = {}", "    if True:\n        params = {}")
+    assert any("while" in e for e in pdc.check_btc_ema_history_depth(s))

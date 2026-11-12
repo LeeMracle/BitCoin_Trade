@@ -40,7 +40,7 @@ SHADOW_FILE = ROOT / "workspace" / "shadow_levels.jsonl"
 DC_PERIOD = 12
 ATR_PERIOD = 14
 EMA_PERIOD = 200
-EMA_WINDOW = 250          # 실거래 scanner._BTC_EMA_FETCH_LIMIT = EMA_PERIOD + 50 (cto M2)
+EMA_WINDOW = 600          # 실거래 scanner._BTC_EMA_FETCH_LIMIT = EMA_PERIOD × 3 (lessons #59 — API 1페이지 200개 상한 페이징)
 UPPER_TOL = 1e-4          # plan §2 — 가격 레벨 상대오차
 ATR_WARN = 0.02           # 보고용 임계 — 넘으면 WARN 표기만
 REGIME_BOUNDARY = 0.005   # |close/EMA − 1| ≤ 0.5% 는 "경계" — 봇(진행봉 포함)과 기준값이 갈릴 수 있는 구간
@@ -231,7 +231,7 @@ def load_rows(path: Path, since: str | None) -> list[dict]:
 
 # ───────────────────────── 역방향 테스트 ─────────────────────────
 
-def _synthetic_candles(n: int = 300, seed: int = 7) -> list[list]:
+def _synthetic_candles(n: int = 700, seed: int = 7) -> list[list]:
     import random
     rnd = random.Random(seed)
     ts0 = int(datetime(2026, 1, 1, tzinfo=timezone.utc).timestamp() * 1000)
