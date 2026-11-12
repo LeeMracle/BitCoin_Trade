@@ -1,6 +1,6 @@
 # ROADMAP — 지금 무엇을 해야 하는가
 
-> **갱신**: 2026-11-12 (모집단 축소 — U2-S1 BTC+ETH·DC12 OOS 통과, 시나리오 A) · **다음 갱신 트리거**: ADR·페이퍼 plan 승인 / 레짐 BULL 복귀 / 새 결정 / 세션 종료
+> **갱신**: 2026-11-13 (ADR 20261112-1 승인·배포 — 단계 0 섀도 진행 중, lessons #59 레짐 EMA 창 결함 수정) · **다음 갱신 트리거**: 섀도 14일 판정(11-26) / 레짐 BULL 복귀 / 단계 1 승인 / 레짐 BULL 복귀 / 새 결정 / 세션 종료
 >
 > 🔴 **이 문서의 규칙 — 이력을 쌓지 않는다. 항상 덮어쓴다. 1페이지를 넘기지 않는다.**
 > 이력이 필요하면 [decisions/](decisions/)(왜 정했나) · [lessons/](lessons/)(무엇이 고장났나) ·
@@ -22,9 +22,9 @@ Phase 4 실전운영   ████████░░░░ 모듈·배포 완�
 
 | | |
 | --- | --- |
-| 봇 | `btc-trader.service` active (10-29 00:16 UTC 재기동) · 텔레그램 브리핑 정상 · ML 게이트 **shadow** 유지 |
+| 봇 | `btc-trader.service` active (11-12 21:50 UTC 재기동, **BTC·ETH 2종목 구독**) · 텔레그램 브리핑 정상 · ML 게이트 **shadow** 유지 |
 | 레짐 | **BEAR** — BTC 103.67M < EMA200 104.60M · **신규 매수 차단** (마지막 청산 10-29 PEPE) · F&G 26 |
-| 포지션 | **0 / 15** — 10-05 보유분(BSV·QTUM·CKB·ONDO 등) 전부 청산됨 |
+| 포지션 | **0 / 2** — 10-05 보유분(BSV·QTUM·CKB·ONDO 등) 전부 청산됨 |
 | 총자산 | **262,056원 (-12.6%, 기준 30만원)** — 서킷(-20%, 24만원)까지 약 22,000원 |
 | 검증 기준선 | `strategy_start` **2026-10-05 01:48 UTC** · 이전 창 n=90 은 `closed_trades` 에 보존 |
 
@@ -53,7 +53,9 @@ Phase 4 실전운영   ████████░░░░ 모듈·배포 완�
 | ① | ✅ **BUY_DISABLED kill switch 적용 (11-07)** — Master 결정 | config.py `BUY_DISABLED=True` + scanner/realtime_monitor 가드 + `check_buy_disabled_all_entry_paths()` AST 룰. 재활성은 ①-2 완료 + 신규 ADR + Master 재승인 전수 충족시만 · [ADR 20261107-1](decisions/20261107_1_buy_disabled_until_redesign.md) · [lessons #57](lessons/20261107_1_buy_disabled_kill_switch.md) |
 | ①-2 | ✅ 재설계 v1(DC+필터 H1~H4, OOS 미달) · v2(대안 4축 A1~A4, IS 전부 탈락) **둘 다 시나리오 B 종결** | [research/20261110_1](../workspace/research/20261110_1_architecture_redesign_result.md) · cto 조건부 PASS. 새 plan 설계 입력: 가설별 구조적 손익분기 기준, Guards OFF 1차 측정 |
 | ①-3 | ✅ **모집단 축소 — 시나리오 A (11-12)** | U2-S1 BTC+ETH·DC12·비중 0.475 · [research/20261112_1](../workspace/research/20261112_1_universe_reduction_result.md) · cto 조건부 PASS (M1 build_panel 레짐·ATR lookahead, M3 터치 진입 경로) |
-| ①-4 | **ADR 20261112-1 + plan 20261112_1 초안 — Master 승인 대기** | 3단계 재활성: 섀도 14일(주문 없음) → 최소주문 10,000원 신호 5건(슬리피지 실측, **≥0.2% 중단**) → 정상 비중 0.475. [ADR](decisions/20261112_1_universe_btc_eth_staged_reenable.md) · [plan](../workspace/plans/20261112_1_execution_equivalence.md) |
+| ①-4 | ✅ **ADR 20261112-1 승인(11-12) + 단계 0 배포(11-13 06:50 KST)** | BTC+ETH 화이트리스트 · 슬롯 2 · 비중 0.475 · `BUY_DISABLED=True` 유지. cto 조건부 PASS(확인 24/이슈 9 — M1 룰 강화는 **단계 1 전 필수**). 배포 첫 행에서 **lessons #59** 발견·수정·재배포(레짐 EMA200 이 API 200개 상한으로 seed 편향 13.7%) |
+| ①-5 | **단계 0 섀도 14일 — 2026-11-13 ~ 11-26 (UTC)** | 매일 자동 기록 `workspace/shadow_levels.jsonl`. 판정: 서버에서 `PYTHONUTF8=1 .venv/bin/python scripts/shadow_level_check.py --since 2026-11-13` (상단·레짐·EMA·창·공백 엄격 0건). 끝나면 결과 문서 → cto → Master 단계 1 승인 |
+| ①-6 | **단계 1 전 필수: pre_deploy 룰 M1 강화** | cto 회피 8/8 — `if` 조건식 Name 존재만 묻는 룰을 본문 `Return`/주문 호출 선행/`order_amount` 재대입/빈 화이트리스트 금지로 보강 + 역방향 8건 |
 | ② | ✅ **F1 레짐 fail-closed — 배포 완료(11-03 13:03 UTC)** | 조회 실패 시 3회 재시도 후 매수 차단, 봇 시작 시 기본값도 차단 · 서버 테스트 7/7 · pre_deploy_check 서버 실행 PASS · 백업 `~/deploy_backup/20261103_F1/` |
 | ③ | ~~창 정의 결정~~ → 불필요 | 백테스트가 실거래를 재현해 "개선 필요"가 독립 근거로 확정. 판정 기준 §3-4 구조적 여유를 PIT 기준으로 재계산 |
 | ④ | F2 주문 이력 7일 창 — 7일 넘게 보유 후 수동 매도 정산 시 TP 매도 누락 | `position_pnl.rebuild_realized_from_exchange` 등에 `since=entry` |

@@ -34,6 +34,8 @@
 
 ## 3. 단계
 
+> **진행 기록**: 11-13 06:50 KST 단계 0 배포 완료(서버 pre_deploy PASS, 2종목 구독·섀도 기록 확인). 첫 행에서 lessons #59(레짐 EMA 창 200개 절단) 발견 → 수정 재배포. **14일 창 = 2026-11-13 ~ 11-26 (UTC)**, 11-12 행은 배포일 재시작 기록이라 제외(`--since 2026-11-13`). cto 구현 리뷰: 확인 24 / 이슈 9(M2 m1 m2 m3 m4 반영, **M1 룰 강화는 단계 1 전**).
+
 1. **구현** (bata-engineer): ADR §4 체크리스트. 커밋 단위 분리 — config/화이트리스트 · 섀도 로그 · 체결 로그 · pre_deploy 룰 · lessons
 2. **교차검증**: cto review — 매수 경로 전수(`grep buy_market` + AST), 섀도 비교 스크립트가 **불일치를 잡는지 역방향 테스트**(lessons #44: 일부러 틀린 값 넣어 FAIL 확인)
 3. **배포** `scripts/deploy_to_aws.sh` → 서버에서 `pre_deploy_check` PASS 확인 → 섀도 14일
