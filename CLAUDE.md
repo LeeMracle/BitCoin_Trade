@@ -36,12 +36,13 @@
 | 진입 | **DC(12)** 돌파 | [ADR 20260505-1](docs/decisions/20260505_1_strategy_param_tuning.md) (50→20→15→10→15→12) |
 | 손절 | ATR(14) × 3.0 트레일링 + **하드 캡 -6%** | lessons #13 · [ADR 20260930-1](docs/decisions/20260930_1_hard_stop_6pct.md) |
 | 익절 | **TP1 +5.5% 50%** / **TP2 +10% 50%** | [ADR 20260824-1](docs/decisions/20260824_1_tp1_55_partial.md) · [20260824-2](docs/decisions/20260824_2_tp2_10pct.md) |
-| 슬롯 | **15** · 단일 종목 비중 상한 **0.10** | [ADR 20260825-1](docs/decisions/20260825_1_slot_expansion.md) |
+| 슬롯 | **2** · 단일 종목 비중 상한 **0.475** | [ADR 20261112-1](docs/decisions/20261112_1_universe_btc_eth_staged_reenable.md) (15/0.10 → 2/0.475, 모집단 BTC+ETH) |
 | 레짐 필터 | **ON** — BTC 종가 < EMA200 시 전 종목 신규 매수 차단 | [ADR 20260516-2](docs/decisions/20260516_2_entry_conditions_tightening.md) |
 
 > **⚠ 레짐 용어 2중화 주의 (lessons #55)**: 매매 경로의 레짐 기준은 `scanner.fetch_btc_above_ema()` — **BTC close > EMA200 단일 판정** (ADR 20260516-2). `workspace/regime_state.json`(`regime_switcher.py` 가 SMA50 + EMA200 + F&G 복합으로 판정, `scripts/regime_check.py` cron 매일 00:30 UTC)은 **관찰용 DRY-RUN**이며 매매 코드에 연결되지 않는다(`REGIME_SWITCH_ENABLED=False`). 같은 "BEAR/BULL" 용어를 쓰지만 두 시스템은 **독립**이므로 매매 가능 여부 판단 시 **매매 레짐(BTC vs EMA200)**만 참조할 것. 혼동 재발 시 lessons #55 참조.
 
-| 종목 풀 | `MIN_VOLUME_KRW` **5억** (~117 종목) | [ADR 20260607-1](docs/decisions/20260607_1_min_volume_revert_5e.md) |
+| 종목 풀 | **화이트리스트 `BTC/KRW`·`ETH/KRW`** (`SYMBOL_WHITELIST`) — `MIN_VOLUME_KRW` 5억 필터는 유지되나 사실상 무의미 | [ADR 20261112-1](docs/decisions/20261112_1_universe_btc_eth_staged_reenable.md) · 이전 [ADR 20260607-1](docs/decisions/20260607_1_min_volume_revert_5e.md) |
+| 재활성 단계 | `BUY_DISABLED=True` (단계 0 섀도) → 단계 1 `MICRO_ORDER_MODE` 12,000원 → 단계 2 정상 비중. 각 단계 Master 승인 | ADR 20261112-1 §1-2 · [plan 20261112_1](workspace/plans/20261112_1_execution_equivalence.md) |
 | 변동성 필터 | `MAX_ATR_PCT` 0.07 · `VOL_FILTER` ×1.5 | ADR 20260516-2 |
 | 안전장치 | 서킷 -20% / -25% · 일일손실 -3% · 5연패 72h 중단 | lessons #11 · #30 · #38 |
 | 수수료 | 0.05% × 2 (`FEE_RATE = 0.0005`) | — |
@@ -100,7 +101,7 @@
 - **참조 의무**: 전략 변경·배포 스크립트 수정·서버 설정 변경 시 관련 lessons 먼저 확인
 - **신규 오류 시**: (1) 수정 → (2) lessons 기록 → (3) pre_deploy_check 룰 추가 → (4) 필요 시 이 문서 갱신
 
-> 📖 **[docs/lessons/INDEX.md](docs/lessons/INDEX.md) — 51개 교훈 상세 (원인·수정·검증규칙 전문)**
+> 📖 **[docs/lessons/INDEX.md](docs/lessons/INDEX.md) — 58개 교훈 상세 (원인·수정·검증규칙 전문)**
 > 아래는 한 줄 인덱스다. **관련 영역을 건드리기 전에 INDEX 에서 해당 항목 전문을 읽을 것.**
 
 ### 메타 교훈 — 검증 룰 자체가 반복해서 속았다 (동일 유형 8회)
@@ -122,6 +123,7 @@
 | --- | --- |
 | 1 | 봉 마감 기반 전략을 실시간 틱으로 실행 금지 (가짜 돌파) |
 | 2 | 백테스트 상승장 비중 높으면 하락장 성과 과대평가 — 하락장 구간 별도 검증 |
+| 58 | 일봉 패널의 레짐·ATR 이 **신호 당일 봉**을 읽음(lookahead) — 장중 진입 시뮬레이션은 모든 필터를 **시가 시점(t-1)** 으로 통일, 축별 기준 시점 표 필수 |
 | 4 | CLAUDE.md ↔ config.py ↔ 서버 전략 파라미터 동기화 필수 |
 | 40 | 거래량 필터가 **진행 중인 봉**을 읽어 전 종목 100% 차단 — `iloc[-2]` 완성봉 필수 |
 | 43 | 업비트 시장가 응답엔 체결정보 없음(전부 None) — `fetch_order(uuid)` 재조회가 유일 경로 |
