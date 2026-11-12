@@ -18,7 +18,7 @@ Phase 3 실거래검증 ████████░░░░ n=52 · L1 조건�
 Phase 4 실전운영   ████████░░░░ 모듈·배포 완료, 검증 통과 대기
 ```
 
-**한 줄**: 실거래 종목군(PIT)에서는 DC 돌파(v1)·대안 4축(v2) 모두 실패. **모집단을 BTC+ETH 로 줄이면 현행 DC12 가 OOS 7기준 전수 통과(11-12, Sharpe 1.31 · MDD -12.9% · n=62)** — 실패 원인은 전략이 아니라 모집단. cto 조건부 PASS(lookahead 수정 시 OOS Sharpe 1.22, IS 여유는 진입 슬리피지 0.2% 에서 소진). `BUY_DISABLED=True` 유지. **다음: ADR + 페이퍼 트레이딩 plan (Master 승인)**.
+**한 줄**: 실거래 종목군(PIT)에서는 DC 돌파(v1)·대안 4축(v2) 모두 실패. **모집단을 BTC+ETH 로 줄이면 현행 DC12 가 OOS 7기준 전수 통과(11-12, Sharpe 1.31 · MDD -12.9% · n=62)** — 실패 원인은 전략이 아니라 모집단. cto 조건부 PASS(lookahead 수정 시 OOS Sharpe 1.22, IS 여유는 진입 슬리피지 0.2% 에서 소진). `BUY_DISABLED=True` 유지. **다음: ADR 20261112-1(3단계 재활성) Master 승인 → 구현·섀도 배포**.
 
 | | |
 | --- | --- |
@@ -53,7 +53,7 @@ Phase 4 실전운영   ████████░░░░ 모듈·배포 완�
 | ① | ✅ **BUY_DISABLED kill switch 적용 (11-07)** — Master 결정 | config.py `BUY_DISABLED=True` + scanner/realtime_monitor 가드 + `check_buy_disabled_all_entry_paths()` AST 룰. 재활성은 ①-2 완료 + 신규 ADR + Master 재승인 전수 충족시만 · [ADR 20261107-1](decisions/20261107_1_buy_disabled_until_redesign.md) · [lessons #57](lessons/20261107_1_buy_disabled_kill_switch.md) |
 | ①-2 | ✅ 재설계 v1(DC+필터 H1~H4, OOS 미달) · v2(대안 4축 A1~A4, IS 전부 탈락) **둘 다 시나리오 B 종결** | [research/20261110_1](../workspace/research/20261110_1_architecture_redesign_result.md) · cto 조건부 PASS. 새 plan 설계 입력: 가설별 구조적 손익분기 기준, Guards OFF 1차 측정 |
 | ①-3 | ✅ **모집단 축소 — 시나리오 A (11-12)** | U2-S1 BTC+ETH·DC12·비중 0.475 · [research/20261112_1](../workspace/research/20261112_1_universe_reduction_result.md) · cto 조건부 PASS (M1 build_panel 레짐·ATR lookahead, M3 터치 진입 경로) |
-| ①-4 | **ADR + 페이퍼 트레이딩 plan — Master 승인 필요** | 터치 진입 경로(현행 realtime_monitor 구조) · 실거래 EMA250·Wilder ATR · **진입 슬리피지 ≥0.2% 중단선** 사전 등록 · `build_panel` lookahead lessons 기록 |
+| ①-4 | **ADR 20261112-1 + plan 20261112_1 초안 — Master 승인 대기** | 3단계 재활성: 섀도 14일(주문 없음) → 최소주문 10,000원 신호 5건(슬리피지 실측, **≥0.2% 중단**) → 정상 비중 0.475. [ADR](decisions/20261112_1_universe_btc_eth_staged_reenable.md) · [plan](../workspace/plans/20261112_1_execution_equivalence.md) |
 | ② | ✅ **F1 레짐 fail-closed — 배포 완료(11-03 13:03 UTC)** | 조회 실패 시 3회 재시도 후 매수 차단, 봇 시작 시 기본값도 차단 · 서버 테스트 7/7 · pre_deploy_check 서버 실행 PASS · 백업 `~/deploy_backup/20261103_F1/` |
 | ③ | ~~창 정의 결정~~ → 불필요 | 백테스트가 실거래를 재현해 "개선 필요"가 독립 근거로 확정. 판정 기준 §3-4 구조적 여유를 PIT 기준으로 재계산 |
 | ④ | F2 주문 이력 7일 창 — 7일 넘게 보유 후 수동 매도 정산 시 TP 매도 누락 | `position_pnl.rebuild_realized_from_exchange` 등에 `since=entry` |
